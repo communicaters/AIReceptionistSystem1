@@ -1,4 +1,5 @@
 import { pgTable, text, serial, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -19,6 +20,27 @@ export const insertUserSchema = createInsertSchema(users).pick({
   role: true,
   email: true,
 });
+
+// Define user relations
+export const usersRelations = relations(users, ({ many }) => ({
+  sipConfigs: many(sipConfig),
+  twilioConfigs: many(twilioConfig),
+  openPhoneConfigs: many(openPhoneConfig),
+  smtpConfigs: many(smtpConfig),
+  sendgridConfigs: many(sendgridConfig),
+  mailgunConfigs: many(mailgunConfig),
+  chatConfigs: many(chatConfig),
+  whatsappConfigs: many(whatsappConfig),
+  calendarConfigs: many(calendarConfig),
+  products: many(productData),
+  trainingData: many(trainingData),
+  intents: many(intentMap),
+  callLogs: many(callLogs),
+  emailLogs: many(emailLogs),
+  chatLogs: many(chatLogs),
+  whatsappLogs: many(whatsappLogs),
+  meetingLogs: many(meetingLogs),
+}));
 
 // Phone service configurations
 export const sipConfig = pgTable("sip_phone_settings", {
