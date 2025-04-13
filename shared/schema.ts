@@ -268,6 +268,13 @@ export const insertInventoryStatusSchema = createInsertSchema(inventoryStatus).o
   id: true,
 });
 
+export const inventoryStatusRelations = relations(inventoryStatus, ({ one }) => ({
+  product: one(productData, {
+    fields: [inventoryStatus.productId],
+    references: [productData.id],
+  }),
+}));
+
 // AI training and models
 export const trainingData = pgTable("training_data", {
   id: serial("id").primaryKey(),
@@ -281,6 +288,13 @@ export const insertTrainingDataSchema = createInsertSchema(trainingData).omit({
   id: true,
 });
 
+export const trainingDataRelations = relations(trainingData, ({ one }) => ({
+  user: one(users, {
+    fields: [trainingData.userId],
+    references: [users.id],
+  }),
+}));
+
 export const intentMap = pgTable("intent_map", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),
@@ -291,6 +305,13 @@ export const intentMap = pgTable("intent_map", {
 export const insertIntentMapSchema = createInsertSchema(intentMap).omit({
   id: true,
 });
+
+export const intentMapRelations = relations(intentMap, ({ one }) => ({
+  user: one(users, {
+    fields: [intentMap.userId],
+    references: [users.id],
+  }),
+}));
 
 // Logs and monitoring
 export const callLogs = pgTable("call_logs", {
@@ -309,6 +330,13 @@ export const insertCallLogSchema = createInsertSchema(callLogs).omit({
   id: true,
 });
 
+export const callLogsRelations = relations(callLogs, ({ one }) => ({
+  user: one(users, {
+    fields: [callLogs.userId],
+    references: [users.id],
+  }),
+}));
+
 export const emailLogs = pgTable("email_logs", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),
@@ -324,6 +352,13 @@ export const insertEmailLogSchema = createInsertSchema(emailLogs).omit({
   id: true,
 });
 
+export const emailLogsRelations = relations(emailLogs, ({ one }) => ({
+  user: one(users, {
+    fields: [emailLogs.userId],
+    references: [users.id],
+  }),
+}));
+
 export const chatLogs = pgTable("chat_logs", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),
@@ -336,6 +371,13 @@ export const chatLogs = pgTable("chat_logs", {
 export const insertChatLogSchema = createInsertSchema(chatLogs).omit({
   id: true,
 });
+
+export const chatLogsRelations = relations(chatLogs, ({ one }) => ({
+  user: one(users, {
+    fields: [chatLogs.userId],
+    references: [users.id],
+  }),
+}));
 
 export const whatsappLogs = pgTable("whatsapp_logs", {
   id: serial("id").primaryKey(),
@@ -350,6 +392,13 @@ export const whatsappLogs = pgTable("whatsapp_logs", {
 export const insertWhatsappLogSchema = createInsertSchema(whatsappLogs).omit({
   id: true,
 });
+
+export const whatsappLogsRelations = relations(whatsappLogs, ({ one }) => ({
+  user: one(users, {
+    fields: [whatsappLogs.userId],
+    references: [users.id],
+  }),
+}));
 
 export const meetingLogs = pgTable("meeting_logs", {
   id: serial("id").primaryKey(),
@@ -366,6 +415,13 @@ export const meetingLogs = pgTable("meeting_logs", {
 export const insertMeetingLogSchema = createInsertSchema(meetingLogs).omit({
   id: true,
 });
+
+export const meetingLogsRelations = relations(meetingLogs, ({ one }) => ({
+  user: one(users, {
+    fields: [meetingLogs.userId],
+    references: [users.id],
+  }),
+}));
 
 // System and module status
 export const moduleStatus = pgTable("module_status", {
