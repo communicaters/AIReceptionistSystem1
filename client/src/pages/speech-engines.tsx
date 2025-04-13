@@ -22,6 +22,11 @@ import { useState, useRef, useEffect } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
+// Import our custom speech components
+import { AudioPlayer } from "@/components/speech/audio-player";
+import { VoiceSelector, type Voice } from "@/components/speech/voice-selector";
+import { AudioUploader } from "@/components/speech/audio-uploader";
+
 const SpeechEngines = () => {
   const { toast } = useToast();
   const [volume, setVolume] = useState(80);
@@ -415,45 +420,17 @@ const SpeechEngines = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    {ttsVoices.map((voice) => (
-                      <div 
-                        key={voice.id}
-                        className={`border rounded-md p-3 flex items-start space-x-3 cursor-pointer hover:border-primary transition-colors ${
-                          selectedVoice === voice.id ? 'border-primary bg-primary/5' : ''
-                        }`}
-                        onClick={() => setSelectedVoice(voice.id)}
-                      >
-                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                          <AudioWaveform className="h-5 w-5 text-primary" />
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex justify-between">
-                            <h3 className="font-medium">{voice.name}</h3>
-                            <span className="text-xs bg-neutral-100 px-2 py-0.5 rounded-full">
-                              {voice.accent}
-                            </span>
-                          </div>
-                          <p className="text-sm text-neutral-500 mt-1">
-                            {voice.description}
-                          </p>
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            className="mt-2"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedVoice(voice.id);
-                              ttsTestMutation.mutate();
-                            }}
-                          >
-                            <Play className="h-3 w-3 mr-1" />
-                            Preview
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  {/* Using our custom VoiceSelector component */}
+                  <VoiceSelector 
+                    voices={ttsVoices as Voice[]}
+                    selectedVoice={selectedVoice}
+                    onSelect={(voiceId) => setSelectedVoice(voiceId)}
+                    onPreview={(voice) => {
+                      setSelectedVoice(voice.id);
+                      ttsTestMutation.mutate();
+                    }}
+                    disabled={ttsTestMutation.isPending}
+                  />
                 </CardContent>
                 <CardFooter>
                   <Button className="w-full">
@@ -461,6 +438,33 @@ const SpeechEngines = () => {
                   </Button>
                 </CardFooter>
               </Card>
+              
+              {/* Adding audio player component for playback */}
+              {audioUrl && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Audio Preview</CardTitle>
+                    <CardDescription>
+                      Listen to the generated speech
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <AudioPlayer 
+                      src={audioUrl}
+                      autoPlay={true}
+                      volume={volume}
+                      playbackRate={speed}
+                      onError={(error) => {
+                        toast({
+                          title: "Playback Error",
+                          description: error.message,
+                          variant: "destructive",
+                        });
+                      }}
+                    />
+                  </CardContent>
+                </Card>
+              )}
             </div>
           </div>
         </TabsContent>
@@ -605,18 +609,16 @@ const SpeechEngines = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-3">
                         <Label>Upload Audio File</Label>
-                        <div 
-                          onClick={handleFileUpload}
-                          className="border-2 border-dashed rounded-md p-4 flex flex-col items-center justify-center cursor-pointer hover:border-primary transition-colors"
-                        >
-                          <Upload className="h-8 w-8 text-muted-foreground mb-2" />
-                          <p className="text-sm text-center text-muted-foreground">
-                            Click to upload audio (MP3, WAV, OGG)
-                          </p>
-                          <p className="text-xs text-center text-muted-foreground mt-1">
-                            Max file size: 10MB
-                          </p>
-                        </div>
+                        <AudioUploader
+                          onFileSelect={(file) => setAudioFile(file)}
+                          onRecordingComplete={(blob) => {
+                            // Convert blob to file
+                            const timestamp = new Date().toISOString().replace(/[-:.]/g, '');
+                            const file = new File([blob], `recording_${timestamp}.webm`, { type: 'audio/webm' });
+                            setAudioFile(file);
+                          }}
+                          disabled={isProcessing}
+                        />
                         <Button 
                           className="w-full" 
                           disabled={!audioFile || isProcessing}

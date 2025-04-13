@@ -74,9 +74,10 @@ class AudioCache {
     try {
       // Convert the map to a plain object
       const entries: Record<string, AudioCacheEntry> = {};
-      for (const [key, entry] of this.cache.entries()) {
+      // Use Array.from to convert the iterator to an array
+      Array.from(this.cache.entries()).forEach(([key, entry]) => {
         entries[key] = entry;
-      }
+      });
       
       const indexPath = path.join(this.cacheDir, 'cache-index.json');
       await writeFileAsync(indexPath, JSON.stringify(entries, null, 2));
@@ -133,7 +134,8 @@ class AudioCache {
     const now = new Date();
     let purgedCount = 0;
     
-    for (const [key, entry] of this.cache.entries()) {
+    // Use Array.from to convert the iterator to an array
+    Array.from(this.cache.entries()).forEach(([key, entry]) => {
       if (entry.expiry < now) {
         this.cache.delete(key);
         
@@ -144,7 +146,7 @@ class AudioCache {
           purgedCount++;
         }
       }
-    }
+    });
     
     if (purgedCount > 0) {
       await this.saveCacheIndex();
