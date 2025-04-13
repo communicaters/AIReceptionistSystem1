@@ -5,6 +5,7 @@ import { db } from "../db";
 import { intentMap, trainingData } from "@shared/schema";
 import { z } from "zod";
 import { asc, desc, eq, like } from "drizzle-orm";
+import { authenticate, requireAuth } from "../middleware/auth";
 
 // Schema validation for request bodies
 const chatCompletionSchema = z.object({
