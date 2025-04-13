@@ -1,6 +1,6 @@
 import { MailService } from '@sendgrid/mail';
 import { storage } from '../storage';
-import { generateEmailResponse } from './openai';
+import { createChatCompletion } from './openai';
 
 // Initialize SendGrid client
 let mailService: MailService | null = null;
@@ -143,11 +143,19 @@ export async function autoRespondToEmail(incomingEmail: {
       throw new Error("SendGrid configuration not found");
     }
     
-    // Generate AI response
-    const responseBody = await generateEmailResponse(
-      incomingEmail.subject,
-      incomingEmail.body
-    );
+    // Generate AI response using chat completion
+    const aiResponse = await createChatCompletion([
+      { 
+        role: "system", 
+        content: "You are an AI Receptionist responding to an email. Respond professionally and helpfully."
+      },
+      { 
+        role: "user", 
+        content: `Subject: ${incomingEmail.subject}\n\nBody: ${incomingEmail.body}`
+      }
+    ]);
+    
+    const responseBody = aiResponse.success ? aiResponse.content : "Thank you for your email. We'll get back to you shortly.";
     
     // Prepare response subject line
     const responseSubject = incomingEmail.subject.startsWith("Re:") 

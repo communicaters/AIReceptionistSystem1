@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { storage } from "../storage";
-import { generateResponse, analyzeSentiment } from "./openai";
+import { createChatCompletion, analyzeSentiment } from "./openai";
 
 // Initialize Twilio client
 let twilioClient: any = null;
@@ -154,8 +154,13 @@ export function setupTwilioWebhooks(app: Express) {
       // Analyze sentiment
       const sentimentResult = await analyzeSentiment(transcript);
       
-      // Generate AI response to the transcript
-      const aiResponse = await generateResponse(transcript);
+      // Generate AI response to the transcript using chat completion
+      const aiResponse = await createChatCompletion([
+        { role: "system", content: "You are an AI Receptionist. Respond to the caller's message professionally and helpfully." },
+        { role: "user", content: transcript }
+      ]);
+      
+      const responseText = aiResponse.success ? aiResponse.content : "We'll get back to you shortly.";
       
       // Update the call log with transcription and sentiment
       // In a production app, you would match this to the correct call log

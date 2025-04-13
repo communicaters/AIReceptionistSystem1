@@ -1,6 +1,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { storage } from '../storage';
-import { generateResponse, identifyIntent } from './openai';
+import { createChatCompletion, classifyIntent } from './openai';
 import { validateWebSocketMessage, safeParse, safeStringify } from './ws-validator';
 import { messageDeduplicator } from './message-filter';
 
@@ -277,8 +277,9 @@ async function handleChatMessage(clientId: string, message: string) {
     timestamp: new Date()
   });
   
-  // Identify the intent of the message
-  const intentResult = await identifyIntent(message);
+  // Identify the intent of the message using our AI
+  const possibleIntents = ["inquiry", "complaint", "support", "order", "general"];
+  const intentResult = await classifyIntent(message, possibleIntents);
   
   // Get chat history for context
   const chatHistory = await storage.getChatLogsBySessionId(sessionId);
@@ -286,8 +287,31 @@ async function handleChatMessage(clientId: string, message: string) {
     .slice(-5) // Get the last 5 messages for context
     .map(log => log.message);
   
-  // Generate AI response
-  const aiResponse = await generateResponse(message, context);
+  // Create a messages array with system instruction, context, and user message
+  const messages = [
+    { 
+      role: "system", 
+      content: "You are an AI Receptionist responding to a chat message. Use context from previous messages when available. Be helpful, concise, and professional."
+    }
+  ];
+  
+  // Add context messages
+  if (context.length > 0) {
+    messages.push({ 
+      role: "system", 
+      content: `Previous conversation context: ${context.join(' | ')}`
+    });
+  }
+  
+  // Add the current user message
+  messages.push({
+    role: "user",
+    content: message
+  });
+  
+  // Generate AI response using chat completion
+  const response = await createChatCompletion(messages);
+  const aiResponse = response.success ? response.content : "I'm sorry, I'm having trouble processing your request at the moment.";
   
   // Log the AI response
   await storage.createChatLog({

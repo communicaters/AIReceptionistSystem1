@@ -8,6 +8,7 @@ import { initSendgrid } from "./lib/sendgrid";
 import { initGoogleCalendar } from "./lib/google-calendar";
 import { initElevenLabs } from "./lib/elevenlabs";
 import { setupWebsocketHandlers } from "./lib/websocket";
+import { aiRouter } from "./routes/ai";
 
 // Helper function to handle API responses
 function apiResponse(res: Response, data: any, status = 200) {
@@ -30,6 +31,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize Twilio webhook handling
   setupTwilioWebhooks(app);
 
+  // Register AI routes
+  app.use("/api/ai", aiRouter);
+  
   // API routes
   app.get("/api/health", (req, res) => {
     apiResponse(res, { status: "OK", timestamp: new Date().toISOString() });
