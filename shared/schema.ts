@@ -316,7 +316,7 @@ export const intentMapRelations = relations(intentMap, ({ one }) => ({
 // Logs and monitoring
 export const callLogs = pgTable("call_logs", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   phoneNumber: text("phone_number").notNull(),
   duration: integer("duration"), // in seconds
   recording: text("recording_url"),
@@ -339,7 +339,7 @@ export const callLogsRelations = relations(callLogs, ({ one }) => ({
 
 export const emailLogs = pgTable("email_logs", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   from: text("from_email").notNull(),
   to: text("to_email").notNull(),
   subject: text("subject").notNull(),
@@ -361,7 +361,7 @@ export const emailLogsRelations = relations(emailLogs, ({ one }) => ({
 
 export const chatLogs = pgTable("chat_logs", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   sessionId: text("session_id").notNull(),
   message: text("message").notNull(),
   sender: text("sender").notNull(), // 'user' or 'ai'
@@ -381,7 +381,7 @@ export const chatLogsRelations = relations(chatLogs, ({ one }) => ({
 
 export const whatsappLogs = pgTable("whatsapp_logs", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   phoneNumber: text("phone_number").notNull(),
   message: text("message").notNull(),
   mediaUrl: text("media_url"),
@@ -402,7 +402,7 @@ export const whatsappLogsRelations = relations(whatsappLogs, ({ one }) => ({
 
 export const meetingLogs = pgTable("meeting_logs", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   attendees: text("attendees").array(),
   subject: text("subject").notNull(),
   description: text("description"),
