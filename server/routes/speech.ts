@@ -89,6 +89,31 @@ const textToSpeechSchema = z.object({
 // Create router
 export const speechRouter = Router();
 
+// Configure audio file serving
+const audioDir = path.join(process.cwd(), 'cache', 'audio');
+if (!fs.existsSync(audioDir)) {
+  fs.mkdirSync(audioDir, { recursive: true });
+}
+
+// Serve audio files from cache
+speechRouter.get('/audio/:filename', (req, res) => {
+  const filename = req.params.filename;
+  const filepath = path.join(audioDir, filename);
+  
+  // Security check to prevent directory traversal
+  if (!filepath.startsWith(audioDir)) {
+    return res.status(403).json({ success: false, error: 'Forbidden' });
+  }
+  
+  if (fs.existsSync(filepath)) {
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
+    fs.createReadStream(filepath).pipe(res);
+  } else {
+    res.status(404).json({ success: false, error: 'Audio file not found' });
+  }
+});
+
 // Get available TTS voices
 speechRouter.get("/tts/voices", async (req, res) => {
   try {
