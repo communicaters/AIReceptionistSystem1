@@ -2,6 +2,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { storage } from '../storage';
 import { generateResponse, identifyIntent } from './openai';
 import { validateWebSocketMessage, safeParse, safeStringify } from './ws-validator';
+import { messageDeduplicator } from './message-filter';
 
 // Store connected clients
 const connectedClients: Map<string, {
@@ -121,6 +122,13 @@ export function setupWebsocketHandlers(wss: WebSocketServer) {
         }
         
         const data = validationResult.data;
+        
+        // Check for duplicate messages to prevent processing the same message multiple times
+        // Skip deduplication for ping/pong messages as they are expected to be duplicate
+        if (data.type !== 'ping' && data.type !== 'pong' && messageDeduplicator.isDuplicate(data)) {
+          console.log(`Duplicate message filtered: ${data.type} from ${clientId}`);
+          return; // Silently ignore duplicate messages
+        }
         
         // Handle different message types
         if (data.type === 'chat' && data.message) {

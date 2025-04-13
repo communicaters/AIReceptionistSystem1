@@ -5,7 +5,7 @@ import "./index.css";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
 import { WebSocketProvider } from "@/components/providers/websocket-provider";
-import ErrorBoundary from "@/components/error-boundary";
+import ErrorBoundary from "./components/error-boundary";
 
 // Import health monitor to activate it
 import "./lib/health-monitor";
