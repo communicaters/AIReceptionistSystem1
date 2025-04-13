@@ -1,6 +1,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { storage } from '../storage';
 import { generateResponse, identifyIntent } from './openai';
+import { validateWebSocketMessage, safeParse, safeStringify } from './ws-validator';
 
 // Store connected clients
 const connectedClients: Map<string, {
@@ -99,13 +100,32 @@ export function setupWebsocketHandlers(wss: WebSocketServer) {
           connectedClients.set(clientId, client);
         }
         
-        // Parse message
-        const data = JSON.parse(message.toString());
+        // Parse and validate the message
+        const parsedData = safeParse(message.toString());
+        if (!parsedData) {
+          return sendToClient(ws, {
+            type: 'error',
+            message: 'Invalid JSON message format',
+            timestamp: new Date().toISOString()
+          });
+        }
+        
+        // Validate the message structure and content
+        const validationResult = validateWebSocketMessage(parsedData);
+        if (!validationResult.isValid || !validationResult.data) {
+          return sendToClient(ws, {
+            type: 'error',
+            message: validationResult.error || 'Invalid message format',
+            timestamp: new Date().toISOString()
+          });
+        }
+        
+        const data = validationResult.data;
         
         // Handle different message types
-        if (data.type === 'chat') {
+        if (data.type === 'chat' && data.message) {
           await handleChatMessage(clientId, data.message);
-        } else if (data.type === 'status') {
+        } else if (data.type === 'status' && data.moduleId && data.status) {
           await handleStatusUpdate(clientId, data.moduleId, data.status);
         } else if (data.type === 'ping') {
           // Handle explicit ping messages from client
@@ -121,6 +141,22 @@ export function setupWebsocketHandlers(wss: WebSocketServer) {
           message: 'Failed to process message',
           details: error instanceof Error ? error.message : 'Unknown error'
         });
+        
+        // Log system activity for errors
+        try {
+          storage.createSystemActivity({
+            module: 'WebSocket',
+            event: 'Message Processing Error',
+            status: 'Error',
+            timestamp: new Date(),
+            details: { 
+              clientId, 
+              error: error instanceof Error ? error.message : 'Unknown error'
+            }
+          }).catch(err => console.error('Failed to log WebSocket error activity:', err));
+        } catch (err) {
+          console.error('Failed to create system activity for WebSocket error:', err);
+        }
       }
     });
     
@@ -186,7 +222,8 @@ export function setupWebsocketHandlers(wss: WebSocketServer) {
 function sendToClient(ws: WebSocket, data: any): boolean {
   try {
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(data));
+      // Use safeStringify to ensure we never throw JSON stringify errors
+      ws.send(safeStringify(data));
       return true;
     } else {
       console.warn(`Cannot send message: WebSocket is not in OPEN state. Current state: ${ws.readyState}`);

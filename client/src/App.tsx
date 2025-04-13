@@ -11,76 +11,80 @@ import Products from "@/pages/products";
 import AITraining from "@/pages/ai-training";
 import SpeechEngines from "@/pages/speech-engines";
 import Settings from "@/pages/settings";
+import { ConnectionStatus } from "@/components/ui/connection-status";
 
 function App() {
   return (
-    <Switch>
-      <Route path="/" component={Dashboard} />
-      <Route path="/voice-call">
-        {() => (
-          <DashboardLayout>
-            <VoiceCall />
-          </DashboardLayout>
-        )}
-      </Route>
-      <Route path="/email-management">
-        {() => (
-          <DashboardLayout>
-            <EmailManagement />
-          </DashboardLayout>
-        )}
-      </Route>
-      <Route path="/live-chat">
-        {() => (
-          <DashboardLayout>
-            <LiveChat />
-          </DashboardLayout>
-        )}
-      </Route>
-      <Route path="/whatsapp">
-        {() => (
-          <DashboardLayout>
-            <WhatsApp />
-          </DashboardLayout>
-        )}
-      </Route>
-      <Route path="/calendar">
-        {() => (
-          <DashboardLayout>
-            <Calendar />
-          </DashboardLayout>
-        )}
-      </Route>
-      <Route path="/products">
-        {() => (
-          <DashboardLayout>
-            <Products />
-          </DashboardLayout>
-        )}
-      </Route>
-      <Route path="/ai-training">
-        {() => (
-          <DashboardLayout>
-            <AITraining />
-          </DashboardLayout>
-        )}
-      </Route>
-      <Route path="/speech-engines">
-        {() => (
-          <DashboardLayout>
-            <SpeechEngines />
-          </DashboardLayout>
-        )}
-      </Route>
-      <Route path="/settings">
-        {() => (
-          <DashboardLayout>
-            <Settings />
-          </DashboardLayout>
-        )}
-      </Route>
-      <Route component={NotFound} />
-    </Switch>
+    <>
+      <ConnectionStatus />
+      <Switch>
+        <Route path="/" component={Dashboard} />
+        <Route path="/voice-call">
+          {() => (
+            <DashboardLayout>
+              <VoiceCall />
+            </DashboardLayout>
+          )}
+        </Route>
+        <Route path="/email-management">
+          {() => (
+            <DashboardLayout>
+              <EmailManagement />
+            </DashboardLayout>
+          )}
+        </Route>
+        <Route path="/live-chat">
+          {() => (
+            <DashboardLayout>
+              <LiveChat />
+            </DashboardLayout>
+          )}
+        </Route>
+        <Route path="/whatsapp">
+          {() => (
+            <DashboardLayout>
+              <WhatsApp />
+            </DashboardLayout>
+          )}
+        </Route>
+        <Route path="/calendar">
+          {() => (
+            <DashboardLayout>
+              <Calendar />
+            </DashboardLayout>
+          )}
+        </Route>
+        <Route path="/products">
+          {() => (
+            <DashboardLayout>
+              <Products />
+            </DashboardLayout>
+          )}
+        </Route>
+        <Route path="/ai-training">
+          {() => (
+            <DashboardLayout>
+              <AITraining />
+            </DashboardLayout>
+          )}
+        </Route>
+        <Route path="/speech-engines">
+          {() => (
+            <DashboardLayout>
+              <SpeechEngines />
+            </DashboardLayout>
+          )}
+        </Route>
+        <Route path="/settings">
+          {() => (
+            <DashboardLayout>
+              <Settings />
+            </DashboardLayout>
+          )}
+        </Route>
+        <Route component={NotFound} />
+      </Switch>
+    </>
   );
 }
 
