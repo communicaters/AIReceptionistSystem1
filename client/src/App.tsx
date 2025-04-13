@@ -1,0 +1,87 @@
+import { Switch, Route } from "wouter";
+import DashboardLayout from "@/components/layout/dashboard-layout";
+import NotFound from "@/pages/not-found";
+import Dashboard from "@/pages/dashboard";
+import VoiceCall from "@/pages/voice-call";
+import EmailManagement from "@/pages/email-management";
+import LiveChat from "@/pages/live-chat";
+import WhatsApp from "@/pages/whatsapp";
+import Calendar from "@/pages/calendar";
+import Products from "@/pages/products";
+import AITraining from "@/pages/ai-training";
+import SpeechEngines from "@/pages/speech-engines";
+import Settings from "@/pages/settings";
+
+function App() {
+  return (
+    <Switch>
+      <Route path="/" component={Dashboard} />
+      <Route path="/voice-call">
+        {() => (
+          <DashboardLayout>
+            <VoiceCall />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path="/email-management">
+        {() => (
+          <DashboardLayout>
+            <EmailManagement />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path="/live-chat">
+        {() => (
+          <DashboardLayout>
+            <LiveChat />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path="/whatsapp">
+        {() => (
+          <DashboardLayout>
+            <WhatsApp />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path="/calendar">
+        {() => (
+          <DashboardLayout>
+            <Calendar />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path="/products">
+        {() => (
+          <DashboardLayout>
+            <Products />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path="/ai-training">
+        {() => (
+          <DashboardLayout>
+            <AITraining />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path="/speech-engines">
+        {() => (
+          <DashboardLayout>
+            <SpeechEngines />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path="/settings">
+        {() => (
+          <DashboardLayout>
+            <Settings />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route component={NotFound} />
+    </Switch>
+  );
+}
+
+export default App;

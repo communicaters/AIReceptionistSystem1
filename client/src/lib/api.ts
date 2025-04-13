@@ -1,0 +1,216 @@
+import { apiRequest } from "./queryClient";
+
+export interface ModuleStatus {
+  id: number;
+  name: string;
+  status: string;
+  responseTime: number | null;
+  successRate: number | null;
+  lastChecked: string;
+  details: string | null;
+}
+
+export interface SystemActivity {
+  id: number;
+  module: string;
+  event: string;
+  status: string;
+  timestamp: string;
+  details: Record<string, any> | null;
+}
+
+export interface VoiceConfig {
+  twilio: any;
+  sip: any;
+  openPhone: any;
+}
+
+export interface EmailConfig {
+  sendgrid: any;
+  smtp: any;
+  mailgun: any;
+}
+
+export interface CallLog {
+  id: number;
+  userId: number;
+  phoneNumber: string;
+  duration: number | null;
+  recording: string | null;
+  transcript: string | null;
+  sentiment: string | null;
+  timestamp: string;
+  status: string;
+}
+
+export interface EmailLog {
+  id: number;
+  userId: number;
+  from: string;
+  to: string;
+  subject: string;
+  body: string;
+  timestamp: string;
+  status: string;
+}
+
+export interface ChatLog {
+  id: number;
+  userId: number;
+  sessionId: string;
+  message: string;
+  sender: string;
+  timestamp: string;
+}
+
+export interface WhatsappLog {
+  id: number;
+  userId: number;
+  phoneNumber: string;
+  message: string;
+  mediaUrl: string | null;
+  direction: string;
+  timestamp: string;
+}
+
+export interface MeetingLog {
+  id: number;
+  userId: number;
+  attendees: string[];
+  subject: string;
+  description: string | null;
+  startTime: string;
+  endTime: string;
+  googleEventId: string | null;
+  status: string;
+}
+
+export interface Product {
+  id: number;
+  userId: number;
+  name: string;
+  description: string | null;
+  category: string | null;
+  priceInCents: number;
+  sku: string;
+  inventory: {
+    id: number;
+    productId: number;
+    quantity: number;
+    lastUpdated: string;
+  } | null;
+}
+
+export interface TrainingData {
+  id: number;
+  userId: number;
+  category: string;
+  question: string;
+  answer: string;
+}
+
+export interface IntentMap {
+  id: number;
+  userId: number;
+  intent: string;
+  examples: string[];
+}
+
+// API functions
+export const updateModuleStatus = async (
+  moduleId: string, 
+  status: string
+): Promise<ModuleStatus> => {
+  const response = await apiRequest("PUT", `/api/modules/${moduleId}/status`, {
+    status,
+    lastChecked: new Date().toISOString()
+  });
+  return response.json();
+};
+
+export const getVoiceConfigs = async (): Promise<VoiceConfig> => {
+  const response = await apiRequest("GET", "/api/voice/configs");
+  return response.json();
+};
+
+export const getCallLogs = async (limit?: number): Promise<CallLog[]> => {
+  const queryParams = limit ? `?limit=${limit}` : "";
+  const response = await apiRequest("GET", `/api/voice/logs${queryParams}`);
+  return response.json();
+};
+
+export const getEmailConfigs = async (): Promise<EmailConfig> => {
+  const response = await apiRequest("GET", "/api/email/configs");
+  return response.json();
+};
+
+export const getEmailLogs = async (limit?: number): Promise<EmailLog[]> => {
+  const queryParams = limit ? `?limit=${limit}` : "";
+  const response = await apiRequest("GET", `/api/email/logs${queryParams}`);
+  return response.json();
+};
+
+export const getChatLogs = async (
+  sessionId?: string,
+  limit?: number
+): Promise<ChatLog[]> => {
+  let queryParams = "";
+  if (sessionId) queryParams = `?sessionId=${sessionId}`;
+  else if (limit) queryParams = `?limit=${limit}`;
+  
+  const response = await apiRequest("GET", `/api/chat/logs${queryParams}`);
+  return response.json();
+};
+
+export const getWhatsappLogs = async (
+  phoneNumber?: string,
+  limit?: number
+): Promise<WhatsappLog[]> => {
+  let queryParams = "";
+  if (phoneNumber) queryParams = `?phoneNumber=${phoneNumber}`;
+  else if (limit) queryParams = `?limit=${limit}`;
+  
+  const response = await apiRequest("GET", `/api/whatsapp/logs${queryParams}`);
+  return response.json();
+};
+
+export const getMeetingLogs = async (limit?: number): Promise<MeetingLog[]> => {
+  const queryParams = limit ? `?limit=${limit}` : "";
+  const response = await apiRequest("GET", `/api/calendar/meetings${queryParams}`);
+  return response.json();
+};
+
+export const getProducts = async (): Promise<Product[]> => {
+  const response = await apiRequest("GET", "/api/products");
+  return response.json();
+};
+
+export const createProduct = async (product: Omit<Product, "id">): Promise<Product> => {
+  const response = await apiRequest("POST", "/api/products", product);
+  return response.json();
+};
+
+export const getTrainingData = async (category?: string): Promise<TrainingData[]> => {
+  const queryParams = category ? `?category=${category}` : "";
+  const response = await apiRequest("GET", `/api/training/data${queryParams}`);
+  return response.json();
+};
+
+export const createTrainingData = async (
+  data: Omit<TrainingData, "id">
+): Promise<TrainingData> => {
+  const response = await apiRequest("POST", "/api/training/data", data);
+  return response.json();
+};
+
+export const getIntents = async (): Promise<IntentMap[]> => {
+  const response = await apiRequest("GET", "/api/training/intents");
+  return response.json();
+};
+
+export const createIntent = async (
+  intent: Omit<IntentMap, "id">
+): Promise<IntentMap> => {
+  const response = await apiRequest("POST", "/api/training/intents", intent);
+  return response.json();
+};
