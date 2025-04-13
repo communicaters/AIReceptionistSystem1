@@ -1,6 +1,7 @@
 import { storage } from '../storage';
 import { openai } from './openai';
 import * as fs from 'fs';
+import * as path from 'path';
 import { promisify } from 'util';
 
 // Convert callback-based functions to promise-based
@@ -68,14 +69,43 @@ export async function speechToText(
       throw new Error("No audio data provided");
     }
 
-    // Call the Whisper API
+    // For the API to work properly, we need to ensure we have a file on disk
+    // If we have a buffer but no path, write it to a temporary file
+    let filePath = audioFile.path;
+    let needsCleanup = false;
+    
+    if (audioFile.buffer && (!audioFile.path || audioFile.path === 'temp')) {
+      // Generate a temporary file path
+      const tempDir = path.join(process.cwd(), 'temp');
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+      
+      const tempFileName = `whisper_${Date.now()}_${Math.floor(Math.random() * 10000)}.mp3`;
+      filePath = path.join(tempDir, tempFileName);
+      
+      // Write the buffer to the file
+      fs.writeFileSync(filePath, audioFile.buffer);
+      needsCleanup = true;
+    }
+    
+    // Call the Whisper API with a file stream
     const transcription = await openai.audio.transcriptions.create({
-      file: fileStream,
+      file: fs.createReadStream(filePath),
       model: "whisper-1",
       language: options.language,
       prompt: options.prompt,
       temperature: options.temperature,
     });
+    
+    // Clean up the temporary file if we created one
+    if (needsCleanup) {
+      try {
+        fs.unlinkSync(filePath);
+      } catch (error) {
+        console.warn(`Failed to delete temporary file ${filePath}:`, error);
+      }
+    }
 
     // Delete the file if requested
     if (options.removeFileAfterProcessing && audioFile.path) {
@@ -86,6 +116,11 @@ export async function speechToText(
       }
     }
 
+    // Parse and estimate audio duration (OpenAI doesn't provide this in the response)
+    // A typical English speaker speaks at ~150 words per minute
+    const wordCount = transcription.text.split(/\s+/).length;
+    const estimatedDuration = wordCount / 150 * 60; // in seconds
+    
     // Log successful transcription
     await storage.createSystemActivity({
       module: "Speech Engines",
@@ -93,17 +128,18 @@ export async function speechToText(
       status: "Completed",
       timestamp: new Date(),
       details: {
-        duration: transcription.duration,
-        language: transcription.language || options.language,
+        estimatedDuration: Math.round(estimatedDuration),
+        language: options.language || 'auto',
         textLength: transcription.text.length,
+        wordCount
       }
     });
 
     return {
       success: true,
       transcript: transcription.text,
-      duration: transcription.duration,
-      language: transcription.language,
+      duration: Math.round(estimatedDuration),
+      language: options.language || 'auto',
     };
   } catch (error: any) {
     console.error("Error in speech-to-text processing:", error);

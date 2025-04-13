@@ -30,6 +30,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   initSendgrid();
   initGoogleCalendar();
   initElevenLabs();
+  initWhisperAPI();
   
   // Initialize Twilio webhook handling
   setupTwilioWebhooks(app);
