@@ -280,8 +280,10 @@ export const trainingData = pgTable("training_data", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   category: text("category").notNull(),
-  question: text("question").notNull(),
-  answer: text("answer").notNull(),
+  content: text("content").notNull(),
+  embedding: jsonb("embedding"),
+  metadata: jsonb("metadata").default({}),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 export const insertTrainingDataSchema = createInsertSchema(trainingData).omit({

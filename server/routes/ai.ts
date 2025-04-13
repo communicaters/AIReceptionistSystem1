@@ -1,11 +1,31 @@
-import { Router } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import { createChatCompletion, analyzeSentiment, classifyIntent, createEmbeddings } from "../lib/openai";
 import { storage } from "../storage";
 import { db } from "../db";
-import { intentMap, trainingData } from "@shared/schema";
+import { intentMap, trainingData, User } from "@shared/schema";
 import { z } from "zod";
 import { asc, desc, eq, like } from "drizzle-orm";
 import { authenticate, requireAuth } from "../middleware/auth";
+
+// Helper function to handle authenticated routes
+function withAuth(handler: (req: Request, res: Response, user: User) => Promise<void>) {
+  return async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ success: false, error: "Unauthorized" });
+    }
+    
+    // At this point, we know req.user exists and is authenticated
+    // TypeScript doesn't know this, so we assert it
+    const user = req.user as User;
+    
+    try {
+      await handler(req, res, user);
+    } catch (error: any) {
+      console.error("Error in route handler:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  };
+};
 
 // Schema validation for request bodies
 const chatCompletionSchema = z.object({
@@ -157,12 +177,8 @@ aiRouter.post("/embeddings", async (req, res) => {
 // CRUD operations for training data
 
 // Create training data entry
-aiRouter.post("/training-data", async (req, res) => {
+aiRouter.post("/training-data", withAuth(async (req, res, user) => {
   try {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ success: false, error: "Unauthorized" });
-    }
-
     const { category, content, metadata } = trainingDataSchema.parse(req.body);
     
     // Generate embeddings for the content
@@ -174,9 +190,9 @@ aiRouter.post("/training-data", async (req, res) => {
 
     const embedding = embeddingResult.embeddings[0];
     
-    // Create the training data entry
+    // Create the training data entry using the authenticated user
     const trainingDataEntry = await storage.createTrainingData({
-      userId: req.user.id,
+      userId: user.id,
       category,
       content,
       embedding,
@@ -189,22 +205,18 @@ aiRouter.post("/training-data", async (req, res) => {
     console.error("Error creating training data:", error);
     res.status(400).json({ success: false, error: error.message });
   }
-});
+}));
 
 // Get all training data by user
-aiRouter.get("/training-data", async (req, res) => {
+aiRouter.get("/training-data", withAuth(async (req, res, user) => {
   try {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ success: false, error: "Unauthorized" });
-    }
-
     const category = req.query.category as string | undefined;
     let trainingDataEntries;
-
+    
     if (category) {
-      trainingDataEntries = await storage.getTrainingDataByCategory(req.user.id, category);
+      trainingDataEntries = await storage.getTrainingDataByCategory(user.id, category);
     } else {
-      trainingDataEntries = await storage.getTrainingDataByUserId(req.user.id);
+      trainingDataEntries = await storage.getTrainingDataByUserId(user.id);
     }
 
     res.json({ success: true, data: trainingDataEntries });
@@ -212,7 +224,7 @@ aiRouter.get("/training-data", async (req, res) => {
     console.error("Error fetching training data:", error);
     res.status(500).json({ success: false, error: error.message });
   }
-});
+}));
 
 // Get training data by ID
 aiRouter.get("/training-data/:id", async (req, res) => {
