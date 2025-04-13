@@ -8,7 +8,7 @@ import { asc, desc, eq, like } from "drizzle-orm";
 import { authenticate, requireAuth } from "../middleware/auth";
 
 // Helper function to handle authenticated routes
-function withAuth(handler: (req: Request, res: Response, user: User) => Promise<void>) {
+function withAuth(handler: (req: Request, res: Response, user: User) => Promise<any>) {
   return async (req: Request, res: Response) => {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ success: false, error: "Unauthorized" });
@@ -227,16 +227,12 @@ aiRouter.get("/training-data", withAuth(async (req, res, user) => {
 }));
 
 // Get training data by ID
-aiRouter.get("/training-data/:id", async (req, res) => {
+aiRouter.get("/training-data/:id", withAuth(async (req, res, user) => {
   try {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ success: false, error: "Unauthorized" });
-    }
-
     const id = parseInt(req.params.id);
     const trainingDataEntry = await storage.getTrainingData(id);
 
-    if (!trainingDataEntry || trainingDataEntry.userId !== req.user.id) {
+    if (!trainingDataEntry || trainingDataEntry.userId !== user.id) {
       return res.status(404).json({ success: false, error: "Training data not found" });
     }
 
@@ -245,21 +241,17 @@ aiRouter.get("/training-data/:id", async (req, res) => {
     console.error("Error fetching training data:", error);
     res.status(500).json({ success: false, error: error.message });
   }
-});
+}));
 
 // Update training data
-aiRouter.put("/training-data/:id", async (req, res) => {
+aiRouter.put("/training-data/:id", withAuth(async (req, res, user) => {
   try {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ success: false, error: "Unauthorized" });
-    }
-
     const id = parseInt(req.params.id);
     const { category, content, metadata } = trainingDataSchema.parse(req.body);
     
     // Check ownership
     const existingData = await storage.getTrainingData(id);
-    if (!existingData || existingData.userId !== req.user.id) {
+    if (!existingData || existingData.userId !== user.id) {
       return res.status(404).json({ success: false, error: "Training data not found" });
     }
 
@@ -288,20 +280,16 @@ aiRouter.put("/training-data/:id", async (req, res) => {
     console.error("Error updating training data:", error);
     res.status(400).json({ success: false, error: error.message });
   }
-});
+}));
 
 // Delete training data
-aiRouter.delete("/training-data/:id", async (req, res) => {
+aiRouter.delete("/training-data/:id", withAuth(async (req, res, user) => {
   try {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ success: false, error: "Unauthorized" });
-    }
-
     const id = parseInt(req.params.id);
     
     // Check ownership
     const existingData = await storage.getTrainingData(id);
-    if (!existingData || existingData.userId !== req.user.id) {
+    if (!existingData || existingData.userId !== user.id) {
       return res.status(404).json({ success: false, error: "Training data not found" });
     }
 
@@ -317,17 +305,13 @@ aiRouter.delete("/training-data/:id", async (req, res) => {
     console.error("Error deleting training data:", error);
     res.status(500).json({ success: false, error: error.message });
   }
-});
+}));
 
 // CRUD operations for intent maps
 
 // Create intent
-aiRouter.post("/intents", async (req, res) => {
+aiRouter.post("/intents", withAuth(async (req, res, user) => {
   try {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ success: false, error: "Unauthorized" });
-    }
-
     const { intent, examples } = req.body;
     
     if (!intent || !examples || !Array.isArray(examples)) {
@@ -335,7 +319,7 @@ aiRouter.post("/intents", async (req, res) => {
     }
 
     const intentEntry = await storage.createIntent({
-      userId: req.user.id,
+      userId: user.id,
       intent,
       examples,
     });
@@ -345,34 +329,26 @@ aiRouter.post("/intents", async (req, res) => {
     console.error("Error creating intent:", error);
     res.status(400).json({ success: false, error: error.message });
   }
-});
+}));
 
 // Get all intents by user
-aiRouter.get("/intents", async (req, res) => {
+aiRouter.get("/intents", withAuth(async (req, res, user) => {
   try {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ success: false, error: "Unauthorized" });
-    }
-
-    const intents = await storage.getIntentsByUserId(req.user.id);
+    const intents = await storage.getIntentsByUserId(user.id);
     res.json({ success: true, data: intents });
   } catch (error: any) {
     console.error("Error fetching intents:", error);
     res.status(500).json({ success: false, error: error.message });
   }
-});
+}));
 
 // Get intent by ID
-aiRouter.get("/intents/:id", async (req, res) => {
+aiRouter.get("/intents/:id", withAuth(async (req, res, user) => {
   try {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ success: false, error: "Unauthorized" });
-    }
-
     const id = parseInt(req.params.id);
     const intent = await storage.getIntent(id);
 
-    if (!intent || intent.userId !== req.user.id) {
+    if (!intent || intent.userId !== user.id) {
       return res.status(404).json({ success: false, error: "Intent not found" });
     }
 
@@ -381,15 +357,11 @@ aiRouter.get("/intents/:id", async (req, res) => {
     console.error("Error fetching intent:", error);
     res.status(500).json({ success: false, error: error.message });
   }
-});
+}));
 
 // Update intent
-aiRouter.put("/intents/:id", async (req, res) => {
+aiRouter.put("/intents/:id", withAuth(async (req, res, user) => {
   try {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ success: false, error: "Unauthorized" });
-    }
-
     const id = parseInt(req.params.id);
     const { intent, examples } = req.body;
     
@@ -399,7 +371,7 @@ aiRouter.put("/intents/:id", async (req, res) => {
     
     // Check ownership
     const existingIntent = await storage.getIntent(id);
-    if (!existingIntent || existingIntent.userId !== req.user.id) {
+    if (!existingIntent || existingIntent.userId !== user.id) {
       return res.status(404).json({ success: false, error: "Intent not found" });
     }
 
@@ -414,20 +386,16 @@ aiRouter.put("/intents/:id", async (req, res) => {
     console.error("Error updating intent:", error);
     res.status(400).json({ success: false, error: error.message });
   }
-});
+}));
 
 // Delete intent
-aiRouter.delete("/intents/:id", async (req, res) => {
+aiRouter.delete("/intents/:id", withAuth(async (req, res, user) => {
   try {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ success: false, error: "Unauthorized" });
-    }
-
     const id = parseInt(req.params.id);
     
     // Check ownership
     const existingIntent = await storage.getIntent(id);
-    if (!existingIntent || existingIntent.userId !== req.user.id) {
+    if (!existingIntent || existingIntent.userId !== user.id) {
       return res.status(404).json({ success: false, error: "Intent not found" });
     }
 
@@ -443,4 +411,4 @@ aiRouter.delete("/intents/:id", async (req, res) => {
     console.error("Error deleting intent:", error);
     res.status(500).json({ success: false, error: error.message });
   }
-});
+}));
