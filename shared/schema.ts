@@ -57,6 +57,13 @@ export const insertSipConfigSchema = createInsertSchema(sipConfig).omit({
   id: true,
 });
 
+export const sipConfigRelations = relations(sipConfig, ({ one }) => ({
+  user: one(users, {
+    fields: [sipConfig.userId],
+    references: [users.id],
+  }),
+}));
+
 export const twilioConfig = pgTable("twilio_config", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),
@@ -70,6 +77,13 @@ export const insertTwilioConfigSchema = createInsertSchema(twilioConfig).omit({
   id: true,
 });
 
+export const twilioConfigRelations = relations(twilioConfig, ({ one }) => ({
+  user: one(users, {
+    fields: [twilioConfig.userId],
+    references: [users.id],
+  }),
+}));
+
 export const openPhoneConfig = pgTable("openphone_config", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),
@@ -81,6 +95,13 @@ export const openPhoneConfig = pgTable("openphone_config", {
 export const insertOpenPhoneConfigSchema = createInsertSchema(openPhoneConfig).omit({
   id: true,
 });
+
+export const openPhoneConfigRelations = relations(openPhoneConfig, ({ one }) => ({
+  user: one(users, {
+    fields: [openPhoneConfig.userId],
+    references: [users.id],
+  }),
+}));
 
 // Email service configurations
 export const smtpConfig = pgTable("smtp_email_config", {
@@ -98,6 +119,13 @@ export const insertSmtpConfigSchema = createInsertSchema(smtpConfig).omit({
   id: true,
 });
 
+export const smtpConfigRelations = relations(smtpConfig, ({ one }) => ({
+  user: one(users, {
+    fields: [smtpConfig.userId],
+    references: [users.id],
+  }),
+}));
+
 export const sendgridConfig = pgTable("sendgrid_config", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),
@@ -110,6 +138,13 @@ export const sendgridConfig = pgTable("sendgrid_config", {
 export const insertSendgridConfigSchema = createInsertSchema(sendgridConfig).omit({
   id: true,
 });
+
+export const sendgridConfigRelations = relations(sendgridConfig, ({ one }) => ({
+  user: one(users, {
+    fields: [sendgridConfig.userId],
+    references: [users.id],
+  }),
+}));
 
 export const mailgunConfig = pgTable("mailgun_config", {
   id: serial("id").primaryKey(),
@@ -125,6 +160,13 @@ export const insertMailgunConfigSchema = createInsertSchema(mailgunConfig).omit(
   id: true,
 });
 
+export const mailgunConfigRelations = relations(mailgunConfig, ({ one }) => ({
+  user: one(users, {
+    fields: [mailgunConfig.userId],
+    references: [users.id],
+  }),
+}));
+
 // Chat and messaging configurations
 export const chatConfig = pgTable("chat_config", {
   id: serial("id").primaryKey(),
@@ -139,6 +181,13 @@ export const insertChatConfigSchema = createInsertSchema(chatConfig).omit({
   id: true,
 });
 
+export const chatConfigRelations = relations(chatConfig, ({ one }) => ({
+  user: one(users, {
+    fields: [chatConfig.userId],
+    references: [users.id],
+  }),
+}));
+
 export const whatsappConfig = pgTable("whatsapp_config", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),
@@ -152,6 +201,13 @@ export const whatsappConfig = pgTable("whatsapp_config", {
 export const insertWhatsappConfigSchema = createInsertSchema(whatsappConfig).omit({
   id: true,
 });
+
+export const whatsappConfigRelations = relations(whatsappConfig, ({ one }) => ({
+  user: one(users, {
+    fields: [whatsappConfig.userId],
+    references: [users.id],
+  }),
+}));
 
 // Calendar and scheduling configurations
 export const calendarConfig = pgTable("calendar_settings", {
@@ -171,6 +227,13 @@ export const insertCalendarConfigSchema = createInsertSchema(calendarConfig).omi
   id: true,
 });
 
+export const calendarConfigRelations = relations(calendarConfig, ({ one }) => ({
+  user: one(users, {
+    fields: [calendarConfig.userId],
+    references: [users.id],
+  }),
+}));
+
 // Product and inventory configurations
 export const productData = pgTable("product_data", {
   id: serial("id").primaryKey(),
@@ -185,6 +248,14 @@ export const productData = pgTable("product_data", {
 export const insertProductDataSchema = createInsertSchema(productData).omit({
   id: true,
 });
+
+export const productDataRelations = relations(productData, ({ one, many }) => ({
+  user: one(users, {
+    fields: [productData.userId],
+    references: [users.id],
+  }),
+  inventory: many(inventoryStatus),
+}));
 
 export const inventoryStatus = pgTable("inventory_status", {
   id: serial("id").primaryKey(),
