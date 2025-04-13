@@ -45,7 +45,7 @@ export const usersRelations = relations(users, ({ many }) => ({
 // Phone service configurations
 export const sipConfig = pgTable("sip_phone_settings", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   serverUrl: text("server_url").notNull(),
   username: text("username").notNull(),
   password: text("password").notNull(),
@@ -66,7 +66,7 @@ export const sipConfigRelations = relations(sipConfig, ({ one }) => ({
 
 export const twilioConfig = pgTable("twilio_config", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   accountSid: text("account_sid").notNull(),
   authToken: text("auth_token").notNull(),
   phoneNumber: text("phone_number").notNull(),
@@ -259,7 +259,7 @@ export const productDataRelations = relations(productData, ({ one, many }) => ({
 
 export const inventoryStatus = pgTable("inventory_status", {
   id: serial("id").primaryKey(),
-  productId: integer("product_id").notNull(),
+  productId: integer("product_id").notNull().references(() => productData.id, { onDelete: 'cascade' }),
   quantity: integer("quantity").notNull().default(0),
   lastUpdated: timestamp("last_updated").notNull(),
 });
