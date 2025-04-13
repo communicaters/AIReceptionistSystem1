@@ -37,7 +37,18 @@ const SpeechEngines = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Fetch available TTS voices
-  const { data: voicesData, isLoading: isLoadingVoices } = useQuery({
+  // Define the response type for voices
+  type VoicesResponse = {
+    success: boolean;
+    voices: Array<{
+      id: string;
+      name: string;
+      accent?: string;
+      description: string;
+    }>;
+  };
+  
+  const { data: voicesData, isLoading: isLoadingVoices } = useQuery<VoicesResponse>({
     queryKey: ['/api/speech/tts/voices'],
     enabled: true,
   });
@@ -180,11 +191,19 @@ const SpeechEngines = () => {
     { id: 2, name: "Google Speech-to-Text", status: "inactive", accuracy: 92 },
   ];
   
-  const ttsVoices = voicesData?.voices || [
-    { id: "voice1", name: "Emma", gender: "Female", accent: "American", description: "Professional female voice" },
-    { id: "voice2", name: "Michael", gender: "Male", accent: "American", description: "Professional male voice" },
-    { id: "voice3", name: "Olivia", gender: "Female", accent: "British", description: "Friendly female voice" },
-    { id: "voice4", name: "James", gender: "Male", accent: "British", description: "Friendly male voice" },
+  // Voice type definition
+  type VoiceType = {
+    id: string;
+    name: string;
+    accent?: string;
+    description: string;
+  };
+  
+  const ttsVoices: VoiceType[] = voicesData?.voices || [
+    { id: "voice1", name: "Emma", accent: "American", description: "Professional female voice" },
+    { id: "voice2", name: "Michael", accent: "American", description: "Professional male voice" },
+    { id: "voice3", name: "Olivia", accent: "British", description: "Friendly female voice" },
+    { id: "voice4", name: "James", accent: "British", description: "Friendly male voice" },
   ];
 
   return (
