@@ -7,20 +7,59 @@ const connectedClients: Map<string, {
   ws: WebSocket;
   userId: number;
   sessionId: string;
+  lastPing: number; // Track last ping time
 }> = new Map();
+
+// Heart beat interval (15 seconds)
+const HEARTBEAT_INTERVAL = 15000;
+// Timeout for client connection (45 seconds - 3x the heartbeat)
+const CLIENT_TIMEOUT = HEARTBEAT_INTERVAL * 3;
 
 // Setup WebSocket server handlers
 export function setupWebsocketHandlers(wss: WebSocketServer) {
-  wss.on('connection', (ws) => {
+  // Heartbeat check interval
+  setInterval(() => {
+    const now = Date.now();
+    
+    // Check each client's last ping time
+    connectedClients.forEach((client, clientId) => {
+      // If client hasn't sent a ping in the timeout period, terminate connection
+      if (now - client.lastPing > CLIENT_TIMEOUT) {
+        console.log(`Client ${clientId} timed out (no ping for ${CLIENT_TIMEOUT}ms). Terminating connection.`);
+        
+        try {
+          client.ws.terminate();
+          connectedClients.delete(clientId);
+        } catch (err) {
+          console.error(`Error terminating client connection:`, err);
+        }
+      }
+    });
+  }, HEARTBEAT_INTERVAL);
+
+  // Handle connection errors at the server level
+  wss.on('error', (error) => {
+    console.error('WebSocket server error:', error);
+  });
+
+  wss.on('connection', (ws, req) => {
+    // Track client IP for better logging
+    const ip = req.socket.remoteAddress || 'unknown';
+    
     // Generate a session ID for this connection
     const sessionId = `session_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
     const userId = 1; // For demo purposes
     
     // Store the client connection
     const clientId = Date.now().toString();
-    connectedClients.set(clientId, { ws, userId, sessionId });
+    connectedClients.set(clientId, { 
+      ws, 
+      userId, 
+      sessionId, 
+      lastPing: Date.now() // Initialize last ping time
+    });
     
-    console.log(`WebSocket client connected: ${clientId}, Session: ${sessionId}`);
+    console.log(`WebSocket client connected: ${clientId}, Session: ${sessionId}, IP: ${ip}`);
     
     // Send welcome message
     sendToClient(ws, {
@@ -29,9 +68,38 @@ export function setupWebsocketHandlers(wss: WebSocketServer) {
       sessionId
     });
     
+    // Handle pings to keep connection alive
+    ws.on('ping', () => {
+      const client = connectedClients.get(clientId);
+      if (client) {
+        client.lastPing = Date.now();
+        connectedClients.set(clientId, client);
+      }
+      
+      // Respond with pong
+      ws.pong();
+    });
+    
+    // Handle pongs (responses to our pings)
+    ws.on('pong', () => {
+      const client = connectedClients.get(clientId);
+      if (client) {
+        client.lastPing = Date.now();
+        connectedClients.set(clientId, client);
+      }
+    });
+    
     // Handle incoming messages
     ws.on('message', async (message) => {
       try {
+        // Update the client's last ping time
+        const client = connectedClients.get(clientId);
+        if (client) {
+          client.lastPing = Date.now();
+          connectedClients.set(clientId, client);
+        }
+        
+        // Parse message
         const data = JSON.parse(message.toString());
         
         // Handle different message types
@@ -39,38 +107,113 @@ export function setupWebsocketHandlers(wss: WebSocketServer) {
           await handleChatMessage(clientId, data.message);
         } else if (data.type === 'status') {
           await handleStatusUpdate(clientId, data.moduleId, data.status);
+        } else if (data.type === 'ping') {
+          // Handle explicit ping messages from client
+          sendToClient(ws, {
+            type: 'pong',
+            timestamp: new Date().toISOString()
+          });
         }
       } catch (error) {
-        console.error('Error parsing WebSocket message:', error);
+        console.error(`Error handling WebSocket message from ${clientId}:`, error);
         sendToClient(ws, {
           type: 'error',
-          message: 'Invalid message format'
+          message: 'Failed to process message',
+          details: error instanceof Error ? error.message : 'Unknown error'
         });
       }
     });
     
-    // Handle client disconnect
-    ws.on('close', () => {
-      console.log(`WebSocket client disconnected: ${clientId}`);
-      connectedClients.delete(clientId);
+    // Handle connection errors
+    ws.on('error', (error) => {
+      console.error(`WebSocket client ${clientId} error:`, error);
+      
+      // Create system activity for error
+      try {
+        storage.createSystemActivity({
+          module: 'WebSocket',
+          event: 'Connection Error',
+          status: 'Error',
+          timestamp: new Date(),
+          details: { clientId, sessionId, error: error.message || 'Unknown error' }
+        }).catch(err => console.error('Failed to log WebSocket error activity:', err));
+      } catch (err) {
+        console.error('Failed to create system activity for WebSocket error:', err);
+      }
     });
+    
+    // Handle client disconnect
+    ws.on('close', (code, reason) => {
+      console.log(`WebSocket client disconnected: ${clientId}, Code: ${code}, Reason: ${reason}`);
+      connectedClients.delete(clientId);
+      
+      // Create system activity for disconnect
+      try {
+        storage.createSystemActivity({
+          module: 'WebSocket',
+          event: 'Client Disconnected',
+          status: 'Info',
+          timestamp: new Date(),
+          details: { clientId, sessionId, code, reason: reason.toString() }
+        }).catch(err => console.error('Failed to log WebSocket disconnect activity:', err));
+      } catch (err) {
+        console.error('Failed to create system activity for WebSocket disconnect:', err);
+      }
+    });
+    
+    // Set up ping interval for this specific client
+    const pingInterval = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.ping();
+        } catch (error) {
+          console.error(`Error sending ping to client ${clientId}:`, error);
+          clearInterval(pingInterval);
+        }
+      } else {
+        clearInterval(pingInterval);
+      }
+    }, HEARTBEAT_INTERVAL);
+    
+    // Clear ping interval when client disconnects
+    ws.on('close', () => clearInterval(pingInterval));
   });
 
-  console.log('WebSocket server initialized');
+  console.log('WebSocket server initialized with heartbeat monitoring');
 }
 
 // Send message to specific client
-function sendToClient(ws: WebSocket, data: any) {
-  if (ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(data));
+function sendToClient(ws: WebSocket, data: any): boolean {
+  try {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(data));
+      return true;
+    } else {
+      console.warn(`Cannot send message: WebSocket is not in OPEN state. Current state: ${ws.readyState}`);
+      return false;
+    }
+  } catch (error) {
+    console.error('Error sending message to client:', error);
+    return false;
   }
 }
 
 // Broadcast message to all connected clients
-export function broadcastMessage(data: any) {
-  connectedClients.forEach(({ ws }) => {
-    sendToClient(ws, data);
+export function broadcastMessage(data: any): number {
+  let successCount = 0;
+  
+  connectedClients.forEach(({ ws }, clientId) => {
+    try {
+      if (sendToClient(ws, data)) {
+        successCount++;
+      }
+    } catch (error) {
+      console.error(`Error broadcasting to client ${clientId}:`, error);
+    }
   });
+  
+  // Return the number of successful sends
+  return successCount;
 }
 
 // Handle chat messages
