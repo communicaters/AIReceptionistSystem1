@@ -86,7 +86,7 @@ export const twilioConfigRelations = relations(twilioConfig, ({ one }) => ({
 
 export const openPhoneConfig = pgTable("openphone_config", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   apiKey: text("api_key").notNull(),
   phoneNumber: text("phone_number").notNull(),
   isActive: boolean("is_active").notNull().default(true),
@@ -106,7 +106,7 @@ export const openPhoneConfigRelations = relations(openPhoneConfig, ({ one }) => 
 // Email service configurations
 export const smtpConfig = pgTable("smtp_email_config", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   host: text("host").notNull(),
   port: integer("port").notNull(),
   username: text("username").notNull(),
@@ -128,7 +128,7 @@ export const smtpConfigRelations = relations(smtpConfig, ({ one }) => ({
 
 export const sendgridConfig = pgTable("sendgrid_config", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   apiKey: text("api_key").notNull(),
   fromEmail: text("from_email").notNull(),
   fromName: text("from_name").notNull(),
@@ -148,7 +148,7 @@ export const sendgridConfigRelations = relations(sendgridConfig, ({ one }) => ({
 
 export const mailgunConfig = pgTable("mailgun_config", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   apiKey: text("api_key").notNull(),
   domain: text("domain").notNull(),
   fromEmail: text("from_email").notNull(),
@@ -170,7 +170,7 @@ export const mailgunConfigRelations = relations(mailgunConfig, ({ one }) => ({
 // Chat and messaging configurations
 export const chatConfig = pgTable("chat_config", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   widgetTitle: text("widget_title").notNull(),
   widgetColor: text("widget_color").notNull().default("#2563eb"),
   greetingMessage: text("greeting_message").notNull(),
@@ -190,7 +190,7 @@ export const chatConfigRelations = relations(chatConfig, ({ one }) => ({
 
 export const whatsappConfig = pgTable("whatsapp_config", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   phoneNumberId: text("phone_number_id").notNull(),
   accessToken: text("access_token").notNull(),
   businessAccountId: text("business_account_id").notNull(),
@@ -212,7 +212,7 @@ export const whatsappConfigRelations = relations(whatsappConfig, ({ one }) => ({
 // Calendar and scheduling configurations
 export const calendarConfig = pgTable("calendar_settings", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   googleClientId: text("google_client_id").notNull(),
   googleClientSecret: text("google_client_secret").notNull(),
   googleRefreshToken: text("google_refresh_token"),
@@ -237,7 +237,7 @@ export const calendarConfigRelations = relations(calendarConfig, ({ one }) => ({
 // Product and inventory configurations
 export const productData = pgTable("product_data", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   name: text("name").notNull(),
   description: text("description"),
   category: text("category"),
@@ -278,7 +278,7 @@ export const inventoryStatusRelations = relations(inventoryStatus, ({ one }) => 
 // AI training and models
 export const trainingData = pgTable("training_data", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   category: text("category").notNull(),
   question: text("question").notNull(),
   answer: text("answer").notNull(),
@@ -297,7 +297,7 @@ export const trainingDataRelations = relations(trainingData, ({ one }) => ({
 
 export const intentMap = pgTable("intent_map", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   intent: text("intent").notNull(),
   examples: text("examples").array().notNull(),
 });
