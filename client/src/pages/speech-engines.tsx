@@ -23,9 +23,156 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 const SpeechEngines = () => {
+  const { toast } = useToast();
   const [volume, setVolume] = useState(80);
   const [speed, setSpeed] = useState(1.0);
   const [testText, setTestText] = useState("Hello, I'm the AI Receptionist. How may I help you today?");
+  const [audioUrl, setAudioUrl] = useState("");
+  const [transcription, setTranscription] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState("en");
+  const [selectedVoice, setSelectedVoice] = useState("voice1");
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [audioUrlInput, setAudioUrlInput] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Fetch available TTS voices
+  const { data: voicesData, isLoading: isLoadingVoices } = useQuery({
+    queryKey: ['/api/speech/tts/voices'],
+    enabled: true,
+  });
+  
+  // Text-to-speech mutation
+  const ttsTestMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest('POST', '/api/speech/tts', {
+        text: testText,
+        voiceId: selectedVoice,
+        stability: 0.75,
+        similarityBoost: 0.7
+      });
+      return await response.json();
+    },
+    onSuccess: (data) => {
+      if (data.success && data.audioUrl) {
+        setAudioUrl(data.audioUrl);
+        toast({
+          title: "Speech Generated",
+          description: "Text has been converted to speech successfully",
+        });
+      } else {
+        toast({
+          title: "Generation Failed",
+          description: data.error || "Failed to generate speech",
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "An error occurred during text-to-speech generation",
+        variant: "destructive",
+      });
+    }
+  });
+  
+  // Speech-to-text from file upload mutation
+  const sttFromFileMutation = useMutation({
+    mutationFn: async () => {
+      if (!audioFile) throw new Error("No audio file selected");
+      
+      const formData = new FormData();
+      formData.append('audio', audioFile);
+      formData.append('language', selectedLanguage);
+      
+      setIsProcessing(true);
+      
+      const response = await fetch('/api/speech/stt/upload', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include'
+      });
+      
+      return await response.json();
+    },
+    onSuccess: (data) => {
+      setIsProcessing(false);
+      if (data.success && data.transcript) {
+        setTranscription(data.transcript);
+        toast({
+          title: "Transcription Complete",
+          description: `Audio transcribed successfully (${Math.round(data.duration || 0)}s)`,
+        });
+      } else {
+        toast({
+          title: "Transcription Failed",
+          description: data.error || "Failed to transcribe audio",
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (error: any) => {
+      setIsProcessing(false);
+      toast({
+        title: "Error",
+        description: error.message || "An error occurred during speech-to-text processing",
+        variant: "destructive",
+      });
+    }
+  });
+  
+  // Speech-to-text from URL mutation
+  const sttFromUrlMutation = useMutation({
+    mutationFn: async () => {
+      if (!audioUrlInput) throw new Error("No audio URL provided");
+      
+      setIsProcessing(true);
+      
+      const response = await apiRequest('POST', '/api/speech/stt/url', {
+        audioUrl: audioUrlInput,
+        language: selectedLanguage
+      });
+      
+      return await response.json();
+    },
+    onSuccess: (data) => {
+      setIsProcessing(false);
+      if (data.success && data.transcript) {
+        setTranscription(data.transcript);
+        toast({
+          title: "Transcription Complete",
+          description: `Audio transcribed successfully (${Math.round(data.duration || 0)}s)`,
+        });
+      } else {
+        toast({
+          title: "Transcription Failed",
+          description: data.error || "Failed to transcribe audio",
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (error: any) => {
+      setIsProcessing(false);
+      toast({
+        title: "Error",
+        description: error.message || "An error occurred during speech-to-text processing",
+        variant: "destructive",
+      });
+    }
+  });
+  
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setAudioFile(e.target.files[0]);
+    }
+  };
+  
+  const handleFileUpload = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
   
   // In a real application, these would come from API queries
   const sttEngines = [
@@ -33,7 +180,7 @@ const SpeechEngines = () => {
     { id: 2, name: "Google Speech-to-Text", status: "inactive", accuracy: 92 },
   ];
   
-  const ttsVoices = [
+  const ttsVoices = voicesData?.voices || [
     { id: "voice1", name: "Emma", gender: "Female", accent: "American", description: "Professional female voice" },
     { id: "voice2", name: "Michael", gender: "Male", accent: "American", description: "Professional male voice" },
     { id: "voice3", name: "Olivia", gender: "Female", accent: "British", description: "Friendly female voice" },
@@ -49,7 +196,7 @@ const SpeechEngines = () => {
             Configure speech-to-text and text-to-speech capabilities
           </p>
         </div>
-        <Button>
+        <Button onClick={() => handleFileUpload()}>
           <Mic className="mr-2 h-4 w-4" />
           Test Speech Recognition
         </Button>
@@ -140,9 +287,22 @@ const SpeechEngines = () => {
                       />
                     </div>
 
-                    <Button className="w-full">
-                      <Play className="mr-2 h-4 w-4" />
-                      Play Test Audio
+                    <Button 
+                      className="w-full" 
+                      disabled={ttsTestMutation.isPending}
+                      onClick={() => ttsTestMutation.mutate()}
+                    >
+                      {ttsTestMutation.isPending ? (
+                        <>
+                          <div className="animate-spin w-4 h-4 border-2 border-current border-t-transparent rounded-full mr-2" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <Play className="mr-2 h-4 w-4" />
+                          Generate & Play Test Audio
+                        </>
+                      )}
                     </Button>
                   </div>
                 </CardContent>
@@ -240,7 +400,10 @@ const SpeechEngines = () => {
                     {ttsVoices.map((voice) => (
                       <div 
                         key={voice.id}
-                        className="border rounded-md p-3 flex items-start space-x-3 cursor-pointer hover:border-primary"
+                        className={`border rounded-md p-3 flex items-start space-x-3 cursor-pointer hover:border-primary transition-colors ${
+                          selectedVoice === voice.id ? 'border-primary bg-primary/5' : ''
+                        }`}
+                        onClick={() => setSelectedVoice(voice.id)}
                       >
                         <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
                           <AudioWaveform className="h-5 w-5 text-primary" />
@@ -255,7 +418,16 @@ const SpeechEngines = () => {
                           <p className="text-sm text-neutral-500 mt-1">
                             {voice.description}
                           </p>
-                          <Button variant="ghost" size="sm" className="mt-2">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="mt-2"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedVoice(voice.id);
+                              ttsTestMutation.mutate();
+                            }}
+                          >
                             <Play className="h-3 w-3 mr-1" />
                             Preview
                           </Button>
@@ -351,7 +523,10 @@ const SpeechEngines = () => {
                       </div>
                     </div>
 
-                    <Button className="w-full">
+                    <Button 
+                      className="w-full"
+                      onClick={handleFileUpload}
+                    >
                       <Mic className="mr-2 h-4 w-4" />
                       Test Speech Recognition
                     </Button>
@@ -363,54 +538,123 @@ const SpeechEngines = () => {
                 <CardHeader>
                   <CardTitle>Speech-to-Text Test Results</CardTitle>
                   <CardDescription>
-                    Recorded test transcriptions and accuracy metrics
+                    Real-time transcription results
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
+                    {/* Hidden file input for audio upload */}
+                    <input 
+                      type="file" 
+                      ref={fileInputRef}
+                      onChange={handleFileChange}
+                      accept="audio/*" 
+                      className="hidden"
+                    />
+                    
+                    {/* Transcription result display */}
                     <div className="border rounded-md p-4">
-                      <div className="flex justify-between">
-                        <h3 className="font-medium">Test Transcript 1</h3>
-                        <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded-full">
-                          97% Accuracy
-                        </span>
+                      <div className="flex justify-between items-center">
+                        <h3 className="font-medium">Current Transcription</h3>
+                        {isProcessing && (
+                          <div className="flex items-center">
+                            <div className="animate-spin w-4 h-4 border-2 border-primary border-t-transparent rounded-full mr-2"></div>
+                            <span className="text-xs">Processing...</span>
+                          </div>
+                        )}
                       </div>
-                      <p className="mt-2 text-sm">
-                        "I'd like to schedule a meeting with the sales team next Tuesday at 2 PM."
-                      </p>
-                      <div className="mt-3 flex space-x-2">
-                        <Button variant="outline" size="sm">
-                          <Play className="h-3 w-3 mr-1" />
-                          Play Recording
-                        </Button>
-                        <Button variant="ghost" size="sm">View Details</Button>
+                      
+                      <div className="mt-3 p-3 bg-muted/50 rounded-md min-h-24">
+                        {transcription ? (
+                          <p className="text-sm">{transcription}</p>
+                        ) : (
+                          <p className="text-sm text-muted-foreground italic">
+                            No transcription available. Upload an audio file or provide a URL to begin.
+                          </p>
+                        )}
                       </div>
+                      
+                      {audioFile && (
+                        <div className="mt-3 flex items-center text-sm text-muted-foreground">
+                          <AudioWaveform className="h-4 w-4 mr-2" />
+                          <span>{audioFile.name} ({Math.round(audioFile.size / 1024)} KB)</span>
+                        </div>
+                      )}
                     </div>
-
-                    <div className="border rounded-md p-4">
-                      <div className="flex justify-between">
-                        <h3 className="font-medium">Test Transcript 2</h3>
-                        <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded-full">
-                          92% Accuracy
-                        </span>
-                      </div>
-                      <p className="mt-2 text-sm">
-                        "What are your business hours for the downtown location?"
-                      </p>
-                      <div className="mt-3 flex space-x-2">
-                        <Button variant="outline" size="sm">
-                          <Play className="h-3 w-3 mr-1" />
-                          Play Recording
+                    
+                    {/* Audio file upload section */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-3">
+                        <Label>Upload Audio File</Label>
+                        <div 
+                          onClick={handleFileUpload}
+                          className="border-2 border-dashed rounded-md p-4 flex flex-col items-center justify-center cursor-pointer hover:border-primary transition-colors"
+                        >
+                          <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+                          <p className="text-sm text-center text-muted-foreground">
+                            Click to upload audio (MP3, WAV, OGG)
+                          </p>
+                          <p className="text-xs text-center text-muted-foreground mt-1">
+                            Max file size: 10MB
+                          </p>
+                        </div>
+                        <Button 
+                          className="w-full" 
+                          disabled={!audioFile || isProcessing}
+                          onClick={() => sttFromFileMutation.mutate()}
+                        >
+                          <AudioWaveform className="mr-2 h-4 w-4" />
+                          Transcribe Audio File
                         </Button>
-                        <Button variant="ghost" size="sm">View Details</Button>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        <Label>Transcribe from URL</Label>
+                        <div className="space-y-2">
+                          <Input
+                            type="url"
+                            placeholder="https://example.com/audio.mp3"
+                            value={audioUrlInput}
+                            onChange={(e) => setAudioUrlInput(e.target.value)}
+                          />
+                          <Button 
+                            className="w-full" 
+                            disabled={!audioUrlInput || isProcessing}
+                            onClick={() => sttFromUrlMutation.mutate()}
+                          >
+                            <Link2 className="mr-2 h-4 w-4" />
+                            Transcribe from URL
+                          </Button>
+                        </div>
+                        
+                        <div className="space-y-2 mt-4">
+                          <Label htmlFor="transcription-language">Language</Label>
+                          <Select 
+                            value={selectedLanguage}
+                            onValueChange={setSelectedLanguage}
+                          >
+                            <SelectTrigger id="transcription-language">
+                              <SelectValue placeholder="Select language" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="en">English</SelectItem>
+                              <SelectItem value="es">Spanish</SelectItem>
+                              <SelectItem value="fr">French</SelectItem>
+                              <SelectItem value="de">German</SelectItem>
+                              <SelectItem value="zh">Chinese</SelectItem>
+                              <SelectItem value="ja">Japanese</SelectItem>
+                              <SelectItem value="ko">Korean</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </CardContent>
                 <CardFooter>
-                  <Button variant="outline" className="w-full">
+                  <Button variant="outline" className="w-full" onClick={handleFileUpload}>
                     <RefreshCw className="mr-2 h-4 w-4" />
-                    Run Accuracy Tests
+                    Start New Transcription
                   </Button>
                 </CardFooter>
               </Card>
