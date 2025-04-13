@@ -7,8 +7,10 @@ import { initOpenAI } from "./lib/openai";
 import { initSendgrid } from "./lib/sendgrid";
 import { initGoogleCalendar } from "./lib/google-calendar";
 import { initElevenLabs } from "./lib/elevenlabs";
+import { initWhisperAPI } from "./lib/whisper";
 import { setupWebsocketHandlers } from "./lib/websocket";
 import { aiRouter } from "./routes/ai";
+import { speechRouter } from "./routes/speech";
 import { authenticate } from "./middleware/auth";
 
 // Helper function to handle API responses
@@ -37,6 +39,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Register AI routes
   app.use("/api/ai", aiRouter);
+  
+  // Register Speech routes
+  app.use("/api/speech", speechRouter);
   
   // API routes
   app.get("/api/health", (req, res) => {
