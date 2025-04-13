@@ -7,6 +7,40 @@ import { z } from "zod";
 import { asc, desc, eq, like } from "drizzle-orm";
 import { authenticate, requireAuth } from "../middleware/auth";
 
+/**
+ * Calculates the cosine similarity between two vectors
+ * Returns a value between -1 and 1, where 1 means identical direction,
+ * 0 means orthogonal (no similarity), and -1 means opposite direction.
+ */
+function calculateCosineSimilarity(vectorA: number[], vectorB: number[]): number {
+  if (vectorA.length !== vectorB.length) {
+    throw new Error('Vectors must have the same length');
+  }
+  
+  // Calculate dot product and magnitudes
+  let dotProduct = 0;
+  let magnitudeA = 0;
+  let magnitudeB = 0;
+  
+  for (let i = 0; i < vectorA.length; i++) {
+    dotProduct += vectorA[i] * vectorB[i];
+    magnitudeA += vectorA[i] * vectorA[i];
+    magnitudeB += vectorB[i] * vectorB[i];
+  }
+  
+  // Calculate magnitudes
+  magnitudeA = Math.sqrt(magnitudeA);
+  magnitudeB = Math.sqrt(magnitudeB);
+  
+  // Prevent division by zero
+  if (magnitudeA === 0 || magnitudeB === 0) {
+    return 0;
+  }
+  
+  // Calculate cosine similarity
+  return dotProduct / (magnitudeA * magnitudeB);
+}
+
 // Helper function to handle authenticated routes
 function withAuth(handler: (req: Request, res: Response, user: User) => Promise<any>) {
   return async (req: Request, res: Response) => {
@@ -303,6 +337,78 @@ aiRouter.delete("/training-data/:id", withAuth(async (req, res, user) => {
     }
   } catch (error: any) {
     console.error("Error deleting training data:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+}));
+
+// Semantic search endpoint for training data
+aiRouter.post("/training-data/search", withAuth(async (req, res, user) => {
+  try {
+    const { query, category, limit = 5 } = req.body;
+    
+    if (!query || typeof query !== 'string') {
+      return res.status(400).json({ 
+        success: false, 
+        error: "Search query is required and must be a string" 
+      });
+    }
+
+    // Generate embedding for the search query
+    const embeddingResult = await createEmbeddings([query]);
+    
+    if (!embeddingResult.success) {
+      return res.status(500).json({ 
+        success: false, 
+        error: "Failed to generate embeddings for search query" 
+      });
+    }
+
+    const queryEmbedding = embeddingResult.embeddings[0];
+    
+    // Get all training data for this user
+    let trainingDataEntries;
+    if (category) {
+      trainingDataEntries = await storage.getTrainingDataByCategory(user.id, category);
+    } else {
+      trainingDataEntries = await storage.getTrainingDataByUserId(user.id);
+    }
+    
+    // Filter out entries without embeddings
+    const entriesWithEmbeddings = trainingDataEntries.filter(
+      entry => entry.embedding != null
+    );
+    
+    if (entriesWithEmbeddings.length === 0) {
+      return res.json({ 
+        success: true, 
+        data: [] 
+      });
+    }
+    
+    // Calculate cosine similarity between query embedding and all training data embeddings
+    const results = entriesWithEmbeddings.map(entry => {
+      // Skip entries without embeddings
+      if (!entry.embedding) return { entry, similarity: 0 };
+      
+      // Calculate cosine similarity
+      const similarity = calculateCosineSimilarity(queryEmbedding, entry.embedding);
+      return { entry, similarity };
+    });
+    
+    // Sort by similarity (highest first) and limit results
+    const sortedResults = results
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, limit);
+    
+    res.json({ 
+      success: true, 
+      data: sortedResults.map(result => ({
+        ...result.entry,
+        similarity: result.similarity
+      }))
+    });
+  } catch (error: any) {
+    console.error("Error performing semantic search:", error);
     res.status(500).json({ success: false, error: error.message });
   }
 }));
