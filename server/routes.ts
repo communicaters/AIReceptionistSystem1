@@ -65,7 +65,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // The redirect URI must match exactly what's in the Google Cloud Console
   // Based on the provided client_secret.json file
-  const googleRedirectUri = `${hostUrl}/api/calendar/auth`;
+  // Using the exact URI from the client_secret.json file to ensure it matches
+  const googleRedirectUri = "https://6bdb745d-6f65-4b7e-940f-08efbdbcc0b7-00-1htwha895k1s8.kirk.replit.dev/api/calendar/auth";
   
   console.log("Google OAuth Redirect URI:", googleRedirectUri);
   console.log("IMPORTANT: This exact URI must be registered in Google Cloud Console under 'Authorized redirect URIs'");
