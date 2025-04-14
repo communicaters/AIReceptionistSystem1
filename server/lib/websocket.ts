@@ -48,8 +48,16 @@ export function setupWebsocketHandlers(wss: WebSocketServer) {
     // Track client IP for better logging
     const ip = req.socket.remoteAddress || 'unknown';
     
-    // Generate a session ID for this connection
-    const sessionId = `session_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+    // Extract sessionId from URL query if it exists, otherwise generate a new one
+    let sessionId: string;
+    try {
+      const url = new URL(req.url || '', `http://${req.headers.host}`);
+      sessionId = url.searchParams.get('sessionId') || `session_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+    } catch (error) {
+      // If there's an error parsing the URL, generate a new session ID
+      sessionId = `session_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+    }
+    
     const userId = 1; // For demo purposes
     
     // Store the client connection

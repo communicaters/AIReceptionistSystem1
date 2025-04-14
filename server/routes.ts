@@ -309,14 +309,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/chat/logs", async (req, res) => {
     try {
       const userId = 1; // For demo, use fixed user ID
-      const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 100; // Increased default limit to show more logs
       const sessionId = req.query.sessionId as string;
       
       let logs;
       if (sessionId) {
+        // Get session-specific logs
         logs = await storage.getChatLogsBySessionId(sessionId);
+        console.log(`Fetched ${logs.length} logs for session ${sessionId}`);
       } else {
+        // Get all logs for this user
         logs = await storage.getChatLogsByUserId(userId, limit);
+        console.log(`Fetched ${logs.length} total chat logs for user ${userId}`);
+        
+        // Log unique sessions for debugging
+        const uniqueSessions = [...new Set(logs.map(log => log.sessionId))];
+        console.log(`Found ${uniqueSessions.length} unique chat sessions: ${uniqueSessions.join(', ')}`);
       }
       
       apiResponse(res, logs);

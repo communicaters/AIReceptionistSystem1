@@ -44,22 +44,49 @@ const LiveChatContent = () => {
     toggleWidget 
   } = useChatContext();
   
+  // Query to fetch all chat logs (no session filter)
   const { 
-    data: chatLogs, 
-    isLoading: isLoadingLogs,
-    error: logsError,
-    refetch: refetchLogs
+    data: allChatLogs, 
+    isLoading: isLoadingAllLogs,
+    error: allLogsError,
+    refetch: refetchAllLogs
   } = useQuery({
-    queryKey: ["/api/chat/logs", selectedSessionId],
-    queryFn: () => selectedSessionId 
-      ? getChatLogs(selectedSessionId) 
-      : getChatLogs(undefined, 10),
-    refetchInterval: selectedSessionId ? 5000 : false // Auto-refresh every 5 seconds if viewing a conversation
+    queryKey: ["/api/chat/logs"],
+    queryFn: () => getChatLogs(undefined, 100), // Get up to 100 logs to ensure we get all sessions
+    refetchInterval: 10000, // Refresh every 10 seconds
   });
 
-  // Get unique session IDs for the dropdown
-  const uniqueSessions = chatLogs 
-    ? [...new Set(chatLogs.map(log => log.sessionId))]
+  // Query to fetch session-specific chat logs
+  const { 
+    data: sessionChatLogs, 
+    isLoading: isLoadingSessionLogs,
+    error: sessionLogsError,
+    refetch: refetchSessionLogs
+  } = useQuery({
+    queryKey: ["/api/chat/logs", selectedSessionId],
+    queryFn: () => selectedSessionId ? getChatLogs(selectedSessionId) : Promise.resolve([]),
+    refetchInterval: selectedSessionId ? 5000 : false, // Auto-refresh every 5 seconds if viewing a conversation
+    enabled: !!selectedSessionId, // Only run this query if a session is selected
+  });
+
+  // Combine the loading and error states
+  const isLoadingLogs = isLoadingAllLogs || (isLoadingSessionLogs && !!selectedSessionId);
+  const logsError = allLogsError || sessionLogsError;
+  
+  // Determine which logs to show based on selection
+  const chatLogs = selectedSessionId ? sessionChatLogs : [];
+  
+  // Function to refresh both queries
+  const refetchLogs = () => {
+    refetchAllLogs();
+    if (selectedSessionId) {
+      refetchSessionLogs();
+    }
+  };
+
+  // Get unique session IDs for the dropdown from all logs
+  const uniqueSessions = allChatLogs 
+    ? [...new Set(allChatLogs.map(log => log.sessionId))]
     : [];
 
   // Handle sending a message
