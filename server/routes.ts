@@ -1007,7 +1007,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = 1; // For demo, use fixed user ID
       const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
       const logs = await storage.getMeetingLogsByUserId(userId, limit);
-      apiResponse(res, logs);
+      
+      // Filter out past meetings by comparing to current date/time
+      const now = new Date();
+      const upcomingMeetings = logs.filter(meeting => {
+        const meetingEndTime = new Date(meeting.endTime);
+        return meetingEndTime >= now;
+      });
+      
+      console.log(`Filtered ${logs.length} total meetings to ${upcomingMeetings.length} upcoming meetings`);
+      
+      apiResponse(res, upcomingMeetings);
     } catch (error) {
       console.error("Error fetching meeting logs:", error);
       apiResponse(res, { error: "Failed to fetch meeting logs" }, 500);
@@ -1217,25 +1227,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`Processing meeting: ${formatTime(startTime)} - ${formatTime(endTime)} [${meeting.subject}]`);
         console.log(`Meeting raw times - Start: ${startTime.toISOString()}, End: ${endTime.toISOString()}`);
         
+        // Create a simplified approach for time slot conversion
+        // Adjust the hour to match local display time for comparison
+        const adjustedStartHour = startTime.getUTCHours() + 5; // Convert UTC to desired display time (+5 offset)
+        const adjustedStartMinute = startTime.getUTCMinutes();
+        const adjustedEndHour = endTime.getUTCHours() + 5; // Convert UTC to desired display time (+5 offset)
+        const adjustedEndMinute = endTime.getUTCMinutes();
+        
+        console.log(`Adjusted meeting time: ${adjustedStartHour}:${adjustedStartMinute} - ${adjustedEndHour}:${adjustedEndMinute}`);
+        
         // Create a more robust approach to check overlap with all time slots
         Array.from(timeSlots.entries()).forEach(([timeKey, slot]) => {
           // Parse the time slot's hour and minute from the key (HH:MM format)
           const [slotHour, slotMinute] = timeKey.split(':').map(Number);
           
-          // Create a date object for this slot
-          const slotDate = new Date(normalizedDate);
-          slotDate.setHours(slotHour, slotMinute, 0, 0);
+          // Check if this time slot overlaps with the adjusted meeting time
+          // For a time slot to be within a meeting, these conditions must be true:
+          // 1. The slot hour must be >= adjusted start hour and <= adjusted end hour
+          // 2. If at the start hour, the slot minute must be >= adjusted start minute
+          // 3. If at the end hour, the slot minute must be < adjusted end minute
           
-          // Calculate the end of this time slot based on slot duration
-          const slotEndDate = new Date(slotDate.getTime() + slotDuration * 60 * 1000);
+          const isWithinMeeting = (
+            (slotHour > adjustedStartHour || (slotHour === adjustedStartHour && slotMinute >= adjustedStartMinute)) &&
+            (slotHour < adjustedEndHour || (slotHour === adjustedEndHour && slotMinute < adjustedEndMinute))
+          );
           
-          // Check if this slot overlaps with the meeting
-          // A slot overlaps if it starts before the meeting ends AND ends after the meeting starts
-          const overlaps = slotDate < endTime && slotEndDate > startTime;
-          
-          if (overlaps) {
+          if (isWithinMeeting) {
             slot.available = false;
-            console.log(`Marking slot ${timeKey} (${formatTime(slotDate)}) as unavailable due to overlap with meeting`);
+            console.log(`Marking slot ${timeKey} (${formatTime(new Date(normalizedDate.setHours(slotHour, slotMinute)))}) as unavailable due to overlap with meeting`);
           }
         });
       });

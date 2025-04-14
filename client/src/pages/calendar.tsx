@@ -100,6 +100,10 @@ const Calendar = () => {
     attendees: "",
     selectedSlot: null
   });
+  
+  // State for meeting details dialog
+  const [selectedMeeting, setSelectedMeeting] = useState<any>(null);
+  const [showMeetingDetailsDialog, setShowMeetingDetailsDialog] = useState(false);
 
   // Get calendar configuration
   const { 
@@ -721,7 +725,16 @@ const Calendar = () => {
                           />
                         </TableCell>
                         <TableCell>
-                          <Button variant="ghost" size="sm">View</Button>
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => {
+                              setSelectedMeeting(meeting);
+                              setShowMeetingDetailsDialog(true);
+                            }}
+                          >
+                            View
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -901,6 +914,85 @@ const Calendar = () => {
               )}
               Schedule Meeting
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Meeting Details Dialog */}
+      <Dialog open={showMeetingDetailsDialog} onOpenChange={setShowMeetingDetailsDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Meeting Details</DialogTitle>
+            <DialogDescription>
+              View the details of this scheduled meeting
+            </DialogDescription>
+          </DialogHeader>
+          {selectedMeeting && (
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <h3 className="font-medium text-sm text-muted-foreground">Subject</h3>
+                <p className="text-base">{selectedMeeting.subject}</p>
+              </div>
+              
+              {selectedMeeting.description && (
+                <div className="space-y-2">
+                  <h3 className="font-medium text-sm text-muted-foreground">Description</h3>
+                  <p className="text-base whitespace-pre-line">{selectedMeeting.description}</p>
+                </div>
+              )}
+              
+              <div className="space-y-2">
+                <h3 className="font-medium text-sm text-muted-foreground">Date & Time</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Start</p>
+                    <p className="text-base">{format(new Date(selectedMeeting.startTime), 'MMM d, yyyy h:mm a')}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">End</p>
+                    <p className="text-base">{format(new Date(selectedMeeting.endTime), 'MMM d, yyyy h:mm a')}</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <h3 className="font-medium text-sm text-muted-foreground">Attendees</h3>
+                {selectedMeeting.attendees && selectedMeeting.attendees.length > 0 ? (
+                  <ul className="list-disc pl-5 space-y-1">
+                    {selectedMeeting.attendees.map((attendee, index) => (
+                      <li key={index}>{attendee}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-muted-foreground text-sm">No attendees</p>
+                )}
+              </div>
+              
+              <div className="space-y-2">
+                <h3 className="font-medium text-sm text-muted-foreground">Status</h3>
+                <div>
+                  <StatusBadge 
+                    status={
+                      selectedMeeting.status === 'scheduled' 
+                        ? 'operational' 
+                        : selectedMeeting.status === 'cancelled' 
+                        ? 'outage' 
+                        : 'degraded'
+                    } 
+                  />
+                </div>
+              </div>
+              
+              {selectedMeeting.googleEventId && (
+                <div className="space-y-2">
+                  <h3 className="font-medium text-sm text-muted-foreground">Google Calendar</h3>
+                  <p className="text-sm">This meeting is synchronized with Google Calendar</p>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setShowMeetingDetailsDialog(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
