@@ -100,7 +100,7 @@ const SpeechEngines = () => {
       
       const payload = {
         voiceId: selectedVoice,
-        externalVoiceId: selectedVoice, // Same as voiceId initially
+        externalVoiceId: selectedVoice, // External voice ID (for API calls)
         displayName: isEditingVoice ? editVoiceName : selectedVoiceData.name,
         accent: isEditingVoice ? editVoiceAccent : (selectedVoiceData.accent || ""),
         description: isEditingVoice ? editVoiceDescription : (selectedVoiceData.description || ""),
@@ -532,7 +532,7 @@ const SpeechEngines = () => {
                         <Input 
                           id="voice-id" 
                           value={selectedVoice}
-                          disabled
+                          onChange={(e) => setSelectedVoice(e.target.value)}
                           placeholder="Unique voice identifier"
                         />
                       </div>
