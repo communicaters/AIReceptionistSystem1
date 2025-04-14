@@ -157,6 +157,7 @@ export interface IStorage {
   getVoiceSettings(id: number): Promise<VoiceSettings | undefined>;
   getVoiceSettingsByVoiceId(voiceId: string): Promise<VoiceSettings | undefined>;
   getVoiceSettingsByUserId(userId: number): Promise<VoiceSettings[]>;
+  getAllVoiceSettings(): Promise<VoiceSettings[]>;
   createVoiceSettings(settings: InsertVoiceSettings): Promise<VoiceSettings>;
   updateVoiceSettings(id: number, settings: Partial<InsertVoiceSettings>): Promise<VoiceSettings | undefined>;
   deleteVoiceSettings(id: number): Promise<boolean>;

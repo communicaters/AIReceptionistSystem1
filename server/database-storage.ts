@@ -526,6 +526,10 @@ export class DatabaseStorage implements IStorage {
   async getVoiceSettingsByUserId(userId: number): Promise<VoiceSettings[]> {
     return await db.select().from(voiceSettings).where(eq(voiceSettings.userId, userId));
   }
+  
+  async getAllVoiceSettings(): Promise<VoiceSettings[]> {
+    return await db.select().from(voiceSettings);
+  }
 
   async createVoiceSettings(settings: InsertVoiceSettings): Promise<VoiceSettings> {
     const result = await db.insert(voiceSettings).values(settings).returning();
