@@ -141,8 +141,57 @@ sampleVoices.forEach(voice => {
   }
 });
 
-// Serve audio files from cache with subdirectory support
-speechRouter.get('/audio/:type?/:filename', (req, res) => {
+// Audio API endpoint for serving audio files
+speechRouter.get('/audio/:audioId', (req, res) => {
+  const { audioId } = req.params;
+  
+  if (!audioId) {
+    return res.status(400).json({ success: false, error: 'Audio ID required' });
+  }
+  
+  // Check for any file extension like .mp3 and remove it
+  const baseAudioId = audioId.replace(/\.[^/.]+$/, "");
+  
+  const filepath = path.join(ttsDir, `${baseAudioId}.mp3`);
+  
+  console.log(`Serving audio file: ${filepath}`);
+  
+  // Security check to prevent directory traversal
+  if (!filepath.startsWith(audioDir)) {
+    return res.status(403).json({ success: false, error: 'Forbidden' });
+  }
+  
+  if (fs.existsSync(filepath)) {
+    // Set proper headers for audio streaming
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Content-Disposition', `inline; filename="${baseAudioId}.mp3"`);
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
+    
+    // Stream the file
+    const fileStream = fs.createReadStream(filepath);
+    fileStream.pipe(res);
+    
+    // Handle errors
+    fileStream.on('error', (error) => {
+      console.error(`Error streaming audio file: ${error.message}`);
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, error: 'Error streaming audio file' });
+      }
+    });
+  } else {
+    console.error(`Audio file not found: ${filepath}`);
+    res.status(404).json({ 
+      success: false, 
+      error: 'Audio file not found',
+      requestedPath: filepath,
+      audioId: baseAudioId
+    });
+  }
+});
+
+// Legacy audio route for backward compatibility
+speechRouter.get('/audio/:type/:filename', (req, res) => {
   const { type, filename } = req.params;
   
   // Process the request

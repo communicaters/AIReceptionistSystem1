@@ -400,8 +400,11 @@ export async function textToSpeech(
       // Call the actual ElevenLabs API to generate speech
       console.log(`Generating speech with ElevenLabs for text: "${text.substring(0, 30)}..."`);
       
-      // Create a URL path for the audio file
-      const audioUrl = `/audio/tts/${filename}`;
+      // Generate a unique ID for this audio
+      const audioId = `${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+      
+      // Create a URL path for the audio file (use API endpoint instead of static file)
+      const audioUrl = `/api/speech/audio/${audioId}`;
       
       try {
         // Generate audio using the ElevenLabs API
@@ -410,7 +413,11 @@ export async function textToSpeech(
           similarityBoost
         });
         
-        // Write the audio buffer to disk
+        // Write the audio buffer to disk with the audioId as filename
+        const audioIdFilepath = path.join(ttsDir, `${audioId}.mp3`);
+        await writeFileAsync(audioIdFilepath, audioBuffer);
+        
+        // Write to the original path too (for cache purposes)
         await writeFileAsync(filepath, audioBuffer);
         
         // Cache the audio data if caching is enabled
