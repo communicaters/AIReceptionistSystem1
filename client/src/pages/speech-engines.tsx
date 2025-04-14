@@ -528,6 +528,15 @@ const SpeechEngines = () => {
                   <CardContent className="pt-0 border-t">
                     <div className="space-y-4">
                       <div className="space-y-2">
+                        <Label htmlFor="voice-id">Voice ID</Label>
+                        <Input 
+                          id="voice-id" 
+                          value={selectedVoice}
+                          disabled
+                          placeholder="Unique voice identifier"
+                        />
+                      </div>
+                      <div className="space-y-2">
                         <Label htmlFor="voice-name">Voice Name</Label>
                         <Input 
                           id="voice-name" 
