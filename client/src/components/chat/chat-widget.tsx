@@ -6,6 +6,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { ChevronDown, Send, X, Minimize2, Maximize2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { WebSocketMessage } from "@/lib/websocket";
 
 interface ChatWidgetProps {
   title?: string;
@@ -22,12 +23,16 @@ export function ChatWidget({
 }: ChatWidgetProps) {
   const [message, setMessage] = useState("");
   const [minimized, setMinimized] = useState(false);
+  const [localMessages, setLocalMessages] = useState<WebSocketMessage[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { sessionId, connected, messages, sendChatMessage } = useWebSocketContext();
   const { toast } = useToast();
   
+  // Combine WebSocket messages with local messages
+  const allMessages = [...messages, ...localMessages];
+  
   // Filter messages to only show chat messages
-  const chatMessages = messages.filter(msg => msg.type === 'chat' || (msg.type === 'welcome' && msg.message));
+  const chatMessages = allMessages.filter(msg => msg.type === 'chat' || (msg.type === 'welcome' && msg.message));
   
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -53,24 +58,22 @@ export function ChatWidget({
     // Store the message to use in the local message object
     const userMessage = message.trim();
     
+    // Create a local user message object
+    const localUserMessage: WebSocketMessage = {
+      type: 'chat',
+      message: userMessage,
+      sender: 'user',
+      timestamp: new Date().toISOString(),
+      sessionId
+    };
+    
+    // Add to local messages immediately
+    setLocalMessages(prevMessages => [...prevMessages, localUserMessage]);
+    
+    // Send to server
     const success = sendChatMessage(userMessage);
     if (success) {
-      // Add the user message to the local messages state
-      const localUserMessage = {
-        type: 'chat',
-        message: userMessage,
-        sender: 'user',
-        timestamp: new Date().toISOString(),
-        sessionId
-      };
-      
-      // Update the WebSocketContext with this message
-      // This hack ensures the user's message displays immediately
-      // even if the WebSocket message handling is delayed
-      window.dispatchEvent(new CustomEvent('local-message', { 
-        detail: localUserMessage 
-      }));
-      
+      // Clear the input field after successful send
       setMessage("");
     } else {
       toast({
@@ -78,6 +81,11 @@ export function ChatWidget({
         description: "Failed to send message. Please try again.",
         variant: "destructive",
       });
+      
+      // Remove the local message if sending failed
+      setLocalMessages(prevMessages => 
+        prevMessages.filter(msg => msg !== localUserMessage)
+      );
     }
   };
   
