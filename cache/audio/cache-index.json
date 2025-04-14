@@ -10,7 +10,7 @@
   },
   "b3378ae84779dee81c99fef55318c939": {
     "url": "/audio/b3378ae84779dee81c99fef55318c939.mp3",
-    "expiry": "2025-04-15T04:56:27.678Z",
+    "expiry": "2025-04-15T04:59:24.338Z",
     "voiceId": "james",
     "params": {
       "stability": 0.75,
@@ -19,7 +19,7 @@
   },
   "2ea05be119611f4b418e7a48455499b6": {
     "url": "/audio/2ea05be119611f4b418e7a48455499b6.mp3",
-    "expiry": "2025-04-15T04:56:29.985Z",
+    "expiry": "2025-04-15T04:59:40.111Z",
     "voiceId": "olivia",
     "params": {
       "stability": 0.75,
@@ -28,8 +28,17 @@
   },
   "b9c8fa1723f7d0e99d2f1365276b30fb": {
     "url": "/audio/b9c8fa1723f7d0e99d2f1365276b30fb.mp3",
-    "expiry": "2025-04-15T04:56:32.299Z",
+    "expiry": "2025-04-15T04:59:31.128Z",
     "voiceId": "emma",
+    "params": {
+      "stability": 0.75,
+      "similarityBoost": 0.7
+    }
+  },
+  "2015fdf21ab094cdbdcfe20d9d38511d": {
+    "url": "/api/audio/2015fdf21ab094cdbdcfe20d9d38511d",
+    "expiry": "2025-04-15T04:59:35.360Z",
+    "voiceId": "michael",
     "params": {
       "stability": 0.75,
       "similarityBoost": 0.7

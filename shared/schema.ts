@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, jsonb, doublePrecision } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -40,6 +40,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   chatLogs: many(chatLogs),
   whatsappLogs: many(whatsappLogs),
   meetingLogs: many(meetingLogs),
+  voiceSettings: many(voiceSettings),
 }));
 
 // Phone service configurations
@@ -453,6 +454,34 @@ export const insertSystemActivitySchema = createInsertSchema(systemActivity).omi
   id: true,
 });
 
+// Voice settings and TTS configuration
+export const voiceSettings = pgTable("voice_settings", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  voiceId: text("voice_id").notNull(),  // Internal voice ID (like "emma", "michael")
+  displayName: text("display_name").notNull(), // Human-readable name
+  externalVoiceId: text("external_voice_id").notNull(), // External API voice ID (like ElevenLabs ID)
+  accent: text("accent").notNull().default("American"),
+  description: text("description"),
+  previewUrl: text("preview_url"),
+  stability: doublePrecision("stability").notNull().default(0.5),
+  similarityBoost: doublePrecision("similarity_boost").notNull().default(0.75),
+  isDefault: boolean("is_default").notNull().default(false),
+  isActive: boolean("is_active").notNull().default(true),
+  lastUpdated: timestamp("last_updated").notNull().defaultNow(),
+});
+
+export const insertVoiceSettingsSchema = createInsertSchema(voiceSettings).omit({
+  id: true,
+});
+
+export const voiceSettingsRelations = relations(voiceSettings, ({ one }) => ({
+  user: one(users, {
+    fields: [voiceSettings.userId],
+    references: [users.id],
+  }),
+}));
+
 // Type exports
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -516,3 +545,6 @@ export type InsertModuleStatus = z.infer<typeof insertModuleStatusSchema>;
 
 export type SystemActivity = typeof systemActivity.$inferSelect;
 export type InsertSystemActivity = z.infer<typeof insertSystemActivitySchema>;
+
+export type VoiceSettings = typeof voiceSettings.$inferSelect;
+export type InsertVoiceSettings = z.infer<typeof insertVoiceSettingsSchema>;

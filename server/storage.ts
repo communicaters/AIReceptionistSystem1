@@ -19,7 +19,8 @@ import {
   whatsappLogs, WhatsappLog, InsertWhatsappLog,
   meetingLogs, MeetingLog, InsertMeetingLog,
   moduleStatus, ModuleStatus, InsertModuleStatus,
-  systemActivity, SystemActivity, InsertSystemActivity
+  systemActivity, SystemActivity, InsertSystemActivity,
+  voiceSettings, VoiceSettings, InsertVoiceSettings
 } from "@shared/schema";
 
 export interface IStorage {
@@ -151,6 +152,14 @@ export interface IStorage {
   getRecentSystemActivity(limit?: number): Promise<SystemActivity[]>;
   getSystemActivityByModule(module: string, limit?: number): Promise<SystemActivity[]>;
   createSystemActivity(activity: InsertSystemActivity): Promise<SystemActivity>;
+  
+  // Voice Settings
+  getVoiceSettings(id: number): Promise<VoiceSettings | undefined>;
+  getVoiceSettingsByVoiceId(voiceId: string): Promise<VoiceSettings | undefined>;
+  getVoiceSettingsByUserId(userId: number): Promise<VoiceSettings[]>;
+  createVoiceSettings(settings: InsertVoiceSettings): Promise<VoiceSettings>;
+  updateVoiceSettings(id: number, settings: Partial<InsertVoiceSettings>): Promise<VoiceSettings | undefined>;
+  deleteVoiceSettings(id: number): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
