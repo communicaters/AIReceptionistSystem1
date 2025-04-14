@@ -323,16 +323,37 @@ export async function textToSpeech(
       // In a real implementation, you would:
       // 1. Call ElevenLabs API to convert text to speech
       // 2. Store or return the audio data
-      // For demo, generate a fake audio URL
-      const audioUrl = `/audio/tts/${Date.now()}_${Math.floor(Math.random() * 1000)}.mp3`;
       
-      // In a real implementation, we would cache the actual audio data
-      // For demo purposes, we're just simulating caching with the URL
+      // Create a directory for TTS audio files if it doesn't exist
+      const ttsDir = path.join(process.cwd(), 'cache', 'audio', 'tts');
+      if (!fs.existsSync(ttsDir)) {
+        fs.mkdirSync(ttsDir, { recursive: true });
+      }
+      
+      // Generate a unique filename based on text content and timestamp
+      const timestamp = Date.now();
+      const safeText = text.substring(0, 20).replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      const filename = `tts_${safeText}_${timestamp}.mp3`;
+      const filepath = path.join(ttsDir, filename);
+      
+      // For demo purposes, create a small valid MP3 file
+      // In a real implementation, this would be audio data from the ElevenLabs API
+      const demoAudioBuffer = Buffer.from([
+        0xFF, 0xFB, 0x90, 0x44, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0xFF, 0xFB, 0x90, 0x44, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+      ]);
+      
+      // Write the file to disk
+      await writeFileAsync(filepath, demoAudioBuffer);
+      
+      // Create a URL path for the audio file
+      const audioUrl = `/audio/tts/${filename}`;
+      
+      // Cache the audio data if caching is enabled
       if (useCache) {
-        // Simulate caching the audio data
-        // In a real implementation, you would:
-        // 1. Get the actual audio buffer from the ElevenLabs API
-        // 2. Cache it using audioCache.set()
+        await audioCache.set(text, voiceId, { stability, similarityBoost }, demoAudioBuffer);
       }
       
       // Create system activity record

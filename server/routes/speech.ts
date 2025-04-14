@@ -132,9 +132,10 @@ sampleVoices.forEach(voice => {
 speechRouter.get('/audio/:type?/:filename', (req, res) => {
   const { type, filename } = req.params;
   
+  // Process the request
   if (!filename) {
     // If only one parameter is provided, it's the filename (not the type)
-    const actualFilename = type;
+    const actualFilename = type || '';
     const filepath = path.join(audioDir, actualFilename);
     
     // Security check to prevent directory traversal
@@ -151,20 +152,22 @@ speechRouter.get('/audio/:type?/:filename', (req, res) => {
     }
   } else {
     // Process with type and filename
-    let filepath;
+    let filepath: string;
+    const safeType = type || '';
+    const safeFilename = filename || '';
     
-    switch (type) {
+    switch (safeType) {
       case 'fallback':
-        filepath = path.join(fallbackDir, filename);
+        filepath = path.join(fallbackDir, safeFilename);
         break;
       case 'tts':
-        filepath = path.join(ttsDir, filename);
+        filepath = path.join(ttsDir, safeFilename);
         break;
       case 'samples':
-        filepath = path.join(samplesDir, filename);
+        filepath = path.join(samplesDir, safeFilename);
         break;
       default:
-        filepath = path.join(audioDir, type, filename);
+        filepath = path.join(audioDir, safeType, safeFilename);
     }
     
     // Security check to prevent directory traversal
