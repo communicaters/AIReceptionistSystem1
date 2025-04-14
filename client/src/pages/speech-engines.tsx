@@ -39,6 +39,12 @@ const SpeechEngines = () => {
   const [selectedVoice, setSelectedVoice] = useState("voice1");
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioUrlInput, setAudioUrlInput] = useState("");
+  const [stability, setStability] = useState(75);
+  const [similarityBoost, setSimilarityBoost] = useState(70);
+  const [isEditingVoice, setIsEditingVoice] = useState(false);
+  const [editVoiceName, setEditVoiceName] = useState("");
+  const [editVoiceAccent, setEditVoiceAccent] = useState("");
+  const [editVoiceDescription, setEditVoiceDescription] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Fetch available TTS voices
@@ -58,14 +64,98 @@ const SpeechEngines = () => {
     enabled: true,
   });
   
+  // Fetch user voice settings
+  type VoiceSettingsResponse = {
+    success: boolean;
+    settings: Array<{
+      id: number;
+      voiceId: string;
+      displayName: string;
+      accent: string;
+      description: string;
+      stability: number;
+      similarityBoost: number;
+      isDefault: boolean;
+    }>;
+  };
+  
+  const { data: voiceSettingsData, isLoading: isLoadingSettings } = useQuery<VoiceSettingsResponse>({
+    queryKey: ['/api/speech/voice-settings'],
+    enabled: true,
+  });
+  
   // Text-to-speech mutation
+  // Save voice settings mutation
+  const saveVoiceSettingsMutation = useMutation({
+    mutationFn: async () => {
+      // Find the currently selected voice
+      const selectedVoiceData = ttsVoices.find(v => v.id === selectedVoice);
+      
+      if (!selectedVoiceData) {
+        throw new Error("Selected voice not found");
+      }
+      
+      // Check if we already have settings for this voice
+      const existingSettings = voiceSettingsData?.settings.find(s => s.voiceId === selectedVoice);
+      
+      const payload = {
+        voiceId: selectedVoice,
+        externalVoiceId: selectedVoice, // Same as voiceId initially
+        displayName: isEditingVoice ? editVoiceName : selectedVoiceData.name,
+        accent: isEditingVoice ? editVoiceAccent : (selectedVoiceData.accent || ""),
+        description: isEditingVoice ? editVoiceDescription : (selectedVoiceData.description || ""),
+        stability: stability / 100, // Convert to 0-1 range
+        similarityBoost: similarityBoost / 100, // Convert to 0-1 range
+        isDefault: false,
+        isActive: true
+      };
+      
+      let response;
+      
+      if (existingSettings) {
+        // Update existing settings
+        response = await apiRequest('PUT', `/api/speech/voice-settings/${existingSettings.id}`, payload);
+      } else {
+        // Create new settings
+        response = await apiRequest('POST', '/api/speech/voice-settings', payload);
+      }
+      
+      return await response.json();
+    },
+    onSuccess: (data) => {
+      if (data.success) {
+        setIsEditingVoice(false);
+        // Invalidate the voice settings query to fetch the updated data
+        queryClient.invalidateQueries({ queryKey: ['/api/speech/voice-settings'] });
+        
+        toast({
+          title: "Voice Settings Saved",
+          description: "Your voice settings have been saved successfully",
+        });
+      } else {
+        toast({
+          title: "Save Failed",
+          description: data.error || "Failed to save voice settings",
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "An error occurred while saving voice settings",
+        variant: "destructive",
+      });
+    }
+  });
+  
   const ttsTestMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest('POST', '/api/speech/tts', {
         text: testText,
         voiceId: selectedVoice,
-        stability: 0.75,
-        similarityBoost: 0.7
+        stability: stability / 100,
+        similarityBoost: similarityBoost / 100
       });
       return await response.json();
     },
@@ -375,9 +465,10 @@ const SpeechEngines = () => {
                       <Label htmlFor="stability">Voice Stability</Label>
                       <Slider
                         id="stability"
-                        defaultValue={[75]}
+                        value={[stability]}
                         max={100}
                         step={1}
+                        onValueChange={(vals) => setStability(vals[0])}
                         className="w-full"
                       />
                       <div className="flex justify-between text-xs text-neutral-500">
@@ -390,9 +481,10 @@ const SpeechEngines = () => {
                       <Label htmlFor="clarity">Voice Clarity & Enhancement</Label>
                       <Slider
                         id="clarity"
-                        defaultValue={[80]}
+                        value={[similarityBoost]}
                         max={100}
                         step={1}
+                        onValueChange={(vals) => setSimilarityBoost(vals[0])}
                         className="w-full"
                       />
                       <div className="flex justify-between text-xs text-neutral-500">
@@ -432,10 +524,124 @@ const SpeechEngines = () => {
                     disabled={ttsTestMutation.isPending}
                   />
                 </CardContent>
-                <CardFooter>
-                  <Button className="w-full">
-                    Save Voice Settings
-                  </Button>
+                {isEditingVoice ? (
+                  <CardContent className="pt-0 border-t">
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="voice-name">Voice Name</Label>
+                        <Input 
+                          id="voice-name" 
+                          value={editVoiceName} 
+                          onChange={(e) => setEditVoiceName(e.target.value)}
+                          placeholder="Display name for this voice"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="voice-accent">Accent</Label>
+                        <Input 
+                          id="voice-accent" 
+                          value={editVoiceAccent} 
+                          onChange={(e) => setEditVoiceAccent(e.target.value)}
+                          placeholder="American, British, Australian, etc."
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="voice-description">Description</Label>
+                        <Textarea 
+                          id="voice-description" 
+                          value={editVoiceDescription} 
+                          onChange={(e) => setEditVoiceDescription(e.target.value)}
+                          placeholder="Brief description of this voice"
+                          rows={3}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="voice-stability">Voice Stability</Label>
+                        <Slider
+                          id="voice-stability"
+                          value={[stability]}
+                          min={0}
+                          max={100}
+                          step={1}
+                          onValueChange={(vals) => setStability(vals[0])}
+                          className="w-full"
+                        />
+                        <div className="flex justify-between text-xs text-neutral-500">
+                          <span>More Variable</span>
+                          <span>More Stable</span>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="voice-similarity">Similarity Boost</Label>
+                        <Slider
+                          id="voice-similarity"
+                          value={[similarityBoost]}
+                          min={0}
+                          max={100}
+                          step={1}
+                          onValueChange={(vals) => setSimilarityBoost(vals[0])}
+                          className="w-full"
+                        />
+                        <div className="flex justify-between text-xs text-neutral-500">
+                          <span>Low</span>
+                          <span>High</span>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                ) : null}
+                <CardFooter className="flex justify-between">
+                  {isEditingVoice ? (
+                    <>
+                      <Button 
+                        variant="outline" 
+                        onClick={() => setIsEditingVoice(false)}
+                      >
+                        Cancel
+                      </Button>
+                      <Button 
+                        onClick={() => saveVoiceSettingsMutation.mutate()}
+                        disabled={saveVoiceSettingsMutation.isPending}
+                      >
+                        {saveVoiceSettingsMutation.isPending ? (
+                          <>
+                            <div className="animate-spin w-4 h-4 border-2 border-current border-t-transparent rounded-full mr-2" />
+                            Saving...
+                          </>
+                        ) : "Save Changes"}
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button 
+                        variant="outline" 
+                        onClick={() => {
+                          // Find currently selected voice
+                          const selectedVoiceData = ttsVoices.find(v => v.id === selectedVoice);
+                          if (selectedVoiceData) {
+                            setEditVoiceName(selectedVoiceData.name);
+                            setEditVoiceAccent(selectedVoiceData.accent || "");
+                            setEditVoiceDescription(selectedVoiceData.description || "");
+                            setIsEditingVoice(true);
+                          }
+                        }}
+                      >
+                        <Settings className="mr-2 h-4 w-4" />
+                        Edit Voice
+                      </Button>
+                      <Button 
+                        onClick={() => saveVoiceSettingsMutation.mutate()}
+                        disabled={saveVoiceSettingsMutation.isPending}
+                      >
+                        {saveVoiceSettingsMutation.isPending ? (
+                          <>
+                            <div className="animate-spin w-4 h-4 border-2 border-current border-t-transparent rounded-full mr-2" />
+                            Saving...
+                          </>
+                        ) : "Save Voice Settings"}
+                      </Button>
+                    </>
+                  )}
                 </CardFooter>
               </Card>
               

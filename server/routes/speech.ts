@@ -517,7 +517,7 @@ speechRouter.delete("/voice-settings/:id", withAuth(async (req, res, user) => {
       timestamp: new Date(),
       details: {
         voiceId: existingSetting.voiceId,
-        name: existingSetting.name
+        displayName: existingSetting.displayName
       }
     });
     
