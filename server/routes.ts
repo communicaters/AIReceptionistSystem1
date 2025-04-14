@@ -12,6 +12,9 @@ import { setupWebsocketHandlers } from "./lib/websocket";
 import { aiRouter } from "./routes/ai";
 import { speechRouter } from "./routes/speech";
 import { authenticate } from "./middleware/auth";
+import express from "express";
+import path from "path";
+import fs from "fs";
 
 // Helper function to handle API responses
 function apiResponse(res: Response, data: any, status = 200) {
@@ -35,7 +38,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize Twilio webhook handling
   setupTwilioWebhooks(app);
   
-  // Apply authentication middleware to all routes
+  // Create and serve audio directories
+  const audioDir = path.join(process.cwd(), 'cache', 'audio');
+  const ttsDir = path.join(audioDir, 'tts');
+  const fallbackDir = path.join(audioDir, 'fallback');
+  
+  // Create directories if they don't exist
+  if (!fs.existsSync(audioDir)) {
+    fs.mkdirSync(audioDir, { recursive: true });
+  }
+  if (!fs.existsSync(ttsDir)) {
+    fs.mkdirSync(ttsDir, { recursive: true });
+  }
+  if (!fs.existsSync(fallbackDir)) {
+    fs.mkdirSync(fallbackDir, { recursive: true });
+  }
+  
+  // Serve audio files without authentication
+  app.use('/audio', express.static(audioDir));
+  
+  // Apply authentication middleware to all other routes
   app.use(authenticate);
 
   // Register AI routes
