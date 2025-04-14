@@ -397,6 +397,203 @@ export async function registerRoutes(app: Express): Promise<Server> {
       apiResponse(res, { error: "Failed to update call log" }, 500);
     }
   });
+  
+  // Test call endpoint
+  app.post("/api/voice/test-call", async (req, res) => {
+    try {
+      const { phoneNumber, message } = req.body;
+      
+      if (!phoneNumber) {
+        return apiResponse(res, { success: false, error: "Phone number is required" }, 400);
+      }
+      
+      // Default test message if not provided
+      const testMessage = message || "This is a test call from the AI receptionist system. The system is working properly.";
+      
+      // Import makeOutboundCall function from Twilio lib
+      const { makeOutboundCall } = await import('./lib/twilio');
+      
+      // Make the test call
+      const result = await makeOutboundCall(phoneNumber, testMessage);
+      
+      if (result.success) {
+        await storage.createSystemActivity({
+          module: "Voice Call",
+          event: "Test Call Successful",
+          status: "Completed",
+          timestamp: new Date(),
+          details: { phoneNumber, callSid: result.callSid }
+        });
+      } else {
+        await storage.createSystemActivity({
+          module: "Voice Call",
+          event: "Test Call Failed",
+          status: "Error",
+          timestamp: new Date(),
+          details: { phoneNumber, error: result.error }
+        });
+      }
+      
+      apiResponse(res, result);
+    } catch (error: any) {
+      console.error("Error making test call:", error);
+      apiResponse(res, { success: false, error: error.message || "Failed to make test call" }, 500);
+    }
+  });
+  
+  // Twilio configuration endpoint
+  app.post("/api/voice/twilio/config", async (req, res) => {
+    try {
+      const userId = 1; // For demo purposes
+      const { accountSid, authToken, phoneNumber, isActive } = req.body;
+      
+      // Validate required fields
+      if (!accountSid || !authToken || !phoneNumber) {
+        return apiResponse(res, { error: "Account SID, Auth Token, and Phone Number are required" }, 400);
+      }
+      
+      // Check if configuration exists
+      const existingConfig = await storage.getTwilioConfigByUserId(userId);
+      
+      let twilioConfig;
+      
+      if (existingConfig) {
+        // Update existing config
+        twilioConfig = await storage.updateTwilioConfig(existingConfig.id, {
+          accountSid,
+          authToken,
+          phoneNumber,
+          isActive: isActive !== undefined ? isActive : existingConfig.isActive
+        });
+      } else {
+        // Create new config
+        twilioConfig = await storage.createTwilioConfig({
+          userId,
+          accountSid,
+          authToken,
+          phoneNumber,
+          isActive: isActive !== undefined ? isActive : true
+        });
+      }
+      
+      // Attempt to initialize Twilio with new credentials
+      const { initTwilio } = await import('./lib/twilio');
+      await initTwilio(true); // Force reconnect with new credentials
+      
+      await storage.createSystemActivity({
+        module: "Voice Call",
+        event: "Twilio Configuration Updated",
+        status: "Completed",
+        timestamp: new Date(),
+        details: { phoneNumber }
+      });
+      
+      apiResponse(res, twilioConfig);
+    } catch (error: any) {
+      console.error("Error saving Twilio configuration:", error);
+      apiResponse(res, { error: error.message || "Failed to save Twilio configuration" }, 500);
+    }
+  });
+  
+  // SIP configuration endpoint
+  app.post("/api/voice/sip/config", async (req, res) => {
+    try {
+      const userId = 1; // For demo purposes
+      const { username, password, serverUrl, extension, isActive } = req.body;
+      
+      // Validate required fields
+      if (!username || !password || !serverUrl) {
+        return apiResponse(res, { error: "Username, Password, and Server URL are required" }, 400);
+      }
+      
+      // Check if configuration exists
+      const existingConfig = await storage.getSipConfigByUserId(userId);
+      
+      let sipConfig;
+      
+      if (existingConfig) {
+        // Update existing config
+        sipConfig = await storage.updateSipConfig(existingConfig.id, {
+          username,
+          password,
+          serverUrl,
+          extension,
+          isActive: isActive !== undefined ? isActive : existingConfig.isActive
+        });
+      } else {
+        // Create new config
+        sipConfig = await storage.createSipConfig({
+          userId,
+          username,
+          password,
+          serverUrl,
+          extension,
+          isActive: isActive !== undefined ? isActive : true
+        });
+      }
+      
+      await storage.createSystemActivity({
+        module: "Voice Call",
+        event: "SIP Configuration Updated",
+        status: "Completed",
+        timestamp: new Date(),
+        details: { serverUrl }
+      });
+      
+      apiResponse(res, sipConfig);
+    } catch (error: any) {
+      console.error("Error saving SIP configuration:", error);
+      apiResponse(res, { error: error.message || "Failed to save SIP configuration" }, 500);
+    }
+  });
+  
+  // OpenPhone configuration endpoint
+  app.post("/api/voice/openphone/config", async (req, res) => {
+    try {
+      const userId = 1; // For demo purposes
+      const { phoneNumber, apiKey, isActive } = req.body;
+      
+      // Validate required fields
+      if (!phoneNumber || !apiKey) {
+        return apiResponse(res, { error: "Phone Number and API Key are required" }, 400);
+      }
+      
+      // Check if configuration exists
+      const existingConfig = await storage.getOpenPhoneConfigByUserId(userId);
+      
+      let openPhoneConfig;
+      
+      if (existingConfig) {
+        // Update existing config
+        openPhoneConfig = await storage.updateOpenPhoneConfig(existingConfig.id, {
+          phoneNumber,
+          apiKey,
+          isActive: isActive !== undefined ? isActive : existingConfig.isActive
+        });
+      } else {
+        // Create new config
+        openPhoneConfig = await storage.createOpenPhoneConfig({
+          userId,
+          phoneNumber,
+          apiKey,
+          isActive: isActive !== undefined ? isActive : true
+        });
+      }
+      
+      await storage.createSystemActivity({
+        module: "Voice Call",
+        event: "OpenPhone Configuration Updated",
+        status: "Completed",
+        timestamp: new Date(),
+        details: { phoneNumber }
+      });
+      
+      apiResponse(res, openPhoneConfig);
+    } catch (error: any) {
+      console.error("Error saving OpenPhone configuration:", error);
+      apiResponse(res, { error: error.message || "Failed to save OpenPhone configuration" }, 500);
+    }
+  });
 
   // Email module
   app.get("/api/email/configs", async (req, res) => {

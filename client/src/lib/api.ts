@@ -143,6 +143,26 @@ export const getVoiceConfigs = async (): Promise<VoiceConfig> => {
   return response.json();
 };
 
+export const saveTwilioConfig = async (config: Partial<TwilioConfig>): Promise<TwilioConfig> => {
+  const response = await apiRequest("POST", "/api/voice/twilio/config", config);
+  return response.json();
+};
+
+export const saveSipConfig = async (config: Partial<SipConfig>): Promise<SipConfig> => {
+  const response = await apiRequest("POST", "/api/voice/sip/config", config);
+  return response.json();
+};
+
+export const saveOpenPhoneConfig = async (config: Partial<OpenPhoneConfig>): Promise<OpenPhoneConfig> => {
+  const response = await apiRequest("POST", "/api/voice/openphone/config", config);
+  return response.json();
+};
+
+export const makeTestCall = async (phoneNumber: string, message: string): Promise<{ success: boolean, callSid?: string, error?: string }> => {
+  const response = await apiRequest("POST", "/api/voice/test-call", { phoneNumber, message });
+  return response.json();
+};
+
 export const getCallLogs = async (limit?: number): Promise<CallLog[]> => {
   const queryParams = limit ? `?limit=${limit}` : "";
   const response = await apiRequest("GET", `/api/voice/logs${queryParams}`);
