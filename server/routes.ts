@@ -1007,16 +1007,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
           calendarConfig.googleClientId && 
           calendarConfig.googleClientSecret) {
         try {
-          // This is a placeholder for actual Google Calendar API integration
-          // In a real implementation, this would create an event in Google Calendar
-          // and return the Google event ID
-          console.log("Would create Google Calendar event with:", meeting);
+          // Import the createEvent function from lib/google-calendar
+          const { createEvent } = require('./lib/google-calendar');
           
-          // For now, mock a Google Event ID
-          const mockGoogleEventId = `mock_event_${Date.now()}`;
+          // Convert attendees from comma-separated string to array if needed
+          let attendeesArray = meeting.attendees;
+          if (typeof attendeesArray === 'string') {
+            attendeesArray = attendeesArray.split(',').map(email => email.trim()).filter(email => email);
+          }
+          
+          // Format event for Google Calendar API
+          const event = {
+            summary: meeting.subject,
+            description: meeting.description || '',
+            start: { 
+              dateTime: new Date(meeting.startTime).toISOString() 
+            },
+            end: { 
+              dateTime: new Date(meeting.endTime).toISOString() 
+            },
+            attendees: attendeesArray.map(email => ({ email }))
+          };
+          
+          // Create event in Google Calendar
+          console.log("Creating Google Calendar event:", event);
+          const googleEvent = await createEvent(userId, event);
+          
+          // Save meeting with Google Calendar event ID
           savedMeeting = await storage.createMeetingLog({
             ...meeting,
-            googleEventId: mockGoogleEventId
+            googleEventId: googleEvent.id
           });
           
           googleEventCreated = true;
@@ -1089,7 +1109,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return meetingDate.toDateString() === date.toDateString();
       });
       
-      // Create time slots based on configuration
+      // Import the getAvailableTimeSlots function from lib/google-calendar
+      const { getAvailableTimeSlots } = require('./lib/google-calendar');
+      
+      // If calendar is connected to Google (has refresh token), use Google Calendar API
+      if (config.googleRefreshToken) {
+        try {
+          console.log(`Getting available time slots from Google Calendar for ${date.toDateString()}`);
+          // Get slots from Google Calendar based on free/busy data
+          const slots = await getAvailableTimeSlots(userId, date, config.slotDuration);
+          apiResponse(res, slots);
+          return;
+        } catch (googleError) {
+          console.error("Error getting Google Calendar slots:", googleError);
+          // Fall back to local slot generation
+        }
+      }
+      
+      // Fall back to local slot generation if Google Calendar is not connected or there's an error
       const startHour = parseInt(config.availabilityStartTime.split(':')[0]);
       const endHour = parseInt(config.availabilityEndTime.split(':')[0]);
       const slotDuration = config.slotDuration;
@@ -1097,7 +1134,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const slots = [];
       const occupied = new Set();
       
-      // Mark occupied slots
+      // Mark occupied slots from local meetings
       datesMeetings.forEach(meeting => {
         const startTime = new Date(meeting.startTime);
         const endTime = new Date(meeting.endTime);
@@ -1112,7 +1149,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
       
-      // Generate all slots
+      // Generate all slots based on business hours
       let currentTime = new Date(date);
       currentTime.setHours(startHour, 0, 0, 0);
       
