@@ -291,7 +291,7 @@ const Calendar = () => {
   };
 
   // Handle new meeting form changes
-  const handleNewMeetingChange = (field: keyof NewMeetingForm, value: string | Date) => {
+  const handleNewMeetingChange = (field: keyof NewMeetingForm, value: string | Date | null) => {
     setNewMeetingForm(prev => ({
       ...prev,
       [field]: value
@@ -774,6 +774,10 @@ const Calendar = () => {
                 selected={selectedDate}
                 onSelect={setSelectedDate}
                 className="rounded-md border"
+                disabled={(date) => {
+                  // Disable dates in the past (before today)
+                  return date < new Date(new Date().setHours(0, 0, 0, 0));
+                }}
               />
             </CardContent>
           </Card>
@@ -840,7 +844,15 @@ const Calendar = () => {
             </CardContent>
             <CardFooter>
               <Button 
-                onClick={() => setShowNewMeetingDialog(true)}
+                onClick={() => {
+                  // Show the new meeting dialog
+                  setShowNewMeetingDialog(true);
+                  
+                  // If no slot is selected, clear the slot to enforce selection
+                  if (!newMeetingForm.selectedSlot) {
+                    handleNewMeetingChange('selectedSlot', null);
+                  }
+                }}
                 disabled={!isConfigured || !selectedDate}
                 className="w-full"
               >
@@ -907,7 +919,7 @@ const Calendar = () => {
             </Button>
             <Button 
               onClick={handleCreateMeeting}
-              disabled={createMeetingMutation.isPending || !newMeetingForm.subject}
+              disabled={createMeetingMutation.isPending || !newMeetingForm.subject || !newMeetingForm.selectedSlot}
             >
               {createMeetingMutation.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
