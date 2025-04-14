@@ -29,7 +29,7 @@ async function handleGoogleOAuthCallback(req: Request, res: Response) {
   // Check for OAuth errors
   if (error) {
     console.error("Google OAuth error:", error);
-    return res.redirect(`/oauth-callback?error=${error}`);
+    return res.redirect(`/oauth-callback?error=${encodeURIComponent(error as string)}`);
   }
   
   // Validate state parameter to prevent CSRF
@@ -54,8 +54,12 @@ async function handleGoogleOAuthCallback(req: Request, res: Response) {
     }
     
     // Exchange the authorization code for tokens
-    const redirectUri = googleRedirectUri;
+    // Use the exact same redirect URI that was used for authorization
+    // This URL must match exactly what's in Google Cloud Console
+    const redirectUri = "https://6bdb745d-6f65-4b7e-940f-08efbdbcc0b7-00-1htwha895k1s8.kirk.replit.dev/api/calendar/auth";
     const tokenUrl = 'https://oauth2.googleapis.com/token';
+    
+    console.log("Using redirect URI for token exchange:", redirectUri);
     
     // Make a request to Google's token endpoint
     const response = await fetch(tokenUrl, {
@@ -152,13 +156,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.replit.dev`
     : (process.env.HOST_URL || 'http://localhost:5000');
   
-  // The redirect URI must match exactly what's in the Google Cloud Console
-  // Based on the provided client_secret.json file
-  // Using the exact URI from the client_secret.json file to ensure it matches
-  const googleRedirectUri = "https://6bdb745d-6f65-4b7e-940f-08efbdbcc0b7-00-1htwha895k1s8.kirk.replit.dev/api/calendar/auth";
-  
-  console.log("Google OAuth Redirect URI:", googleRedirectUri);
-  console.log("IMPORTANT: This exact URI must be registered in Google Cloud Console under 'Authorized redirect URIs'");
+  // The redirect URI for Google Calendar OAuth must match exactly what's in the Google Cloud Console
+  // For this application, we're using:
+  // https://6bdb745d-6f65-4b7e-940f-08efbdbcc0b7-00-1htwha895k1s8.kirk.replit.dev/api/calendar/auth
   
   // Initialize Twilio webhook handling
   setupTwilioWebhooks(app);
@@ -885,19 +885,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       // Construct the Google OAuth URL
-      // Use the googleRedirectUri variable defined at the top of the file
-      const redirectUri = googleRedirectUri;
+      // Use the exact redirect URI that's registered in Google Cloud Console
+      const redirectUri = "https://6bdb745d-6f65-4b7e-940f-08efbdbcc0b7-00-1htwha895k1s8.kirk.replit.dev/api/calendar/auth";
       
       // Log the full redirect URI to help with debugging and setup
       console.log(`Using Google OAuth Redirect URI: ${redirectUri}`);
       console.log(`Important: This exact URI must be registered in Google Cloud Console under "Authorized redirect URIs"`);
       
-      const scope = encodeURIComponent('https://www.googleapis.com/auth/calendar');
+      // Include both scopes required for Google Calendar - calendar read/write and events read/write
+      const scopes = encodeURIComponent(
+        'https://www.googleapis.com/auth/calendar ' +
+        'https://www.googleapis.com/auth/calendar.events'
+      );
       
       // Get prompt parameter from request, default to 'select_account' to force account selection
       const prompt = req.query.prompt || 'select_account';
       
-      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${config.googleClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}&access_type=offline&prompt=${prompt}&state=${state}`;
+      console.log("Requesting Google OAuth with scopes:", scopes);
+      
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${config.googleClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scopes}&access_type=offline&prompt=${prompt}&state=${state}`;
       
       // Log the authorization attempt
       await storage.createSystemActivity({

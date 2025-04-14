@@ -18,7 +18,11 @@ export function openGoogleAuthPopup(): Promise<void> {
     
     // OAuth endpoint URL - this will be handled by our server-side route
     // Add prompt=select_account to force Google account selection
+    // The redirect URI is fixed and must match what's in client_secret.json
     const url = '/api/calendar/auth?prompt=select_account';
+    
+    // Log that we're initiating the OAuth flow
+    console.log('Initiating Google OAuth flow with redirect URI: https://6bdb745d-6f65-4b7e-940f-08efbdbcc0b7-00-1htwha895k1s8.kirk.replit.dev/api/calendar/auth');
     
     // Open the popup window
     const popup = window.open(
