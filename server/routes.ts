@@ -383,6 +383,324 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/whatsapp/config", async (req, res) => {
+    try {
+      const userId = 1; // For demo, use fixed user ID
+      const configData = req.body;
+      
+      // Validate required fields
+      const requiredFields = ['phoneNumberId', 'accessToken', 'businessAccountId', 'webhookVerifyToken'];
+      const missingFields = requiredFields.filter(field => !configData[field]);
+      
+      if (missingFields.length > 0) {
+        return apiResponse(res, { 
+          error: `Missing required fields: ${missingFields.join(', ')}` 
+        }, 400);
+      }
+      
+      // Check if config already exists for this user
+      const existingConfig = await storage.getWhatsappConfigByUserId(userId);
+      let config;
+      
+      if (existingConfig) {
+        // Update existing config
+        config = await storage.updateWhatsappConfig(existingConfig.id, {
+          ...configData,
+          userId
+        });
+      } else {
+        // Create new config
+        config = await storage.createWhatsappConfig({
+          ...configData,
+          userId
+        });
+      }
+      
+      await storage.createSystemActivity({
+        module: "WhatsApp",
+        event: existingConfig ? "ConfigUpdated" : "ConfigCreated",
+        status: "success",
+        timestamp: new Date(),
+        details: { userId, configId: config.id }
+      });
+      
+      apiResponse(res, config);
+    } catch (error) {
+      console.error("Error saving WhatsApp config:", error);
+      
+      await storage.createSystemActivity({
+        module: "WhatsApp",
+        event: "ConfigError",
+        status: "error",
+        timestamp: new Date(),
+        details: { error: error.message }
+      });
+      
+      apiResponse(res, { error: "Failed to save WhatsApp configuration" }, 500);
+    }
+  });
+
+  // WhatsApp Webhook Endpoint
+  app.get("/api/whatsapp/webhook", async (req, res) => {
+    try {
+      // Handle the verification request from WhatsApp
+      // When you configure webhooks in the WhatsApp API, the platform sends a verification request
+      const mode = req.query["hub.mode"];
+      const token = req.query["hub.verify_token"];
+      const challenge = req.query["hub.challenge"];
+      
+      // Fetch the verify token from our storage to validate
+      const userId = 1; // For demo, use fixed user ID
+      const config = await storage.getWhatsappConfigByUserId(userId);
+      
+      if (!config) {
+        console.error("WhatsApp verification failed: No configuration found");
+        return res.sendStatus(403);
+      }
+      
+      // Check if the mode and token are in the query string of the request
+      if (mode === "subscribe" && token === config.webhookVerifyToken) {
+        // Respond with the challenge token from the request
+        console.log("WhatsApp webhook verified successfully");
+        
+        await storage.createSystemActivity({
+          module: "WhatsApp",
+          event: "WebhookVerified",
+          status: "success",
+          timestamp: new Date(),
+          details: { userId }
+        });
+        
+        return res.status(200).send(challenge);
+      }
+      
+      // Otherwise, respond with 403 Forbidden status
+      console.error("WhatsApp webhook verification failed: Invalid verification token");
+      
+      await storage.createSystemActivity({
+        module: "WhatsApp",
+        event: "WebhookVerificationFailed",
+        status: "error",
+        timestamp: new Date(),
+        details: { 
+          userId,
+          expected: config.webhookVerifyToken,
+          received: token
+        }
+      });
+      
+      return res.sendStatus(403);
+    } catch (error) {
+      console.error("Error during WhatsApp webhook verification:", error);
+      return res.sendStatus(500);
+    }
+  });
+
+  // WhatsApp message receiving webhook
+  app.post("/api/whatsapp/webhook", async (req, res) => {
+    try {
+      // Facebook/WhatsApp requires a 200 response quickly to acknowledge receipt
+      res.status(200).send("EVENT_RECEIVED");
+      
+      const userId = 1; // For demo, use fixed user ID
+      const data = req.body;
+      
+      // Log the incoming webhook payload for debugging
+      console.log("WhatsApp webhook received:", JSON.stringify(data, null, 2));
+      
+      // Record system activity for the webhook event
+      await storage.createSystemActivity({
+        module: "WhatsApp",
+        event: "WebhookReceived",
+        status: "success",
+        timestamp: new Date(),
+        details: { payload: data }
+      });
+      
+      // Process the incoming webhook
+      if (data.object === "whatsapp_business_account") {
+        // Process each entry
+        for (const entry of data.entry) {
+          for (const change of entry.changes) {
+            if (change.field === "messages") {
+              const value = change.value;
+              
+              // Handle different types of messages
+              if (value && value.messages && value.messages.length > 0) {
+                for (const message of value.messages) {
+                  const phoneNumber = value.contacts[0]?.wa_id || "unknown";
+                  const timestamp = new Date(parseInt(message.timestamp) * 1000);
+                  
+                  let messageText = "";
+                  let mediaUrl = null;
+                  
+                  // Handle different message types (text, media, etc.)
+                  if (message.type === "text" && message.text) {
+                    messageText = message.text.body;
+                  } else if (message.type === "image" && message.image) {
+                    messageText = "📷 Image received";
+                    mediaUrl = message.image.id || message.image.link;
+                  } else if (message.type === "audio" && message.audio) {
+                    messageText = "🎵 Audio received";
+                    mediaUrl = message.audio.id || message.audio.link;
+                  } else if (message.type === "video" && message.video) {
+                    messageText = "🎬 Video received";
+                    mediaUrl = message.video.id || message.video.link;
+                  } else if (message.type === "document" && message.document) {
+                    messageText = `📄 Document received: ${message.document.filename}`;
+                    mediaUrl = message.document.id || message.document.link;
+                  } else {
+                    messageText = `Message of type ${message.type} received`;
+                  }
+                  
+                  // Store the message in our logs
+                  await storage.createWhatsappLog({
+                    userId,
+                    phoneNumber,
+                    message: messageText,
+                    mediaUrl,
+                    direction: "inbound",
+                    timestamp
+                  });
+                  
+                  // Here you would add code to pass the message to your AI for processing
+                  // and generating a response, which would then be sent back to the user.
+                  
+                  console.log(`WhatsApp message processed from ${phoneNumber}: ${messageText}`);
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error processing WhatsApp webhook:", error);
+      
+      await storage.createSystemActivity({
+        module: "WhatsApp",
+        event: "WebhookError",
+        status: "error",
+        timestamp: new Date(),
+        details: { error: error.message }
+      });
+    }
+  });
+
+  // Send WhatsApp message endpoint
+  app.post("/api/whatsapp/send", async (req, res) => {
+    try {
+      const userId = 1; // For demo, use fixed user ID
+      const { phoneNumber, message, mediaUrl } = req.body;
+      
+      if (!phoneNumber || !message) {
+        return apiResponse(res, { error: "Phone number and message are required" }, 400);
+      }
+      
+      // Get the WhatsApp configuration
+      const config = await storage.getWhatsappConfigByUserId(userId);
+      
+      if (!config) {
+        return apiResponse(res, { error: "WhatsApp configuration not found" }, 404);
+      }
+      
+      if (!config.isActive) {
+        return apiResponse(res, { error: "WhatsApp integration is not active" }, 400);
+      }
+      
+      // Here you would implement the actual sending of the message via WhatsApp API
+      // For now, we'll just log it and simulate success for the demo
+      console.log(`Sending WhatsApp message to ${phoneNumber}: ${message}`);
+      
+      // Log the outgoing message
+      const whatsappLog = await storage.createWhatsappLog({
+        userId,
+        phoneNumber,
+        message,
+        mediaUrl,
+        direction: "outbound",
+        timestamp: new Date()
+      });
+      
+      await storage.createSystemActivity({
+        module: "WhatsApp",
+        event: "MessageSent",
+        status: "success",
+        timestamp: new Date(),
+        details: { userId, phoneNumber, messageId: whatsappLog.id }
+      });
+      
+      apiResponse(res, { 
+        success: true, 
+        messageId: whatsappLog.id,
+        message: "Message queued for delivery"
+      });
+    } catch (error) {
+      console.error("Error sending WhatsApp message:", error);
+      
+      await storage.createSystemActivity({
+        module: "WhatsApp",
+        event: "MessageSendError",
+        status: "error",
+        timestamp: new Date(),
+        details: { error: error.message }
+      });
+      
+      apiResponse(res, { error: "Failed to send WhatsApp message" }, 500);
+    }
+  });
+
+  // Test WhatsApp connection
+  app.post("/api/whatsapp/test", async (req, res) => {
+    try {
+      const userId = 1; // For demo, use fixed user ID
+      
+      // Get the WhatsApp configuration
+      const config = await storage.getWhatsappConfigByUserId(userId);
+      
+      if (!config) {
+        return apiResponse(res, { 
+          success: false, 
+          error: "WhatsApp configuration not found"
+        }, 404);
+      }
+      
+      // For a real implementation, you would make a test call to the WhatsApp API here
+      // For now, we'll just simulate a connection test
+      
+      const isSuccessful = config.isActive && config.accessToken && config.phoneNumberId;
+      
+      await storage.createSystemActivity({
+        module: "WhatsApp",
+        event: "ConnectionTest",
+        status: isSuccessful ? "success" : "error",
+        timestamp: new Date(),
+        details: { userId, isSuccessful }
+      });
+      
+      apiResponse(res, { 
+        success: isSuccessful,
+        message: isSuccessful 
+          ? "WhatsApp connection successful" 
+          : "WhatsApp connection failed"
+      });
+    } catch (error) {
+      console.error("Error testing WhatsApp connection:", error);
+      
+      await storage.createSystemActivity({
+        module: "WhatsApp",
+        event: "ConnectionTestError",
+        status: "error",
+        timestamp: new Date(),
+        details: { error: error.message }
+      });
+      
+      apiResponse(res, { 
+        success: false, 
+        error: "Failed to test WhatsApp connection" 
+      }, 500);
+    }
+  });
+
   app.get("/api/whatsapp/logs", async (req, res) => {
     try {
       const userId = 1; // For demo, use fixed user ID

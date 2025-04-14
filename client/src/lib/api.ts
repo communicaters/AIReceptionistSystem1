@@ -63,6 +63,16 @@ export interface ChatLog {
   timestamp: string;
 }
 
+export interface WhatsappConfig {
+  id: number;
+  userId: number;
+  phoneNumberId: string;
+  accessToken: string;
+  businessAccountId: string;
+  webhookVerifyToken: string;
+  isActive: boolean;
+}
+
 export interface WhatsappLog {
   id: number;
   userId: number;
