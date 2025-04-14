@@ -399,7 +399,7 @@ export async function textToSpeech(
       const filepath = path.join(ttsDir, filename);
       
       // Call the actual ElevenLabs API to generate speech
-      console.log(`Generating speech with ElevenLabs for text: "${text.substring(0, 30)}..."`);
+      console.log(`Generating speech with ElevenLabs for voice ID: "${voiceId}" and text: "${text.substring(0, 30)}..."`);
       
       // Generate a unique ID for this audio
       const audioId = `${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
@@ -408,8 +408,29 @@ export async function textToSpeech(
       const audioUrl = `/api/audio/${audioId}`;
       
       try {
-        // Generate audio using the ElevenLabs API
-        const audioBuffer = await client.generateSpeech(text, voiceId, {
+        // Check if we need to map our internal voice ID to an ElevenLabs ID
+        // This allows us to support both our predefined voices and custom ElevenLabs voice IDs
+        let actualVoiceId = voiceId;
+        
+        // If the voice ID doesn't look like an ElevenLabs ID (which are typically longer strings),
+        // try to find it in user settings
+        if (voiceId && voiceId.length < 20) {
+          try {
+            // Get all voice settings to find a matching voice ID
+            const allVoiceSettings = await storage.getAllVoiceSettings();
+            const matchedSetting = allVoiceSettings.find(vs => vs.voiceId === voiceId);
+            
+            if (matchedSetting && matchedSetting.externalVoiceId) {
+              actualVoiceId = matchedSetting.externalVoiceId;
+              console.log(`Mapped internal voice ID "${voiceId}" to external ID "${actualVoiceId}"`);
+            }
+          } catch (err) {
+            console.warn("Failed to look up voice settings:", err);
+          }
+        }
+        
+        // Generate audio using the ElevenLabs API with potentially mapped voice ID
+        const audioBuffer = await client.generateSpeech(text, actualVoiceId, {
           stability,
           similarityBoost
         });
