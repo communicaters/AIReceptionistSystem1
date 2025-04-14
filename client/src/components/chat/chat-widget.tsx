@@ -3,10 +3,19 @@ import { useWebSocketContext } from "@/components/providers/websocket-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChevronDown, Send, X, Minimize2, Maximize2 } from "lucide-react";
+import { Send, X, Minimize2, Maximize2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { WebSocketMessage } from "@/lib/websocket";
+
+// Define chat message types directly to avoid any potential issues with imports
+interface ChatMessage {
+  id?: number;
+  type: string;
+  message: string;
+  sender?: string;
+  timestamp: string;
+  sessionId?: string;
+}
 
 interface ChatWidgetProps {
   title?: string;
@@ -23,21 +32,56 @@ export function ChatWidget({
 }: ChatWidgetProps) {
   const [message, setMessage] = useState("");
   const [minimized, setMinimized] = useState(false);
-  const [localMessages, setLocalMessages] = useState<WebSocketMessage[]>([]);
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { sessionId, connected, messages, sendChatMessage } = useWebSocketContext();
   const { toast } = useToast();
   
-  // Combine WebSocket messages with local messages
-  const allMessages = [...messages, ...localMessages];
+  // Initialize with greeting message if no messages exist
+  useEffect(() => {
+    if (chatHistory.length === 0) {
+      setChatHistory([{
+        type: 'welcome',
+        message: greetingMessage,
+        timestamp: new Date().toISOString(),
+        sender: 'ai'
+      }]);
+    }
+  }, [greetingMessage]);
   
-  // Filter messages to only show chat messages
-  const chatMessages = allMessages.filter(msg => msg.type === 'chat' || (msg.type === 'welcome' && msg.message));
+  // Listen for incoming messages from WebSocket
+  useEffect(() => {
+    if (messages && messages.length > 0) {
+      // Find messages that are not already in our chat history
+      const newMessages = messages.filter(wsMsg => 
+        wsMsg.type === 'chat' && 
+        wsMsg.message && // Ensure message is defined
+        !chatHistory.some(chatMsg => 
+          chatMsg.message === wsMsg.message && 
+          chatMsg.sender === wsMsg.sender &&
+          chatMsg.timestamp === wsMsg.timestamp
+        )
+      );
+      
+      if (newMessages.length > 0) {
+        // Convert WebSocketMessages to ChatMessages
+        const typedNewMessages: ChatMessage[] = newMessages.map(msg => ({
+          type: msg.type,
+          message: msg.message || '',
+          sender: msg.sender,
+          timestamp: msg.timestamp || new Date().toISOString(),
+          sessionId: msg.sessionId
+        }));
+        
+        setChatHistory(prev => [...prev, ...typedNewMessages]);
+      }
+    }
+  }, [messages, chatHistory]);
   
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     scrollToBottom();
-  }, [chatMessages]);
+  }, [chatHistory]);
   
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -55,23 +99,20 @@ export function ChatWidget({
       return;
     }
     
-    // Store the message to use in the local message object
-    const userMessage = message.trim();
-    
-    // Create a local user message object
-    const localUserMessage: WebSocketMessage = {
+    // Create user message
+    const userMessageObj: ChatMessage = {
       type: 'chat',
-      message: userMessage,
+      message: message.trim(),
       sender: 'user',
       timestamp: new Date().toISOString(),
-      sessionId
+      sessionId: sessionId || undefined
     };
     
-    // Add to local messages immediately
-    setLocalMessages(prevMessages => [...prevMessages, localUserMessage]);
+    // Add to chat history immediately (before server response)
+    setChatHistory(prev => [...prev, userMessageObj]);
     
     // Send to server
-    const success = sendChatMessage(userMessage);
+    const success = sendChatMessage(message.trim());
     if (success) {
       // Clear the input field after successful send
       setMessage("");
@@ -82,10 +123,8 @@ export function ChatWidget({
         variant: "destructive",
       });
       
-      // Remove the local message if sending failed
-      setLocalMessages(prevMessages => 
-        prevMessages.filter(msg => msg !== localUserMessage)
-      );
+      // Remove the message from chat history if sending failed
+      setChatHistory(prev => prev.filter(msg => msg !== userMessageObj));
     }
   };
   
@@ -138,18 +177,10 @@ export function ChatWidget({
       </CardHeader>
       
       <CardContent className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Welcome/Greeting Message */}
-        {chatMessages.length === 0 && (
-          <div className="bg-primary/10 p-3 rounded-lg max-w-[80%]">
-            <p className="text-sm">{greetingMessage}</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {format(new Date(), 'HH:mm')}
-            </p>
-          </div>
-        )}
+        {/* No need for separate welcome message as we add it to chatHistory on initial load */}
         
         {/* Chat Messages */}
-        {chatMessages.map((msg, index) => (
+        {chatHistory.map((msg: ChatMessage, index: number) => (
           <div
             key={index}
             className={`max-w-[80%] p-3 rounded-lg ${
