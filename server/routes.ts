@@ -58,8 +58,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   initWhisperAPI();
   
   // Google OAuth redirect URI - share this with users for Google Console setup
-  const googleRedirectUri = `${process.env.HOST_URL || 'http://localhost:5000'}/api/calendar/auth/callback`;
+  // Use the Replit domain name if deployed, or localhost for local development
+  const hostUrl = process.env.REPL_SLUG 
+    ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.replit.dev`
+    : (process.env.HOST_URL || 'http://localhost:5000');
+  
+  const googleRedirectUri = `${hostUrl}/api/calendar/auth/callback`;
+  
   console.log("Google OAuth Redirect URI:", googleRedirectUri);
+  console.log("IMPORTANT: This exact URI must be registered in Google Cloud Console under 'Authorized redirect URIs'");
   
   // Initialize Twilio webhook handling
   setupTwilioWebhooks(app);
@@ -779,8 +786,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       // Construct the Google OAuth URL
-      // Use the exact same URL that's printed during server startup
-      const redirectUri = `${process.env.HOST_URL || 'http://localhost:5000'}/api/calendar/auth/callback`;
+      // Use the same hostUrl variable defined at the top of the file
+      const redirectUri = `${hostUrl}/api/calendar/auth/callback`;
       
       // Log the full redirect URI to help with debugging and setup
       console.log(`Using Google OAuth Redirect URI: ${redirectUri}`);
@@ -838,7 +845,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Exchange the authorization code for tokens
-      const redirectUri = `${process.env.HOST_URL || 'http://localhost:5000'}/api/calendar/auth/callback`;
+      // Use the same hostUrl variable defined at the top of the file
+      const redirectUri = `${hostUrl}/api/calendar/auth/callback`;
       const tokenUrl = 'https://oauth2.googleapis.com/token';
       
       // Make a request to Google's token endpoint
@@ -1114,8 +1122,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return meetingDate.toDateString() === date.toDateString();
       });
       
-      // Import the getAvailableTimeSlots function from lib/google-calendar
-      const { getAvailableTimeSlots } = require('./lib/google-calendar');
+      // Use the getAvailableTimeSlots function imported at the top of the file
       
       // If calendar is connected to Google (has refresh token), use Google Calendar API
       if (config.googleRefreshToken) {
