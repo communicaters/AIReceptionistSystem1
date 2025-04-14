@@ -7,6 +7,7 @@ import {
   getAvailableTimeSlots,
   createMeeting
 } from "@/lib/api";
+import { openGoogleAuthPopup } from "@/lib/google-oauth";
 import { 
   Card, 
   CardContent, 
@@ -475,7 +476,41 @@ const Calendar = () => {
                             <div className="-mx-2 -my-1.5 flex">
                               <button
                                 type="button"
-                                onClick={() => window.open("/api/calendar/auth/authorize", "_blank")}
+                                onClick={() => {
+                                  // First, save the current configuration
+                                  if (!configForm.googleClientId || !configForm.googleClientSecret) {
+                                    toast({
+                                      title: "Missing required fields",
+                                      description: "Google Client ID and Secret are required",
+                                      variant: "destructive",
+                                    });
+                                    return;
+                                  }
+                                  
+                                  // Save config first to ensure credentials are stored
+                                  saveConfigMutation.mutate(configForm, {
+                                    onSuccess: () => {
+                                      // Then open the popup for OAuth authentication
+                                      openGoogleAuthPopup()
+                                        .then(() => {
+                                          // Success - refresh the data
+                                          queryClient.invalidateQueries({ queryKey: ["/api/calendar/config"] });
+                                          toast({
+                                            title: "Google Calendar Connected",
+                                            description: "Your Google Calendar account has been successfully connected.",
+                                          });
+                                        })
+                                        .catch((error) => {
+                                          // Handle errors from popup
+                                          toast({
+                                            title: "Connection Failed",
+                                            description: error.message || "Failed to connect to Google Calendar",
+                                            variant: "destructive",
+                                          });
+                                        });
+                                    }
+                                  });
+                                }}
                                 disabled={!configForm.googleClientId || !configForm.googleClientSecret || saveConfigMutation.isPending}
                                 className="rounded-md bg-blue-50 px-2 py-1.5 text-sm font-medium text-blue-800 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 focus:ring-offset-blue-50 disabled:opacity-50"
                               >
