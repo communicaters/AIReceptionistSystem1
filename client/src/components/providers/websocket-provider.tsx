@@ -1,6 +1,6 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { useToast } from "@/hooks/use-toast";
-import { websocketService, WebSocketMessage } from "@/lib/websocket";
+import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
+import { useToast } from '@/hooks/use-toast';
+import { WebSocketMessage, websocketService } from '@/lib/websocket';
 
 interface WebSocketContextType {
   connected: boolean;
@@ -8,97 +8,93 @@ interface WebSocketContextType {
   messages: WebSocketMessage[];
   sendChatMessage: (message: string) => boolean;
   sendStatusUpdate: (moduleId: string, status: string) => boolean;
+  clearMessages: () => void;
 }
 
-const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
+const WebSocketContext = createContext<WebSocketContextType | null>(null);
 
 export function WebSocketProvider({ children }: { children: ReactNode }) {
-  const [connected, setConnected] = useState(false);
+  const [connected, setConnected] = useState<boolean>(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<WebSocketMessage[]>([]);
   const { toast } = useToast();
 
-  // Handle connection status changes
-  useEffect(() => {
-    const unsubscribe = websocketService.addConnectionStatusListener((isConnected) => {
-      setConnected(isConnected);
-      
-      // Conditionally show toast messages
-      if (isConnected) {
-        setSessionId(websocketService.getSessionId());
-        
-        if (sessionId !== null) { // Only toast on reconnections, not initial connection
-          toast({
-            title: "Connection Restored",
-            description: "Successfully reconnected to the server.",
-            variant: "default",
-          });
-        }
-      }
-    });
-
-    return unsubscribe;
-  }, [sessionId, toast]);
-
   // Handle incoming messages
-  useEffect(() => {
-    const unsubscribe = websocketService.addMessageListener((data) => {
-      // Update session ID from welcome message
-      if (data.type === 'welcome' && data.sessionId) {
-        setSessionId(data.sessionId);
-      }
-      
-      // Add message to the messages array
-      setMessages(prev => [...prev, data]);
-      
-      // Handle error messages with toast
-      if (data.type === 'error') {
-        toast({
-          title: "Error",
-          description: data.message || "An error occurred",
-          variant: "destructive",
-        });
-      }
-    });
-
-    return unsubscribe;
-  }, [toast]);
-
-  // Attempt reconnection if disconnected
-  useEffect(() => {
-    if (!connected && sessionId) {
-      // Only attempt to reconnect if we had a previous session
-      const reconnectInterval = setInterval(() => {
-        if (!websocketService.isConnected()) {
-          websocketService.connect();
-        } else {
-          clearInterval(reconnectInterval);
-        }
-      }, 5000); // Try every 5 seconds
-      
-      return () => clearInterval(reconnectInterval);
+  const handleMessage = useCallback((data: WebSocketMessage) => {
+    // Update session ID if it's a welcome message
+    if (data.type === 'welcome' && data.sessionId) {
+      setSessionId(data.sessionId);
     }
-  }, [connected, sessionId]);
-
-  // Clean up on unmount
+    
+    // Handle error messages with toasts
+    if (data.type === 'error') {
+      toast({
+        title: 'WebSocket Error',
+        description: data.message || 'An unknown error occurred',
+        variant: 'destructive',
+      });
+    }
+    
+    // Add the message to our state
+    setMessages((prevMessages) => [...prevMessages, data]);
+  }, [toast]);
+  
+  // Handle connection status changes
+  const handleConnectionStatus = useCallback((isConnected: boolean) => {
+    setConnected(isConnected);
+    
+    if (isConnected) {
+      // When connected, get the session ID
+      const currentSessionId = websocketService.getSessionId();
+      if (currentSessionId) {
+        setSessionId(currentSessionId);
+      }
+    }
+  }, []);
+  
+  // Set up WebSocket listeners
   useEffect(() => {
+    // Register listeners
+    const removeMessageListener = websocketService.addMessageListener(handleMessage);
+    const removeStatusListener = websocketService.addConnectionStatusListener(handleConnectionStatus);
+    
+    // Get initial values
+    setConnected(websocketService.isConnected());
+    setSessionId(websocketService.getSessionId());
+    
+    // Clean up listeners on unmount
     return () => {
-      // No need to disconnect on unmount as we want to maintain the connection
-      // across page navigations, but we'll clean up the context
+      removeMessageListener();
+      removeStatusListener();
     };
+  }, [handleMessage, handleConnectionStatus]);
+
+  // Convenience method to send a chat message
+  const sendChatMessage = useCallback((message: string): boolean => {
+    return websocketService.sendChatMessage(message);
+  }, []);
+  
+  // Convenience method to send a status update
+  const sendStatusUpdate = useCallback((moduleId: string, status: string): boolean => {
+    return websocketService.sendStatusUpdate(moduleId, status);
+  }, []);
+  
+  // Clear messages method
+  const clearMessages = useCallback(() => {
+    setMessages([]);
   }, []);
 
-  // Context value
-  const value = {
-    connected,
-    sessionId,
-    messages,
-    sendChatMessage: websocketService.sendChatMessage.bind(websocketService),
-    sendStatusUpdate: websocketService.sendStatusUpdate.bind(websocketService),
-  };
-
   return (
-    <WebSocketContext.Provider value={value}>
+    <WebSocketContext.Provider
+      value={{
+        connected,
+        sessionId,
+        messages,
+        sendChatMessage,
+        sendStatusUpdate,
+        clearMessages,
+      }}
+    >
       {children}
     </WebSocketContext.Provider>
   );
@@ -106,7 +102,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
 
 export function useWebSocketContext() {
   const context = useContext(WebSocketContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useWebSocketContext must be used within a WebSocketProvider');
   }
   return context;

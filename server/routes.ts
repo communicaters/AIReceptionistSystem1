@@ -262,6 +262,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/chat/config", async (req, res) => {
+    try {
+      const userId = 1; // For demo, use fixed user ID
+      const existingConfig = await storage.getChatConfigByUserId(userId);
+      
+      // Create or update config based on existing data
+      let updatedConfig;
+      if (existingConfig) {
+        updatedConfig = await storage.updateChatConfig(existingConfig.id, {
+          ...req.body,
+          userId
+        });
+      } else {
+        updatedConfig = await storage.createChatConfig({
+          ...req.body,
+          userId,
+          isActive: true,
+          widgetColor: req.body.widgetColor || "#2563eb",
+          widgetTitle: req.body.widgetTitle || "Company Assistant",
+          greetingMessage: req.body.greetingMessage || "Hello! How can I assist you today?",
+          aiResponseTime: req.body.aiResponseTime || 2000,
+          activeHours: req.body.activeHours || "9:00-17:00",
+          enableAutoResponse: req.body.enableAutoResponse !== undefined ? req.body.enableAutoResponse : true,
+          enableHumanHandoff: req.body.enableHumanHandoff !== undefined ? req.body.enableHumanHandoff : true,
+          humanHandoffDelay: req.body.humanHandoffDelay || 300000 // 5 minutes default
+        });
+      }
+      
+      apiResponse(res, updatedConfig);
+      
+      // Log system activity
+      await storage.createSystemActivity({
+        module: "Live Chat",
+        event: "Chat Configuration Updated",
+        status: "Completed",
+        timestamp: new Date(),
+        details: { userId }
+      });
+    } catch (error) {
+      console.error("Error updating chat config:", error);
+      apiResponse(res, { error: "Failed to update chat configuration" }, 500);
+    }
+  });
+
   app.get("/api/chat/logs", async (req, res) => {
     try {
       const userId = 1; // For demo, use fixed user ID
@@ -279,6 +323,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching chat logs:", error);
       apiResponse(res, { error: "Failed to fetch chat logs" }, 500);
+    }
+  });
+  
+  app.post("/api/chat/message", async (req, res) => {
+    try {
+      const userId = 1; // For demo, use fixed user ID
+      const { message, sessionId, sender } = req.body;
+      
+      if (!message || !sessionId || !sender) {
+        return apiResponse(res, { error: "Missing required fields: message, sessionId, or sender" }, 400);
+      }
+      
+      // Create the chat log entry
+      const chatLog = await storage.createChatLog({
+        userId,
+        sessionId,
+        message,
+        sender,
+        timestamp: new Date()
+      });
+      
+      apiResponse(res, chatLog);
+    } catch (error) {
+      console.error("Error creating chat message:", error);
+      apiResponse(res, { error: "Failed to create chat message" }, 500);
     }
   });
 

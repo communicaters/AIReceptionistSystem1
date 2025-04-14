@@ -12,10 +12,11 @@ import AITraining from "@/pages/ai-training";
 import SpeechEngines from "@/pages/speech-engines";
 import Settings from "@/pages/settings";
 import { ConnectionStatus } from "@/components/ui/connection-status";
+import { WebSocketProvider } from "@/components/providers/websocket-provider";
 
 function App() {
   return (
-    <>
+    <WebSocketProvider>
       <ConnectionStatus />
       <Switch>
         <Route path="/" component={Dashboard} />
@@ -84,7 +85,7 @@ function App() {
         </Route>
         <Route component={NotFound} />
       </Switch>
-    </>
+    </WebSocketProvider>
   );
 }
 
