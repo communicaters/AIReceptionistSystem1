@@ -55,6 +55,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     fs.mkdirSync(fallbackDir, { recursive: true });
   }
   
+  // Create sample MP3 files for voice samples
+  createAllSampleMp3s().catch(err => {
+    console.error("Error creating sample MP3 files:", err);
+  });
+  
   // Direct audio serving endpoint
   app.get('/api/audio/:audioId', (req, res) => {
     const { audioId } = req.params;
