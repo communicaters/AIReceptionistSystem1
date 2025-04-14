@@ -95,22 +95,90 @@ if (!fs.existsSync(audioDir)) {
   fs.mkdirSync(audioDir, { recursive: true });
 }
 
-// Serve audio files from cache
-speechRouter.get('/audio/:filename', (req, res) => {
-  const filename = req.params.filename;
-  const filepath = path.join(audioDir, filename);
-  
-  // Security check to prevent directory traversal
-  if (!filepath.startsWith(audioDir)) {
-    return res.status(403).json({ success: false, error: 'Forbidden' });
+// Create directories for audio files
+const fallbackDir = path.join(audioDir, 'fallback');
+const ttsDir = path.join(audioDir, 'tts');
+const samplesDir = path.join(audioDir, 'samples');
+
+// Ensure all directories exist
+[fallbackDir, ttsDir, samplesDir].forEach(dir => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
   }
+});
+
+// Create placeholder sample files if they don't exist
+const sampleVoices = [
+  { id: 'emma', text: 'This is Emma, a professional female voice with an American accent.' },
+  { id: 'michael', text: 'This is Michael, a professional male voice with an American accent.' },
+  { id: 'olivia', text: 'This is Olivia, a friendly female voice with a British accent.' },
+  { id: 'james', text: 'This is James, a friendly male voice with a British accent.' },
+];
+
+// Create sample files (just empty files for demo)
+sampleVoices.forEach(voice => {
+  const samplePath = path.join(samplesDir, `${voice.id}.mp3`);
+  if (!fs.existsSync(samplePath)) {
+    // Create a minimal valid MP3 file (just headers)
+    const emptyMp3 = Buffer.from([
+      0xFF, 0xFB, 0x90, 0x44, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    ]);
+    fs.writeFileSync(samplePath, emptyMp3);
+  }
+});
+
+// Serve audio files from cache with subdirectory support
+speechRouter.get('/audio/:type?/:filename', (req, res) => {
+  const { type, filename } = req.params;
   
-  if (fs.existsSync(filepath)) {
-    res.setHeader('Content-Type', 'audio/mpeg');
-    res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
-    fs.createReadStream(filepath).pipe(res);
+  if (!filename) {
+    // If only one parameter is provided, it's the filename (not the type)
+    const actualFilename = type;
+    const filepath = path.join(audioDir, actualFilename);
+    
+    // Security check to prevent directory traversal
+    if (!filepath.startsWith(audioDir)) {
+      return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
+    
+    if (fs.existsSync(filepath)) {
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
+      fs.createReadStream(filepath).pipe(res);
+    } else {
+      res.status(404).json({ success: false, error: 'Audio file not found' });
+    }
   } else {
-    res.status(404).json({ success: false, error: 'Audio file not found' });
+    // Process with type and filename
+    let filepath;
+    
+    switch (type) {
+      case 'fallback':
+        filepath = path.join(fallbackDir, filename);
+        break;
+      case 'tts':
+        filepath = path.join(ttsDir, filename);
+        break;
+      case 'samples':
+        filepath = path.join(samplesDir, filename);
+        break;
+      default:
+        filepath = path.join(audioDir, type, filename);
+    }
+    
+    // Security check to prevent directory traversal
+    if (!filepath.startsWith(audioDir)) {
+      return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
+    
+    if (fs.existsSync(filepath)) {
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
+      fs.createReadStream(filepath).pipe(res);
+    } else {
+      res.status(404).json({ success: false, error: 'Audio file not found' });
+    }
   }
 });
 

@@ -215,7 +215,7 @@ export const AVAILABLE_VOICES = [
   },
 ];
 
-// Fallback TTS implementation using browser's built-in speech synthesis
+// Fallback TTS implementation with static files
 async function fallbackTextToSpeech(
   text: string,
   options: {
@@ -235,9 +235,30 @@ async function fallbackTextToSpeech(
       }
     });
     
-    // For demo purposes, generate a static audio URL
-    // In a real implementation, you would use Web Speech API or another fallback service
-    const fallbackUrl = `/audio/fallback/${Date.now()}.mp3`;
+    // Create a fallback cache directory if it doesn't exist
+    const fallbackDir = path.join(process.cwd(), 'cache', 'audio', 'fallback');
+    if (!fs.existsSync(fallbackDir)) {
+      fs.mkdirSync(fallbackDir, { recursive: true });
+    }
+    
+    // Generate a unique filename based on text content (truncated) and timestamp
+    const timestamp = Date.now();
+    const safeText = text.substring(0, 20).replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    const filename = `fallback_${safeText}_${timestamp}.mp3`;
+    const filepath = path.join(fallbackDir, filename);
+    
+    // For demo purposes, create a small empty MP3 file
+    // This ensures the audio player doesn't get a 404 error
+    // In a real implementation, generate actual audio
+    const emptyAudioBuffer = Buffer.from([
+      0xFF, 0xFB, 0x90, 0x44, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    ]);
+    
+    await writeFileAsync(filepath, emptyAudioBuffer);
+    
+    // Return a URL that points to this file
+    const fallbackUrl = `/audio/fallback/${filename}`;
     
     await storage.createSystemActivity({
       module: "Speech Engines",
@@ -247,6 +268,7 @@ async function fallbackTextToSpeech(
       details: {
         textLength: text.length,
         usedFallback: true,
+        audioFile: filename,
       }
     });
     
