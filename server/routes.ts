@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import { setupTwilioWebhooks } from "./lib/twilio";
 import { initOpenAI } from "./lib/openai";
 import { initSendgrid } from "./lib/sendgrid";
-import { initGoogleCalendar, createOAuth2Client } from "./lib/google-calendar";
+import { initGoogleCalendar, createOAuth2Client, createEvent, getAvailableTimeSlots } from "./lib/google-calendar";
 import { initElevenLabs } from "./lib/elevenlabs";
 import { initWhisperAPI } from "./lib/whisper";
 import { createAllSampleMp3s } from "./lib/create-sample-mp3";
@@ -779,7 +779,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       // Construct the Google OAuth URL
+      // Use the exact same URL that's printed during server startup
       const redirectUri = `${process.env.HOST_URL || 'http://localhost:5000'}/api/calendar/auth/callback`;
+      
+      // Log the full redirect URI to help with debugging and setup
+      console.log(`Using Google OAuth Redirect URI: ${redirectUri}`);
+      console.log(`Important: This exact URI must be registered in Google Cloud Console under "Authorized redirect URIs"`);
+      
       const scope = encodeURIComponent('https://www.googleapis.com/auth/calendar');
       const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${config.googleClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}&access_type=offline&prompt=consent&state=${state}`;
       
@@ -1007,8 +1013,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           calendarConfig.googleClientId && 
           calendarConfig.googleClientSecret) {
         try {
-          // Import the createEvent function from lib/google-calendar
-          const { createEvent } = require('./lib/google-calendar');
+          // Use the createEvent function imported at the top of the file
           
           // Convert attendees from comma-separated string to array if needed
           let attendeesArray = meeting.attendees;
