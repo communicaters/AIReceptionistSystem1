@@ -103,7 +103,29 @@ export function AudioPlayer({
   };
   
   const handleError = (e: Event) => {
-    const errorMessage = "Failed to load audio file";
+    console.log("Audio player error:", e);
+    let errorMessage = "Failed to load audio file";
+    
+    // Get more detailed error message if available
+    if (audioRef.current && audioRef.current.error) {
+      const mediaError = audioRef.current.error;
+      // Add code information to error message
+      if (mediaError.code) {
+        const errorCodes = {
+          1: "MEDIA_ERR_ABORTED - Audio playback was aborted",
+          2: "MEDIA_ERR_NETWORK - Network error occurred during playback",
+          3: "MEDIA_ERR_DECODE - Audio decoding error",
+          4: "MEDIA_ERR_SRC_NOT_SUPPORTED - Audio format not supported"
+        };
+        errorMessage = errorCodes[mediaError.code as keyof typeof errorCodes] || errorMessage;
+      }
+      
+      // Add any additional error message from the browser
+      if (mediaError.message) {
+        errorMessage += `: ${mediaError.message}`;
+      }
+    }
+    
     setError(errorMessage);
     if (onError) onError(new Error(errorMessage));
   };
