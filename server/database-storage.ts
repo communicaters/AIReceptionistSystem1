@@ -371,6 +371,19 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
+  async updateCallLog(id: number, log: Partial<InsertCallLog>): Promise<CallLog | undefined> {
+    const result = await db
+      .update(callLogs)
+      .set({
+        ...log,
+        // Ensure timestamp is preserved if not provided
+        ...(log.timestamp ? {} : { timestamp: new Date() })
+      })
+      .where(eq(callLogs.id, id))
+      .returning();
+    return result[0];
+  }
+
   // Email Logs
   async getEmailLog(id: number): Promise<EmailLog | undefined> {
     const result = await db.select().from(emailLogs).where(eq(emailLogs.id, id));
