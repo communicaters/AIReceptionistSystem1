@@ -1207,8 +1207,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create a map of all 24-hour time slots in the day (HH:MM format)
       const timeSlots = new Map();
       
+      // If there are meetings on this day, ensure we generate slots for the entire day
+      // This ensures we capture meetings outside normal business hours
+      let actualStartHour = startHour;
+      let actualEndHour = endHour;
+      
+      // If we have meetings, expand the time range to cover the entire day
+      if (datesMeetings.length > 0) {
+        actualStartHour = 0;  // Start from midnight
+        actualEndHour = 24;   // End at midnight
+      }
+      
       // Generate all time slots first with available=true
-      for (let hour = startHour; hour < endHour; hour++) {
+      for (let hour = actualStartHour; hour < actualEndHour; hour++) {
         for (let minute = 0; minute < 60; minute += slotDuration) {
           const slotTime = new Date(normalizedDate);
           slotTime.setHours(hour, minute, 0, 0);
@@ -1216,10 +1227,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const timeKey = formatTimeSlot(slotTime);
           const formattedTime = formatTime(slotTime);
           
+          // Only slots within business hours are "available" by default
+          // Others are created but marked as unavailable
+          const isWithinBusinessHours = hour >= startHour && hour < endHour;
+          
           timeSlots.set(timeKey, {
             time: formattedTime,
-            available: true,
-            key: timeKey // For debugging
+            available: isWithinBusinessHours,
+            key: timeKey, // For debugging
+            isBusinessHours: isWithinBusinessHours
           });
         }
       }
@@ -1233,34 +1249,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`Processing meeting: ${formatTime(startTime)} - ${formatTime(endTime)} [${meeting.subject}]`);
         console.log(`Meeting raw times - Start: ${startTime.toISOString()}, End: ${endTime.toISOString()}`);
         
-        // Instead of using static timezone offset, use the local date's hour and minutes
-        // This ensures we're comparing apples to apples with the time slots
-        const adjustedStartHour = startTime.getHours();
-        const adjustedStartMinute = startTime.getMinutes();
-        const adjustedEndHour = endTime.getHours();
-        const adjustedEndMinute = endTime.getMinutes();
+        // Create full calendar date objects with the meeting times
+        // This ensures proper timezone handling for comparison
         
-        console.log(`Adjusted meeting time: ${adjustedStartHour}:${adjustedStartMinute} - ${adjustedEndHour}:${adjustedEndMinute}`);
+        // Check if meeting starts on the selected date
+        // If the meeting is from a different day, set start time to beginning of day
+        let meetingStartDateTime;
+        if (startTime.toISOString().split('T')[0] === normalizedDate.toISOString().split('T')[0]) {
+          meetingStartDateTime = new Date(normalizedDate);
+          meetingStartDateTime.setHours(startTime.getUTCHours(), startTime.getUTCMinutes(), 0, 0);
+        } else {
+          meetingStartDateTime = new Date(normalizedDate);
+          meetingStartDateTime.setHours(0, 0, 0, 0); // Beginning of the selected day
+        }
+        
+        // Check if meeting ends on the selected date
+        // If the meeting ends on a different day, set end time to end of day
+        let meetingEndDateTime;
+        if (endTime.toISOString().split('T')[0] === normalizedDate.toISOString().split('T')[0]) {
+          meetingEndDateTime = new Date(normalizedDate);
+          meetingEndDateTime.setHours(endTime.getUTCHours(), endTime.getUTCMinutes(), 0, 0);
+        } else {
+          meetingEndDateTime = new Date(normalizedDate);
+          meetingEndDateTime.setHours(23, 59, 59, 999); // End of the selected day
+        }
+        
+        console.log(`Normalized meeting time: ${meetingStartDateTime.getHours()}:${meetingStartDateTime.getMinutes()} - ${meetingEndDateTime.getHours()}:${meetingEndDateTime.getMinutes()}`);
         
         // Create a more robust approach to check overlap with all time slots
         Array.from(timeSlots.entries()).forEach(([timeKey, slot]) => {
           // Parse the time slot's hour and minute from the key (HH:MM format)
           const [slotHour, slotMinute] = timeKey.split(':').map(Number);
           
-          // Check if this time slot overlaps with the adjusted meeting time
-          // For a time slot to be within a meeting, these conditions must be true:
-          // 1. The slot hour must be >= adjusted start hour and <= adjusted end hour
-          // 2. If at the start hour, the slot minute must be >= adjusted start minute
-          // 3. If at the end hour, the slot minute must be < adjusted end minute
+          // Create a Date object for this time slot for easier comparison
+          const slotDateTime = new Date(normalizedDate);
+          slotDateTime.setHours(slotHour, slotMinute, 0, 0);
           
-          const isWithinMeeting = (
-            (slotHour > adjustedStartHour || (slotHour === adjustedStartHour && slotMinute >= adjustedStartMinute)) &&
-            (slotHour < adjustedEndHour || (slotHour === adjustedEndHour && slotMinute < adjustedEndMinute))
-          );
+          // Check if this slot falls within the meeting time
+          // A slot is unavailable if its time is >= meeting start and < meeting end
+          const slotTime = slotDateTime.getTime();
+          const meetingStartTime = meetingStartDateTime.getTime();
+          const meetingEndTime = meetingEndDateTime.getTime();
+          
+          const isWithinMeeting = slotTime >= meetingStartTime && slotTime < meetingEndTime;
           
           if (isWithinMeeting) {
             slot.available = false;
-            console.log(`Marking slot ${timeKey} (${formatTime(new Date(normalizedDate.setHours(slotHour, slotMinute)))}) as unavailable due to overlap with meeting`);
+            console.log(`Marking slot ${timeKey} (${formatTime(slotDateTime)}) as unavailable due to overlap with meeting`);
           }
         });
       });
@@ -1284,11 +1319,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`Generated ${slots.length} time slots, ${slots.filter(s => !s.available).length} are occupied`);
       console.log('Occupied time slots:', slots.filter(s => !s.available).map(s => s.key));
       
-      // Remove debugging fields before sending the response
-      const cleanedSlots = slots.map(slot => ({
-        time: slot.time,
-        available: slot.available
-      }));
+      // Remove debugging fields and filter to only business hours slots
+      const cleanedSlots = slots
+        .filter(slot => slot.isBusinessHours) // Only include slots within business hours
+        .map(slot => ({
+          time: slot.time,
+          available: slot.available
+        }));
       
       apiResponse(res, cleanedSlots);
     } catch (error) {
