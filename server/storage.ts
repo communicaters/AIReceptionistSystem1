@@ -184,6 +184,7 @@ export class MemStorage implements IStorage {
   private meetingLogs: Map<number, MeetingLog>;
   private moduleStatuses: Map<number, ModuleStatus>;
   private systemActivities: Map<number, SystemActivity>;
+  private voiceSettings: Map<number, VoiceSettings>;
 
   private currentIds: {
     users: number;
@@ -232,6 +233,7 @@ export class MemStorage implements IStorage {
     this.meetingLogs = new Map();
     this.moduleStatuses = new Map();
     this.systemActivities = new Map();
+    this.voiceSettings = new Map();
 
     // Initialize IDs
     this.currentIds = {
@@ -256,6 +258,7 @@ export class MemStorage implements IStorage {
       meetingLogs: 1,
       moduleStatuses: 1,
       systemActivities: 1,
+      voiceSettings: 1,
     };
 
     // Initialize default data
