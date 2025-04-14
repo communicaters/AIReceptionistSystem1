@@ -22,6 +22,27 @@ function apiResponse(res: Response, data: any, status = 200) {
   return res.status(status).json(data);
 }
 
+// Format a date to a time string (e.g., "9:00 AM")
+function formatTime(date: Date): string {
+  let hours = date.getHours();
+  const minutes = date.getMinutes();
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  
+  hours = hours % 12;
+  hours = hours ? hours : 12; // the hour '0' should be '12'
+  
+  const minutesStr = minutes < 10 ? '0' + minutes : minutes;
+  
+  return hours + ':' + minutesStr + ' ' + ampm;
+}
+
+// Format a date to a time slot string for comparison (e.g., "09:00")
+function formatTimeSlot(date: Date): string {
+  const hours = date.getHours().toString().padStart(2, '0');
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   
@@ -733,6 +754,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/calendar/config", async (req, res) => {
+    try {
+      const userId = 1; // For demo, use fixed user ID
+      const configData = req.body;
+      
+      // Validate required fields
+      if (!configData.googleClientId || !configData.googleClientSecret) {
+        return apiResponse(res, { error: "Google Client ID and Secret are required" }, 400);
+      }
+
+      // Check if configuration already exists
+      const existingConfig = await storage.getCalendarConfigByUserId(userId);
+      
+      let savedConfig;
+      if (existingConfig) {
+        // Update existing config
+        savedConfig = await storage.updateCalendarConfig(existingConfig.id, {
+          ...configData,
+          userId
+        });
+        
+        console.log("Updated calendar configuration:", savedConfig);
+      } else {
+        // Create new config
+        savedConfig = await storage.createCalendarConfig({
+          ...configData,
+          userId,
+          isActive: configData.isActive ?? true
+        });
+        
+        console.log("Created new calendar configuration:", savedConfig);
+      }
+      
+      // Log activity
+      await storage.createSystemActivity({
+        module: "Calendar",
+        event: existingConfig ? "ConfigUpdated" : "ConfigCreated",
+        status: "success",
+        timestamp: new Date(),
+        details: { userId }
+      });
+      
+      apiResponse(res, savedConfig);
+    } catch (error) {
+      console.error("Error saving calendar config:", error);
+      
+      // Log error
+      await storage.createSystemActivity({
+        module: "Calendar",
+        event: "ConfigError",
+        status: "error",
+        timestamp: new Date(),
+        details: { error: String(error) }
+      });
+      
+      apiResponse(res, { error: "Failed to save calendar configuration" }, 500);
+    }
+  });
+
   app.get("/api/calendar/meetings", async (req, res) => {
     try {
       const userId = 1; // For demo, use fixed user ID
@@ -742,6 +822,172 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching meeting logs:", error);
       apiResponse(res, { error: "Failed to fetch meeting logs" }, 500);
+    }
+  });
+  
+  app.post("/api/calendar/meetings", async (req, res) => {
+    try {
+      const userId = 1; // For demo, use fixed user ID
+      const meetingData = req.body;
+      
+      // Validate required fields
+      if (!meetingData.subject || !meetingData.startTime || !meetingData.endTime) {
+        return apiResponse(res, { 
+          error: "Subject, start time, and end time are required" 
+        }, 400);
+      }
+      
+      // Format for database
+      const meeting = {
+        userId,
+        subject: meetingData.subject,
+        description: meetingData.description || null,
+        startTime: new Date(meetingData.startTime),
+        endTime: new Date(meetingData.endTime),
+        attendees: meetingData.attendees || [],
+        status: "scheduled",
+        googleEventId: null
+      };
+      
+      // Check if calendar is configured
+      const calendarConfig = await storage.getCalendarConfigByUserId(userId);
+      
+      let savedMeeting;
+      let googleEventCreated = false;
+      
+      // Try to create Google Calendar event if configured
+      if (calendarConfig?.isActive && 
+          calendarConfig.googleRefreshToken && 
+          calendarConfig.googleClientId && 
+          calendarConfig.googleClientSecret) {
+        try {
+          // This is a placeholder for actual Google Calendar API integration
+          // In a real implementation, this would create an event in Google Calendar
+          // and return the Google event ID
+          console.log("Would create Google Calendar event with:", meeting);
+          
+          // For now, mock a Google Event ID
+          const mockGoogleEventId = `mock_event_${Date.now()}`;
+          savedMeeting = await storage.createMeetingLog({
+            ...meeting,
+            googleEventId: mockGoogleEventId
+          });
+          
+          googleEventCreated = true;
+        } catch (googleError) {
+          console.error("Error creating Google Calendar event:", googleError);
+          // Fall back to creating just a local meeting
+        }
+      }
+      
+      // If Google Calendar creation failed or not configured, create local meeting only
+      if (!googleEventCreated) {
+        savedMeeting = await storage.createMeetingLog(meeting);
+      }
+      
+      // Log activity
+      await storage.createSystemActivity({
+        module: "Calendar",
+        event: "MeetingCreated",
+        status: "success",
+        timestamp: new Date(),
+        details: { meetingId: savedMeeting.id, subject: meeting.subject }
+      });
+      
+      apiResponse(res, savedMeeting);
+    } catch (error) {
+      console.error("Error creating meeting:", error);
+      
+      // Log error
+      await storage.createSystemActivity({
+        module: "Calendar",
+        event: "MeetingCreationError",
+        status: "error",
+        timestamp: new Date(),
+        details: { error: String(error) }
+      });
+      
+      apiResponse(res, { error: "Failed to create meeting" }, 500);
+    }
+  });
+  
+  app.get("/api/calendar/slots", async (req, res) => {
+    try {
+      const userId = 1; // For demo, use fixed user ID
+      const dateStr = req.query.date as string;
+      
+      if (!dateStr) {
+        return apiResponse(res, { error: "Date parameter is required" }, 400);
+      }
+      
+      // Parse the date
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) {
+        return apiResponse(res, { error: "Invalid date format" }, 400);
+      }
+      
+      // Get calendar config
+      const config = await storage.getCalendarConfigByUserId(userId);
+      
+      // If no config, return error
+      if (!config) {
+        return apiResponse(res, { 
+          error: "Calendar not configured" 
+        }, 404);
+      }
+      
+      // Get meetings for the date
+      const meetings = await storage.getMeetingLogsByUserId(userId);
+      const datesMeetings = meetings.filter(meeting => {
+        const meetingDate = new Date(meeting.startTime);
+        return meetingDate.toDateString() === date.toDateString();
+      });
+      
+      // Create time slots based on configuration
+      const startHour = parseInt(config.availabilityStartTime.split(':')[0]);
+      const endHour = parseInt(config.availabilityEndTime.split(':')[0]);
+      const slotDuration = config.slotDuration;
+      
+      const slots = [];
+      const occupied = new Set();
+      
+      // Mark occupied slots
+      datesMeetings.forEach(meeting => {
+        const startTime = new Date(meeting.startTime);
+        const endTime = new Date(meeting.endTime);
+        
+        // Mark all slots that overlap with this meeting as occupied
+        let currentSlot = new Date(date);
+        currentSlot.setHours(startTime.getHours(), startTime.getMinutes(), 0, 0);
+        
+        while (currentSlot < endTime) {
+          occupied.add(formatTimeSlot(currentSlot));
+          currentSlot = new Date(currentSlot.getTime() + slotDuration * 60000);
+        }
+      });
+      
+      // Generate all slots
+      let currentTime = new Date(date);
+      currentTime.setHours(startHour, 0, 0, 0);
+      
+      const endTime = new Date(date);
+      endTime.setHours(endHour, 0, 0, 0);
+      
+      while (currentTime < endTime) {
+        const timeString = formatTimeSlot(currentTime);
+        slots.push({
+          time: formatTime(currentTime),
+          available: !occupied.has(timeString)
+        });
+        
+        // Move to next slot
+        currentTime = new Date(currentTime.getTime() + slotDuration * 60000);
+      }
+      
+      apiResponse(res, slots);
+    } catch (error) {
+      console.error("Error getting available slots:", error);
+      apiResponse(res, { error: "Failed to get available time slots" }, 500);
     }
   });
 

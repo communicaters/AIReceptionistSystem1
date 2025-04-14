@@ -220,6 +220,51 @@ export const getMeetingLogs = async (limit?: number): Promise<MeetingLog[]> => {
   return response.json();
 };
 
+export interface CalendarConfig {
+  id: number;
+  userId: number;
+  googleClientId: string;
+  googleClientSecret: string;
+  googleRefreshToken: string | null;
+  googleCalendarId: string | null;
+  availabilityStartTime: string;
+  availabilityEndTime: string;
+  slotDuration: number;
+  isActive: boolean;
+}
+
+export const getCalendarConfig = async (): Promise<CalendarConfig | { error: string }> => {
+  const response = await apiRequest("GET", "/api/calendar/config");
+  return response.json();
+};
+
+export const saveCalendarConfig = async (
+  config: Partial<CalendarConfig>
+): Promise<CalendarConfig> => {
+  const response = await apiRequest("POST", "/api/calendar/config", config);
+  return response.json();
+};
+
+export const getAvailableTimeSlots = async (
+  date: string
+): Promise<{ time: string; available: boolean }[]> => {
+  const response = await apiRequest("GET", `/api/calendar/slots?date=${date}`);
+  return response.json();
+};
+
+export const createMeeting = async (
+  meeting: {
+    subject: string;
+    description?: string;
+    startTime: string;
+    endTime: string;
+    attendees: string[];
+  }
+): Promise<MeetingLog> => {
+  const response = await apiRequest("POST", "/api/calendar/meetings", meeting);
+  return response.json();
+};
+
 export const getProducts = async (): Promise<Product[]> => {
   const response = await apiRequest("GET", "/api/products");
   return response.json();
