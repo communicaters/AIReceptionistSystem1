@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import { setupTwilioWebhooks } from "./lib/twilio";
 import { initOpenAI } from "./lib/openai";
 import { initSendgrid } from "./lib/sendgrid";
-import { initGoogleCalendar } from "./lib/google-calendar";
+import { initGoogleCalendar, createOAuth2Client } from "./lib/google-calendar";
 import { initElevenLabs } from "./lib/elevenlabs";
 import { initWhisperAPI } from "./lib/whisper";
 import { createAllSampleMp3s } from "./lib/create-sample-mp3";

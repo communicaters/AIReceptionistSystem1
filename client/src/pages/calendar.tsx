@@ -583,7 +583,8 @@ const Calendar = () => {
                       availabilityStartTime: "09:00",
                       availabilityEndTime: "17:00",
                       slotDuration: 30,
-                      isActive: false
+                      isActive: false,
+                      googleRefreshToken: null
                     });
                     saveConfigMutation.mutate({
                       googleClientId: "",
@@ -592,7 +593,8 @@ const Calendar = () => {
                       availabilityStartTime: "09:00",
                       availabilityEndTime: "17:00",
                       slotDuration: 30,
-                      isActive: false
+                      isActive: false,
+                      googleRefreshToken: null
                     });
                   }
                 }}
