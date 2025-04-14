@@ -361,6 +361,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       apiResponse(res, { error: "Failed to fetch call logs" }, 500);
     }
   });
+  
+  app.patch("/api/voice/logs/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return apiResponse(res, { error: "Invalid call log ID" }, 400);
+      }
+      
+      const existingLog = await storage.getCallLog(id);
+      if (!existingLog) {
+        return apiResponse(res, { error: "Call log not found" }, 404);
+      }
+      
+      const updatedLog = await storage.updateCallLog(id, req.body);
+      if (!updatedLog) {
+        return apiResponse(res, { error: "Failed to update call log" }, 500);
+      }
+      
+      // Log the update to system activity
+      await storage.createSystemActivity({
+        module: "Voice Call",
+        event: "Call Log Updated",
+        status: "Completed",
+        timestamp: new Date(),
+        details: {
+          callId: id,
+          updates: Object.keys(req.body)
+        }
+      });
+      
+      apiResponse(res, updatedLog);
+    } catch (error) {
+      console.error("Error updating call log:", error);
+      apiResponse(res, { error: "Failed to update call log" }, 500);
+    }
+  });
 
   // Email module
   app.get("/api/email/configs", async (req, res) => {

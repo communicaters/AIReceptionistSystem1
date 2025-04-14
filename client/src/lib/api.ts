@@ -149,6 +149,14 @@ export const getCallLogs = async (limit?: number): Promise<CallLog[]> => {
   return response.json();
 };
 
+export const updateCallLog = async (
+  id: number, 
+  updates: Partial<CallLog>
+): Promise<CallLog> => {
+  const response = await apiRequest("PATCH", `/api/voice/logs/${id}`, updates);
+  return response.json();
+};
+
 export const getEmailConfigs = async (): Promise<EmailConfig> => {
   const response = await apiRequest("GET", "/api/email/configs");
   return response.json();
