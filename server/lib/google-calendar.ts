@@ -172,9 +172,9 @@ export async function getAvailableTimeSlots(
     
     // Create map of busy times
     const busyTimes = new Map();
-    busySlots.forEach(slot => {
-      const start = new Date(slot.start as string);
-      const end = new Date(slot.end as string);
+    busySlots.forEach((slot: { start: string; end: string }) => {
+      const start = new Date(slot.start);
+      const end = new Date(slot.end);
       
       // Convert to minutes since start of day for easier comparison
       const startMinutes = start.getHours() * 60 + start.getMinutes();
