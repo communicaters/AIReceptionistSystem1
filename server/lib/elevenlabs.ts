@@ -182,8 +182,17 @@ export function initElevenLabs() {
         "james": "TxGEqnHWrfWFTfGW9XjX"     // Male voice (Josh)
       };
       
-      // Get the actual ElevenLabs voice ID
-      const actualVoiceId = voiceMap[voiceId] || voiceMap["emma"];
+      let actualVoiceId;
+      
+      // If the voice ID looks like an ElevenLabs ID (long ID string), use it directly
+      if (voiceId && voiceId.length > 20) {
+        console.log(`Using custom ElevenLabs voice ID: ${voiceId}`);
+        actualVoiceId = voiceId;
+      } else {
+        // Otherwise, try to map it to one of our predefined voices
+        actualVoiceId = voiceMap[voiceId] || voiceMap["emma"];
+        console.log(`Mapped voice ID "${voiceId}" to ElevenLabs voice ID: ${actualVoiceId}`);
+      }
       
       // Construct the API URL
       const apiUrl = `https://api.elevenlabs.io/v1/text-to-speech/${actualVoiceId}/stream`;
@@ -412,9 +421,13 @@ export async function textToSpeech(
         // This allows us to support both our predefined voices and custom ElevenLabs voice IDs
         let actualVoiceId = voiceId;
         
-        // If the voice ID doesn't look like an ElevenLabs ID (which are typically longer strings),
-        // try to find it in user settings
-        if (voiceId && voiceId.length < 20) {
+        // If the voice ID looks like an ElevenLabs ID (typically long alphanumeric string), use it directly
+        if (voiceId && voiceId.length > 20) {
+          console.log(`Using custom ElevenLabs voice ID directly: ${voiceId}`);
+          actualVoiceId = voiceId;
+        } 
+        // Otherwise, check if it's one of our internal IDs that has a custom mapping
+        else if (voiceId && voiceId.length < 20) {
           try {
             // Get all voice settings to find a matching voice ID
             const allVoiceSettings = await storage.getAllVoiceSettings();
@@ -423,6 +436,17 @@ export async function textToSpeech(
             if (matchedSetting && matchedSetting.externalVoiceId) {
               actualVoiceId = matchedSetting.externalVoiceId;
               console.log(`Mapped internal voice ID "${voiceId}" to external ID "${actualVoiceId}"`);
+            } else {
+              // If no custom mapping exists, use our default voice mapping
+              const client = getElevenLabsClient();
+              const voiceMap: Record<string, string> = {
+                "emma": "EXAVITQu4vr4xnSDxMaL",     // Female voice
+                "michael": "ErXwobaYiN019PkySvjV",  // Male voice (Adam)
+                "olivia": "pNInz6obpgDQGcFmaJgB",   // Female voice
+                "james": "TxGEqnHWrfWFTfGW9XjX"     // Male voice (Josh)
+              };
+              actualVoiceId = voiceMap[voiceId] || voiceMap["emma"];
+              console.log(`Using default voice mapping for "${voiceId}": ${actualVoiceId}`);
             }
           } catch (err) {
             console.warn("Failed to look up voice settings:", err);

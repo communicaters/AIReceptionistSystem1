@@ -209,6 +209,7 @@ export class MemStorage implements IStorage {
     meetingLogs: number;
     moduleStatuses: number;
     systemActivities: number;
+    voiceSettings: number;
   };
 
   constructor() {
@@ -1064,6 +1065,52 @@ export class MemStorage implements IStorage {
     const newActivity: SystemActivity = { ...activity, id };
     this.systemActivities.set(id, newActivity);
     return newActivity;
+  }
+  
+  // Voice Settings
+  async getVoiceSettings(id: number): Promise<VoiceSettings | undefined> {
+    return this.voiceSettings.get(id);
+  }
+  
+  async getVoiceSettingsByVoiceId(voiceId: string): Promise<VoiceSettings | undefined> {
+    return Array.from(this.voiceSettings.values()).find(
+      (setting) => setting.voiceId === voiceId
+    );
+  }
+  
+  async getVoiceSettingsByUserId(userId: number): Promise<VoiceSettings[]> {
+    return Array.from(this.voiceSettings.values()).filter(
+      (setting) => setting.userId === userId
+    );
+  }
+  
+  async getAllVoiceSettings(): Promise<VoiceSettings[]> {
+    return Array.from(this.voiceSettings.values());
+  }
+  
+  async createVoiceSettings(settings: InsertVoiceSettings): Promise<VoiceSettings> {
+    const id = this.currentIds.voiceSettings++;
+    const newSettings: VoiceSettings = { ...settings, id, lastUpdated: new Date() };
+    this.voiceSettings.set(id, newSettings);
+    return newSettings;
+  }
+  
+  async updateVoiceSettings(id: number, settings: Partial<InsertVoiceSettings>): Promise<VoiceSettings | undefined> {
+    const existingSettings = this.voiceSettings.get(id);
+    if (!existingSettings) return undefined;
+    
+    const updatedSettings: VoiceSettings = { 
+      ...existingSettings, 
+      ...settings, 
+      lastUpdated: new Date() 
+    };
+    this.voiceSettings.set(id, updatedSettings);
+    return updatedSettings;
+  }
+  
+  async deleteVoiceSettings(id: number): Promise<boolean> {
+    this.voiceSettings.delete(id);
+    return true;
   }
 }
 
