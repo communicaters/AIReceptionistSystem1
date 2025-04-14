@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getChatLogs } from "@/lib/api";
+import { ChatWidget } from "@/components/chat/chat-widget";
+import { ChatProvider, useChatContext } from "@/components/providers/chat-provider";
 import { 
   Card, 
   CardContent, 
@@ -25,25 +27,74 @@ import {
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
+import { useWebSocketContext } from "@/components/providers/websocket-provider";
 
-const LiveChat = () => {
+const LiveChatContent = () => {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [message, setMessage] = useState("");
+  const { toast } = useToast();
+  const { connected, sendChatMessage } = useWebSocketContext();
+  const { 
+    chatConfig, 
+    setChatConfig, 
+    saveConfig, 
+    isSaving, 
+    showWidget, 
+    toggleWidget 
+  } = useChatContext();
   
   const { 
     data: chatLogs, 
     isLoading: isLoadingLogs,
-    error: logsError
+    error: logsError,
+    refetch: refetchLogs
   } = useQuery({
     queryKey: ["/api/chat/logs", selectedSessionId],
     queryFn: () => selectedSessionId 
       ? getChatLogs(selectedSessionId) 
-      : getChatLogs(undefined, 10)
+      : getChatLogs(undefined, 10),
+    refetchInterval: selectedSessionId ? 5000 : false // Auto-refresh every 5 seconds if viewing a conversation
   });
 
   // Get unique session IDs for the dropdown
   const uniqueSessions = chatLogs 
     ? [...new Set(chatLogs.map(log => log.sessionId))]
     : [];
+
+  // Handle sending a message
+  const handleSendMessage = () => {
+    if (!message.trim() || !selectedSessionId) return;
+    
+    if (!connected) {
+      toast({
+        title: "Connection Error",
+        description: "Not connected to the server. Please try again later.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const success = sendChatMessage(message);
+    if (success) {
+      setMessage("");
+      // Refetch the logs after a small delay to include the new message
+      setTimeout(() => refetchLogs(), 500);
+    } else {
+      toast({
+        title: "Message Failed",
+        description: "Failed to send message. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+  
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -54,7 +105,7 @@ const LiveChat = () => {
             Manage chat widget, view conversations, and configure auto-responses
           </p>
         </div>
-        <Button>
+        <Button onClick={toggleWidget}>
           <MessageCircle className="mr-2 h-4 w-4" />
           Open Chat Widget
         </Button>
@@ -73,7 +124,11 @@ const LiveChat = () => {
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="widget-title">Widget Title</Label>
-                  <Input id="widget-title" defaultValue="Company Assistant" />
+                  <Input 
+                    id="widget-title" 
+                    value={chatConfig.widgetTitle} 
+                    onChange={(e) => setChatConfig({ widgetTitle: e.target.value })}
+                  />
                 </div>
 
                 <div className="space-y-2">
@@ -82,10 +137,15 @@ const LiveChat = () => {
                     <Input 
                       id="widget-color" 
                       type="color" 
-                      defaultValue="#2563eb" 
+                      value={chatConfig.widgetColor}
+                      onChange={(e) => setChatConfig({ widgetColor: e.target.value })}
                       className="w-12 h-8 p-1" 
                     />
-                    <Input defaultValue="#2563eb" className="flex-1" />
+                    <Input 
+                      value={chatConfig.widgetColor}
+                      onChange={(e) => setChatConfig({ widgetColor: e.target.value })}
+                      className="flex-1" 
+                    />
                   </div>
                 </div>
 
@@ -93,64 +153,77 @@ const LiveChat = () => {
                   <Label htmlFor="greeting-message">Greeting Message</Label>
                   <Input 
                     id="greeting-message" 
-                    defaultValue="Hello! How can I assist you today?" 
+                    value={chatConfig.greetingMessage}
+                    onChange={(e) => setChatConfig({ greetingMessage: e.target.value })}
                   />
                 </div>
 
-                <div className="flex items-center space-x-2">
-                  <Switch id="auto-response" defaultChecked />
-                  <Label htmlFor="auto-response">Enable AI Auto-Response</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="active-hours">Active Hours</Label>
+                  <Input 
+                    id="active-hours" 
+                    value={chatConfig.activeHours}
+                    onChange={(e) => setChatConfig({ activeHours: e.target.value })}
+                  />
                 </div>
+
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="auto-response">AI Auto-Response</Label>
+                  <Switch 
+                    id="auto-response" 
+                    checked={chatConfig.enableAutoResponse}
+                    onCheckedChange={(checked) => setChatConfig({ enableAutoResponse: checked })}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="human-handoff">Enable Human Handoff</Label>
+                  <Switch 
+                    id="human-handoff" 
+                    checked={chatConfig.enableHumanHandoff}
+                    onCheckedChange={(checked) => setChatConfig({ enableHumanHandoff: checked })}
+                  />
+                </div>
+
+                <Button className="w-full" onClick={saveConfig} disabled={isSaving}>
+                  {isSaving ? (
+                    <div className="h-4 w-4 border-t-2 border-b-2 border-white rounded-full animate-spin mr-2" />
+                  ) : (
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                  )}
+                  Save Configuration
+                </Button>
               </div>
             </CardContent>
-            <CardFooter className="flex justify-between">
-              <Button variant="outline">Reset</Button>
-              <Button>Save Changes</Button>
-            </CardFooter>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Active Chat Sessions</CardTitle>
+              <CardTitle>Chat Analytics</CardTitle>
               <CardDescription>
-                Currently active chat conversations
+                Summary of chat performance metrics
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {uniqueSessions.length > 0 ? (
-                  uniqueSessions.map((sessionId) => (
-                    <div 
-                      key={sessionId}
-                      onClick={() => setSelectedSessionId(sessionId)}
-                      className={`p-3 border rounded-md cursor-pointer hover:bg-neutral-50 transition-colors ${
-                        selectedSessionId === sessionId ? 'border-primary bg-primary/5' : ''
-                      }`}
-                    >
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center">
-                          <Users className="h-4 w-4 mr-2 text-neutral-500" />
-                          <h4 className="font-medium">Session #{sessionId.substring(8, 16)}</h4>
-                        </div>
-                        <div className="text-xs text-neutral-500">
-                          Active
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-center text-neutral-500 py-4">
-                    No active chat sessions
-                  </div>
-                )}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="p-4 bg-neutral-50 rounded-lg">
+                  <div className="text-sm text-neutral-500">Total Chats</div>
+                  <div className="text-2xl font-bold">{uniqueSessions.length || 0}</div>
+                </div>
+                <div className="p-4 bg-neutral-50 rounded-lg">
+                  <div className="text-sm text-neutral-500">Avg. Response Time</div>
+                  <div className="text-2xl font-bold">{chatConfig.aiResponseTime / 1000}s</div>
+                </div>
+                <div className="p-4 bg-neutral-50 rounded-lg">
+                  <div className="text-sm text-neutral-500">Satisfaction Rate</div>
+                  <div className="text-2xl font-bold">92%</div>
+                </div>
+                <div className="p-4 bg-neutral-50 rounded-lg">
+                  <div className="text-sm text-neutral-500">AI Resolution</div>
+                  <div className="text-2xl font-bold">78%</div>
+                </div>
               </div>
             </CardContent>
-            <CardFooter>
-              <Button variant="outline" className="w-full">
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh Sessions
-              </Button>
-            </CardFooter>
           </Card>
         </div>
 
@@ -170,7 +243,11 @@ const LiveChat = () => {
                       : 'Select a session to view details'}
                   </CardDescription>
                 </div>
-                <Button variant="outline" size="sm">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  disabled={!selectedSessionId || !chatConfig.enableHumanHandoff}
+                >
                   <ArrowRightLeft className="h-4 w-4 mr-1" />
                   Transfer
                 </Button>
@@ -204,7 +281,7 @@ const LiveChat = () => {
                           : 'bg-primary text-white ml-auto'
                       }`}
                     >
-                      <div className="text-sm">{message.message}</div>
+                      <div className="text-sm break-words">{message.message}</div>
                       <div className={`text-xs mt-1 ${
                         message.sender === 'user' ? 'text-neutral-500' : 'text-primary-foreground/70'
                       }`}>
@@ -219,11 +296,15 @@ const LiveChat = () => {
               <div className="flex w-full space-x-2 pt-4">
                 <Input 
                   placeholder="Type your message..." 
-                  disabled={!selectedSessionId} 
-                />
-                <Button 
-                  size="icon" 
                   disabled={!selectedSessionId}
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                />
+                <Button
+                  size="icon"
+                  disabled={!selectedSessionId || !message.trim() || !connected}
+                  onClick={handleSendMessage}
                 >
                   <Send className="h-4 w-4" />
                 </Button>
@@ -233,36 +314,68 @@ const LiveChat = () => {
 
           <Card>
             <CardHeader>
-              <CardTitle>Chat Analytics</CardTitle>
+              <CardTitle>Active Sessions</CardTitle>
               <CardDescription>
-                Summary of chat performance metrics
+                View and manage current chat sessions
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div className="p-4 bg-neutral-50 rounded-lg">
-                  <div className="text-sm text-neutral-500">Total Chats</div>
-                  <div className="text-2xl font-bold">946</div>
-                </div>
-                <div className="p-4 bg-neutral-50 rounded-lg">
-                  <div className="text-sm text-neutral-500">Avg. Response Time</div>
-                  <div className="text-2xl font-bold">8.2s</div>
-                </div>
-                <div className="p-4 bg-neutral-50 rounded-lg">
-                  <div className="text-sm text-neutral-500">Satisfaction Rate</div>
-                  <div className="text-2xl font-bold">92%</div>
-                </div>
-                <div className="p-4 bg-neutral-50 rounded-lg">
-                  <div className="text-sm text-neutral-500">AI Resolution</div>
-                  <div className="text-2xl font-bold">78%</div>
-                </div>
+              <div className="grid grid-cols-1 gap-2">
+                {uniqueSessions.length === 0 ? (
+                  <div className="text-neutral-500 py-4 text-center">
+                    No active chat sessions
+                  </div>
+                ) : (
+                  uniqueSessions.map((sessionId) => (
+                    <Button
+                      key={sessionId}
+                      variant={selectedSessionId === sessionId ? "default" : "outline"}
+                      className="justify-start h-auto py-3"
+                      onClick={() => setSelectedSessionId(sessionId)}
+                    >
+                      <div className="flex items-center">
+                        <div className="bg-primary/10 text-primary p-2 rounded-full mr-3">
+                          <Users className="h-5 w-5" />
+                        </div>
+                        <div className="text-left">
+                          <div className="font-medium">
+                            Session #{sessionId.substring(8, 16)}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            Started {formatDistanceToNow(
+                              new Date(parseInt(sessionId.split('_')[1])),
+                              { addSuffix: true }
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </Button>
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>
         </div>
       </div>
+      
+      {/* Chat Widget */}
+      {showWidget && (
+        <ChatWidget
+          title={chatConfig.widgetTitle}
+          primaryColor={chatConfig.widgetColor}
+          greetingMessage={chatConfig.greetingMessage}
+          onClose={toggleWidget}
+        />
+      )}
     </div>
   );
 };
+
+// Wrap the component with the ChatProvider
+const LiveChat = () => (
+  <ChatProvider>
+    <LiveChatContent />
+  </ChatProvider>
+);
 
 export default LiveChat;
