@@ -195,15 +195,23 @@ const Calendar = () => {
   useEffect(() => {
     if (calendarConfig && !('error' in calendarConfig)) {
       setConfigForm({
-        googleClientId: calendarConfig.googleClientId,
-        googleClientSecret: calendarConfig.googleClientSecret,
-        googleCalendarId: calendarConfig.googleCalendarId,
+        // Use the values from the provided client secret file
+        googleClientId: "374771026760-0mc21legop5c4d6gu2fp6lccs03rh42o.apps.googleusercontent.com",
+        googleClientSecret: "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",
+        googleCalendarId: calendarConfig.googleCalendarId || "primary",
         availabilityStartTime: calendarConfig.availabilityStartTime,
         availabilityEndTime: calendarConfig.availabilityEndTime,
         slotDuration: calendarConfig.slotDuration,
         isActive: calendarConfig.isActive,
         googleRefreshToken: calendarConfig.googleRefreshToken
       });
+    } else {
+      // Set default values from the client secret file for initial load
+      setConfigForm(prev => ({
+        ...prev,
+        googleClientId: "374771026760-0mc21legop5c4d6gu2fp6lccs03rh42o.apps.googleusercontent.com",
+        googleClientSecret: "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",
+      }));
     }
   }, [calendarConfig]);
   

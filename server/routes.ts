@@ -814,8 +814,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       // Construct the Google OAuth URL
-      // Use the same hostUrl variable defined at the top of the file
-      const redirectUri = `${hostUrl}/api/calendar/auth/callback`;
+      // Use the googleRedirectUri variable defined at the top of the file
+      const redirectUri = googleRedirectUri;
       
       // Log the full redirect URI to help with debugging and setup
       console.log(`Using Google OAuth Redirect URI: ${redirectUri}`);
@@ -877,8 +877,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Exchange the authorization code for tokens
-      // Use the same hostUrl variable defined at the top of the file
-      const redirectUri = `${hostUrl}/api/calendar/auth/callback`;
+      // Use the googleRedirectUri variable defined at the top of the file
+      const redirectUri = googleRedirectUri;
       const tokenUrl = 'https://oauth2.googleapis.com/token';
       
       // Make a request to Google's token endpoint
