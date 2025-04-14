@@ -1157,12 +1157,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }, 404);
       }
       
-      // Get meetings using SQL date filtering instead of JavaScript filtering
-      // This ensures we get the correct meetings for the requested date
+      // Get meetings using SQL date filtering with improved detection
+      // This ensures we get ALL meetings that overlap with the requested date
+      // by checking not just meetings that start on the date but also meetings
+      // that end on the date or span over the date
       const query = `
         SELECT * FROM meeting_logs 
         WHERE user_id = $1 
-        AND start_time::date = $2::date
+        AND (
+          start_time::date = $2::date
+          OR end_time::date = $2::date
+          OR (start_time::date < $2::date AND end_time::date > $2::date)
+        )
       `;
       
       const { rows: datesMeetings } = await pool.query(query, [userId, normalizedDate.toISOString().split('T')[0]]);
@@ -1227,12 +1233,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`Processing meeting: ${formatTime(startTime)} - ${formatTime(endTime)} [${meeting.subject}]`);
         console.log(`Meeting raw times - Start: ${startTime.toISOString()}, End: ${endTime.toISOString()}`);
         
-        // Create a simplified approach for time slot conversion
-        // Adjust the hour to match local display time for comparison
-        const adjustedStartHour = startTime.getUTCHours() + 5; // Convert UTC to desired display time (+5 offset)
-        const adjustedStartMinute = startTime.getUTCMinutes();
-        const adjustedEndHour = endTime.getUTCHours() + 5; // Convert UTC to desired display time (+5 offset)
-        const adjustedEndMinute = endTime.getUTCMinutes();
+        // Instead of using static timezone offset, use the local date's hour and minutes
+        // This ensures we're comparing apples to apples with the time slots
+        const adjustedStartHour = startTime.getHours();
+        const adjustedStartMinute = startTime.getMinutes();
+        const adjustedEndHour = endTime.getHours();
+        const adjustedEndMinute = endTime.getMinutes();
         
         console.log(`Adjusted meeting time: ${adjustedStartHour}:${adjustedStartMinute} - ${adjustedEndHour}:${adjustedEndMinute}`);
         

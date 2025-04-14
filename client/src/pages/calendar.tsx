@@ -959,7 +959,7 @@ const Calendar = () => {
                 <h3 className="font-medium text-sm text-muted-foreground">Attendees</h3>
                 {selectedMeeting.attendees && selectedMeeting.attendees.length > 0 ? (
                   <ul className="list-disc pl-5 space-y-1">
-                    {selectedMeeting.attendees.map((attendee, index) => (
+                    {selectedMeeting.attendees.map((attendee: string, index: number) => (
                       <li key={index}>{attendee}</li>
                     ))}
                   </ul>

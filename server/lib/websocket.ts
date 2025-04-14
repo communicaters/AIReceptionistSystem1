@@ -465,19 +465,25 @@ async function handleMeetingScheduling(message: string, userId: number, sessionI
     // Check if the time slot is available
     const formattedDate = meetingData.date; // Already in YYYY-MM-DD format
     
-    // Query to check for overlapping meetings
+    // Enhanced query to check for overlapping meetings
+    // This handles all possible overlap scenarios and accounts for time zone differences
     const checkQuery = `
       SELECT COUNT(*) as count FROM meeting_logs 
       WHERE user_id = $1 
-      AND start_time::date = $2::date
       AND (
+        -- Check if the meeting overlaps with any existing meeting
+        -- This is a more robust check that handles all edge cases:
+        -- 1. New meeting starts during an existing meeting
+        -- 2. New meeting ends during an existing meeting
+        -- 3. New meeting contains an existing meeting
+        -- 4. New meeting is exactly the same time as an existing meeting
+        -- Using OVERLAPS operator for PostgreSQL which handles all these cases
         ($3::timestamp, $4::timestamp) OVERLAPS (start_time, end_time)
       )
     `;
     
     const { rows } = await pool.query(checkQuery, [
       userId, 
-      formattedDate,
       startTime.toISOString(),
       endTime.toISOString()
     ]);
