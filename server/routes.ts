@@ -821,13 +821,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check for OAuth errors
       if (error) {
         console.error("Google OAuth error:", error);
-        return res.redirect(`/calendar?error=${error}`);
+        return res.redirect(`/oauth-callback?error=${error}`);
       }
       
       // Validate state parameter to prevent CSRF
       if (!state || !global.oauthStateStore || !global.oauthStateStore[state as string]) {
         console.error("Invalid OAuth state parameter");
-        return res.redirect('/calendar?error=invalid_state');
+        return res.redirect('/oauth-callback?error=invalid_state');
       }
       
       // Extract user ID from state
@@ -841,7 +841,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (!config || !config.googleClientId || !config.googleClientSecret) {
         console.error("Missing Google Calendar configuration");
-        return res.redirect('/calendar?error=missing_config');
+        return res.redirect('/oauth-callback?error=missing_config');
       }
       
       // Exchange the authorization code for tokens
@@ -877,7 +877,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           details: { userId, error: tokenData.error || "Unknown token error" }
         });
         
-        return res.redirect('/calendar?error=token_exchange_failed');
+        return res.redirect('/oauth-callback?error=token_exchange_failed');
       }
       
       // Save the refresh token to the user's config
@@ -895,11 +895,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         details: { userId }
       });
       
-      // Redirect back to the calendar page with success message
-      res.redirect('/calendar?connected=true');
+      // Redirect to the OAuth callback page with success message
+      res.redirect('/oauth-callback?connected=true');
     } catch (error) {
       console.error("Error handling OAuth callback:", error);
-      res.redirect('/calendar?error=callback_error');
+      res.redirect('/oauth-callback?error=callback_error');
     }
   });
 
