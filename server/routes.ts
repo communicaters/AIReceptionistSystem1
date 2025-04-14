@@ -1139,10 +1139,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Get meetings for the date
       const meetings = await storage.getMeetingLogsByUserId(userId);
+      
+      // Filter meetings for the current date only
       const datesMeetings = meetings.filter(meeting => {
         const meetingDate = new Date(meeting.startTime);
         return meetingDate.toDateString() === date.toDateString();
       });
+      
+      console.log(`Found ${datesMeetings.length} meetings for ${date.toDateString()}:`, 
+        datesMeetings.map(m => `${formatTime(new Date(m.startTime))} - ${formatTime(new Date(m.endTime))} [${m.subject}]`));
       
       // Use the getAvailableTimeSlots function imported at the top of the file
       
@@ -1173,35 +1178,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const startTime = new Date(meeting.startTime);
         const endTime = new Date(meeting.endTime);
         
+        console.log(`Processing meeting: ${formatTime(startTime)} - ${formatTime(endTime)} [${meeting.subject}]`);
+        
         // Mark all slots that overlap with this meeting as occupied
-        let currentSlot = new Date(date);
+        // Start with a clean date object to avoid timezone issues
+        let currentSlot = new Date(date.getFullYear(), date.getMonth(), date.getDate());
         currentSlot.setHours(startTime.getHours(), startTime.getMinutes(), 0, 0);
         
+        // Track occupied slots for debugging
+        const occupiedSlots = [];
+        
         while (currentSlot < endTime) {
-          occupied.add(formatTimeSlot(currentSlot));
+          const timeKey = formatTimeSlot(currentSlot);
+          occupied.add(timeKey);
+          occupiedSlots.push(formatTime(currentSlot));
+          
+          // Move to the next slot
           currentSlot = new Date(currentSlot.getTime() + slotDuration * 60000);
         }
+        
+        console.log(`Marked as occupied: ${occupiedSlots.join(', ')}`);
       });
       
       // Generate all slots based on business hours
-      let currentTime = new Date(date);
+      let currentTime = new Date(date.getFullYear(), date.getMonth(), date.getDate());
       currentTime.setHours(startHour, 0, 0, 0);
       
-      const endTime = new Date(date);
+      const endTime = new Date(date.getFullYear(), date.getMonth(), date.getDate());
       endTime.setHours(endHour, 0, 0, 0);
       
+      // Debug the occupied set
+      console.log('Occupied time slots:', Array.from(occupied));
+      
       while (currentTime < endTime) {
-        const timeString = formatTimeSlot(currentTime);
+        const timeKey = formatTimeSlot(currentTime);
+        const isOccupied = occupied.has(timeKey);
+        
         slots.push({
           time: formatTime(currentTime),
-          available: !occupied.has(timeString)
+          available: !isOccupied,
+          // Include key for debugging
+          key: timeKey
         });
         
         // Move to next slot
         currentTime = new Date(currentTime.getTime() + slotDuration * 60000);
       }
       
-      apiResponse(res, slots);
+      console.log(`Generated ${slots.length} time slots, ${slots.filter(s => !s.available).length} are occupied`);
+      
+      // Remove debugging fields before sending the response
+      const cleanedSlots = slots.map(slot => ({
+        time: slot.time,
+        available: slot.available
+      }));
+      
+      apiResponse(res, cleanedSlots);
     } catch (error) {
       console.error("Error getting available slots:", error);
       apiResponse(res, { error: "Failed to get available time slots" }, 500);
