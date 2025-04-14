@@ -116,6 +116,7 @@ export interface IStorage {
   getCallLog(id: number): Promise<CallLog | undefined>;
   getCallLogsByUserId(userId: number, limit?: number): Promise<CallLog[]>;
   createCallLog(log: InsertCallLog): Promise<CallLog>;
+  updateCallLog(id: number, log: Partial<InsertCallLog>): Promise<CallLog | undefined>;
 
   // Email Logs
   getEmailLog(id: number): Promise<EmailLog | undefined>;
@@ -906,6 +907,15 @@ export class MemStorage implements IStorage {
     const newLog: CallLog = { ...log, id };
     this.callLogs.set(id, newLog);
     return newLog;
+  }
+
+  async updateCallLog(id: number, log: Partial<InsertCallLog>): Promise<CallLog | undefined> {
+    const existingLog = this.callLogs.get(id);
+    if (!existingLog) return undefined;
+    
+    const updatedLog: CallLog = { ...existingLog, ...log };
+    this.callLogs.set(id, updatedLog);
+    return updatedLog;
   }
 
   // Email Logs
