@@ -1207,18 +1207,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create a map of all 24-hour time slots in the day (HH:MM format)
       const timeSlots = new Map();
       
-      // If there are meetings on this day, ensure we generate slots for the entire day
-      // This ensures we capture meetings outside normal business hours
+      // If there are meetings on this day, we need to make sure we handle
+      // the timezone difference between database UTC and display time
+      const timezoneOffsetHours = 5; // EST offset from UTC
+      
+      // Adjust start/end hours to account for possible meetings outside business hours
       let actualStartHour = startHour;
       let actualEndHour = endHour;
       
-      // If we have meetings, expand the time range to cover the entire day
+      // If we have meetings, expand the time range to cover all possible meeting times
       if (datesMeetings.length > 0) {
+        // Try to find the earliest and latest meeting times after timezone adjustment
+        let earliestMeetingHour = 24; // Start with max hour
+        let latestMeetingHour = 0;    // Start with min hour
+        
+        // Check all meetings to find time boundaries
+        datesMeetings.forEach(meeting => {
+          const startTime = new Date(meeting.start_time);
+          const endTime = new Date(meeting.end_time);
+          
+          // Convert UTC database times to local display times
+          const startLocalHour = startTime.getUTCHours() + timezoneOffsetHours;
+          const endLocalHour = endTime.getUTCHours() + timezoneOffsetHours;
+          
+          if (startLocalHour < earliestMeetingHour) earliestMeetingHour = startLocalHour;
+          if (endLocalHour > latestMeetingHour) latestMeetingHour = endLocalHour;
+          
+          console.log(`Meeting hours: UTC ${startTime.getUTCHours()}-${endTime.getUTCHours()} -> Local ${startLocalHour}-${endLocalHour}`);
+        });
+        
+        console.log(`Meeting hour range after timezone adjustment: ${earliestMeetingHour}-${latestMeetingHour}`);
+        
+        // Expand to cover the entire day to be safe
         actualStartHour = 0;  // Start from midnight
         actualEndHour = 24;   // End at midnight
       }
       
-      // Generate all time slots first with available=true
+      // Generate all time slots
       for (let hour = actualStartHour; hour < actualEndHour; hour++) {
         for (let minute = 0; minute < 60; minute += slotDuration) {
           const slotTime = new Date(normalizedDate);
@@ -1250,25 +1275,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`Meeting raw times - Start: ${startTime.toISOString()}, End: ${endTime.toISOString()}`);
         
         // Create full calendar date objects with the meeting times
-        // This ensures proper timezone handling for comparison
+        // Accounting for timezone differences between database UTC and local time display
         
-        // Check if meeting starts on the selected date
-        // If the meeting is from a different day, set start time to beginning of day
+        // The database times are in UTC, but the meetings appear to be displayed in EST/EDT
+        // We need to adjust by adding 5 hours (this is the timezone offset for EST)
+        const timezoneOffsetHours = 5; // EST offset from UTC
+        
+        // Construct meeting start time with timezone correction
         let meetingStartDateTime;
         if (startTime.toISOString().split('T')[0] === normalizedDate.toISOString().split('T')[0]) {
+          // Use the database UTC hours but add timezone offset to match display time
           meetingStartDateTime = new Date(normalizedDate);
-          meetingStartDateTime.setHours(startTime.getUTCHours(), startTime.getUTCMinutes(), 0, 0);
+          // Add timezone offset to convert from UTC to local time
+          const localHours = startTime.getUTCHours() + timezoneOffsetHours;
+          const localMinutes = startTime.getUTCMinutes();
+          
+          meetingStartDateTime.setHours(localHours, localMinutes, 0, 0);
+          console.log(`Adjusted meeting start time: UTC ${startTime.getUTCHours()}:${startTime.getUTCMinutes()} -> Local ${localHours}:${localMinutes}`);
         } else {
           meetingStartDateTime = new Date(normalizedDate);
           meetingStartDateTime.setHours(0, 0, 0, 0); // Beginning of the selected day
         }
         
-        // Check if meeting ends on the selected date
-        // If the meeting ends on a different day, set end time to end of day
+        // Construct meeting end time with timezone correction
         let meetingEndDateTime;
         if (endTime.toISOString().split('T')[0] === normalizedDate.toISOString().split('T')[0]) {
+          // Use the database UTC hours but add timezone offset to match display time
           meetingEndDateTime = new Date(normalizedDate);
-          meetingEndDateTime.setHours(endTime.getUTCHours(), endTime.getUTCMinutes(), 0, 0);
+          // Add timezone offset to convert from UTC to local time
+          const localHours = endTime.getUTCHours() + timezoneOffsetHours;
+          const localMinutes = endTime.getUTCMinutes();
+          
+          meetingEndDateTime.setHours(localHours, localMinutes, 0, 0);
+          console.log(`Adjusted meeting end time: UTC ${endTime.getUTCHours()}:${endTime.getUTCMinutes()} -> Local ${localHours}:${localMinutes}`);
         } else {
           meetingEndDateTime = new Date(normalizedDate);
           meetingEndDateTime.setHours(23, 59, 59, 999); // End of the selected day
