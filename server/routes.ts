@@ -63,7 +63,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.replit.dev`
     : (process.env.HOST_URL || 'http://localhost:5000');
   
-  const googleRedirectUri = `${hostUrl}/api/calendar/auth/callback`;
+  // The redirect URI must match exactly what's in the Google Cloud Console
+  // Based on the provided client_secret.json file
+  const googleRedirectUri = `${hostUrl}/api/calendar/auth`;
   
   console.log("Google OAuth Redirect URI:", googleRedirectUri);
   console.log("IMPORTANT: This exact URI must be registered in Google Cloud Console under 'Authorized redirect URIs'");
@@ -760,6 +762,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     next();
   });
   
+  // Simple redirect endpoint for the popup
+  app.get("/api/calendar/auth", async (req, res) => {
+    try {
+      const userId = req.query.userId ? parseInt(req.query.userId as string) : 1;
+      const config = await storage.getCalendarConfigByUserId(userId);
+      
+      if (!config || !config.googleClientId || !config.googleClientSecret) {
+        return res.redirect('/oauth-callback?error=missing_config');
+      }
+
+      // Forward any query parameters, including prompt=select_account
+      const queryParams = new URLSearchParams(req.url.split('?')[1] || '');
+      
+      // Add userId to keep track of which user is authenticating
+      if (!queryParams.has('userId')) {
+        queryParams.append('userId', userId.toString());
+      }
+      
+      // Redirect to the authorize endpoint with the original query parameters
+      res.redirect(`/api/calendar/auth/authorize?${queryParams.toString()}`);
+    } catch (error) {
+      console.error("Error redirecting to auth:", error);
+      res.redirect('/oauth-callback?error=redirect_error');
+    }
+  });
+
   // Google OAuth authorization endpoint
   app.get("/api/calendar/auth/authorize", async (req, res) => {
     try {
@@ -794,7 +822,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`Important: This exact URI must be registered in Google Cloud Console under "Authorized redirect URIs"`);
       
       const scope = encodeURIComponent('https://www.googleapis.com/auth/calendar');
-      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${config.googleClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}&access_type=offline&prompt=consent&state=${state}`;
+      
+      // Get prompt parameter from request, default to 'select_account' to force account selection
+      const prompt = req.query.prompt || 'select_account';
+      
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${config.googleClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}&access_type=offline&prompt=${prompt}&state=${state}`;
       
       // Log the authorization attempt
       await storage.createSystemActivity({

@@ -17,7 +17,8 @@ export function openGoogleAuthPopup(): Promise<void> {
     const top = window.screenY + (window.outerHeight - height) / 2;
     
     // OAuth endpoint URL - this will be handled by our server-side route
-    const url = '/api/calendar/auth';
+    // Add prompt=select_account to force Google account selection
+    const url = '/api/calendar/auth?prompt=select_account';
     
     // Open the popup window
     const popup = window.open(
