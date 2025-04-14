@@ -22,6 +22,95 @@ function apiResponse(res: Response, data: any, status = 200) {
   return res.status(status).json(data);
 }
 
+// Handle Google OAuth callback with authorization code
+async function handleGoogleOAuthCallback(req: Request, res: Response) {
+  const { code, state, error } = req.query;
+  
+  // Check for OAuth errors
+  if (error) {
+    console.error("Google OAuth error:", error);
+    return res.redirect(`/oauth-callback?error=${error}`);
+  }
+  
+  // Validate state parameter to prevent CSRF
+  if (!state || !global.oauthStateStore || !global.oauthStateStore[state as string]) {
+    console.error("Invalid OAuth state parameter");
+    return res.redirect('/oauth-callback?error=invalid_state');
+  }
+  
+  // Extract user ID from state
+  const { userId } = global.oauthStateStore[state as string];
+  
+  // Clean up the state store
+  delete global.oauthStateStore[state as string];
+  
+  try {
+    // Get the calendar config for this user
+    const config = await storage.getCalendarConfigByUserId(userId);
+    
+    if (!config || !config.googleClientId || !config.googleClientSecret) {
+      console.error("Missing Google Calendar configuration");
+      return res.redirect('/oauth-callback?error=missing_config');
+    }
+    
+    // Exchange the authorization code for tokens
+    const redirectUri = googleRedirectUri;
+    const tokenUrl = 'https://oauth2.googleapis.com/token';
+    
+    // Make a request to Google's token endpoint
+    const response = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        code: code as string,
+        client_id: config.googleClientId,
+        client_secret: config.googleClientSecret,
+        redirect_uri: redirectUri,
+        grant_type: 'authorization_code'
+      })
+    });
+    
+    const tokenData = await response.json();
+    
+    if (!response.ok || tokenData.error) {
+      console.error("Error exchanging code for tokens:", tokenData.error || "Unknown error");
+      
+      await storage.createSystemActivity({
+        module: "Calendar",
+        event: "OAuthTokenError",
+        status: "error",
+        timestamp: new Date(),
+        details: { userId, error: tokenData.error || "Unknown token error" }
+      });
+      
+      return res.redirect('/oauth-callback?error=token_exchange_failed');
+    }
+    
+    // Save the refresh token to the user's config
+    await storage.updateCalendarConfig(config.id, {
+      googleRefreshToken: tokenData.refresh_token || config.googleRefreshToken,
+      isActive: true
+    });
+    
+    // Log the successful authorization
+    await storage.createSystemActivity({
+      module: "Calendar",
+      event: "OAuthAuthorizeSuccess",
+      status: "success",
+      timestamp: new Date(),
+      details: { userId }
+    });
+    
+    // Redirect to the OAuth callback page with success message
+    return res.redirect('/oauth-callback?connected=true');
+  } catch (error) {
+    console.error("Error handling OAuth callback:", error);
+    return res.redirect('/oauth-callback?error=callback_error');
+  }
+}
+
 // Format a date to a time string (e.g., "9:00 AM")
 function formatTime(date: Date): string {
   let hours = date.getHours();
@@ -763,44 +852,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     next();
   });
   
-  // Simple redirect endpoint for the popup
+  // Google OAuth authorization endpoint - must match exactly with redirect_uri in client_secret.json
   app.get("/api/calendar/auth", async (req, res) => {
     try {
-      const userId = req.query.userId ? parseInt(req.query.userId as string) : 1;
-      const config = await storage.getCalendarConfigByUserId(userId);
+      // Check if this is the initial authorization request or the callback with code
+      const code = req.query.code;
       
-      if (!config || !config.googleClientId || !config.googleClientSecret) {
-        return res.redirect('/oauth-callback?error=missing_config');
-      }
-
-      // Forward any query parameters, including prompt=select_account
-      const queryParams = new URLSearchParams(req.url.split('?')[1] || '');
-      
-      // Add userId to keep track of which user is authenticating
-      if (!queryParams.has('userId')) {
-        queryParams.append('userId', userId.toString());
+      if (code) {
+        // This is the callback from Google with the authorization code
+        return handleGoogleOAuthCallback(req, res);
       }
       
-      // Redirect to the authorize endpoint with the original query parameters
-      res.redirect(`/api/calendar/auth/authorize?${queryParams.toString()}`);
-    } catch (error) {
-      console.error("Error redirecting to auth:", error);
-      res.redirect('/oauth-callback?error=redirect_error');
-    }
-  });
-
-  // Google OAuth authorization endpoint
-  app.get("/api/calendar/auth/authorize", async (req, res) => {
-    try {
+      // This is the initial authorization request
       const userId = req.query.userId ? parseInt(req.query.userId as string) : 1;
       
       // Get existing config to check client ID and secret
       const config = await storage.getCalendarConfigByUserId(userId);
       
       if (!config || !config.googleClientId || !config.googleClientSecret) {
-        return apiResponse(res, {
-          error: "Google Calendar configuration missing. Please set your Google Client ID and Secret first."
-        }, 400);
+        return res.redirect('/oauth-callback?error=missing_config');
       }
       
       // Generate a state parameter to prevent CSRF
@@ -846,95 +916,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Google OAuth callback endpoint
-  app.get("/api/calendar/auth/callback", async (req, res) => {
-    try {
-      const { code, state, error } = req.query;
-      
-      // Check for OAuth errors
-      if (error) {
-        console.error("Google OAuth error:", error);
-        return res.redirect(`/oauth-callback?error=${error}`);
-      }
-      
-      // Validate state parameter to prevent CSRF
-      if (!state || !global.oauthStateStore || !global.oauthStateStore[state as string]) {
-        console.error("Invalid OAuth state parameter");
-        return res.redirect('/oauth-callback?error=invalid_state');
-      }
-      
-      // Extract user ID from state
-      const { userId } = global.oauthStateStore[state as string];
-      
-      // Clean up the state store
-      delete global.oauthStateStore[state as string];
-      
-      // Get the calendar config for this user
-      const config = await storage.getCalendarConfigByUserId(userId);
-      
-      if (!config || !config.googleClientId || !config.googleClientSecret) {
-        console.error("Missing Google Calendar configuration");
-        return res.redirect('/oauth-callback?error=missing_config');
-      }
-      
-      // Exchange the authorization code for tokens
-      // Use the googleRedirectUri variable defined at the top of the file
-      const redirectUri = googleRedirectUri;
-      const tokenUrl = 'https://oauth2.googleapis.com/token';
-      
-      // Make a request to Google's token endpoint
-      const response = await fetch(tokenUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          code: code as string,
-          client_id: config.googleClientId,
-          client_secret: config.googleClientSecret,
-          redirect_uri: redirectUri,
-          grant_type: 'authorization_code'
-        })
-      });
-      
-      const tokenData = await response.json();
-      
-      if (!response.ok || tokenData.error) {
-        console.error("Error exchanging code for tokens:", tokenData.error || "Unknown error");
-        
-        await storage.createSystemActivity({
-          module: "Calendar",
-          event: "OAuthTokenError",
-          status: "error",
-          timestamp: new Date(),
-          details: { userId, error: tokenData.error || "Unknown token error" }
-        });
-        
-        return res.redirect('/oauth-callback?error=token_exchange_failed');
-      }
-      
-      // Save the refresh token to the user's config
-      const updatedConfig = await storage.updateCalendarConfig(config.id, {
-        googleRefreshToken: tokenData.refresh_token || config.googleRefreshToken,
-        isActive: true
-      });
-      
-      // Log the successful authorization
-      await storage.createSystemActivity({
-        module: "Calendar",
-        event: "OAuthAuthorizeSuccess",
-        status: "success",
-        timestamp: new Date(),
-        details: { userId }
-      });
-      
-      // Redirect to the OAuth callback page with success message
-      res.redirect('/oauth-callback?connected=true');
-    } catch (error) {
-      console.error("Error handling OAuth callback:", error);
-      res.redirect('/oauth-callback?error=callback_error');
-    }
-  });
+  // No longer need this endpoint as we now handle both authorization and callback
+  // in a single endpoint at /api/calendar/auth
 
   app.get("/api/calendar/config", async (req, res) => {
     try {
