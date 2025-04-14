@@ -22,7 +22,8 @@ import {
   whatsappLogs, WhatsappLog, InsertWhatsappLog,
   meetingLogs, MeetingLog, InsertMeetingLog,
   moduleStatus, ModuleStatus, InsertModuleStatus,
-  systemActivity, SystemActivity, InsertSystemActivity
+  systemActivity, SystemActivity, InsertSystemActivity,
+  voiceSettings, VoiceSettings, InsertVoiceSettings
 } from "@shared/schema";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
@@ -509,5 +510,35 @@ export class DatabaseStorage implements IStorage {
   async createSystemActivity(activity: InsertSystemActivity): Promise<SystemActivity> {
     const result = await db.insert(systemActivity).values(activity).returning();
     return result[0];
+  }
+
+  // Voice Settings
+  async getVoiceSettings(id: number): Promise<VoiceSettings | undefined> {
+    const result = await db.select().from(voiceSettings).where(eq(voiceSettings.id, id));
+    return result[0];
+  }
+
+  async getVoiceSettingsByVoiceId(voiceId: string): Promise<VoiceSettings | undefined> {
+    const result = await db.select().from(voiceSettings).where(eq(voiceSettings.voiceId, voiceId));
+    return result[0];
+  }
+
+  async getVoiceSettingsByUserId(userId: number): Promise<VoiceSettings[]> {
+    return await db.select().from(voiceSettings).where(eq(voiceSettings.userId, userId));
+  }
+
+  async createVoiceSettings(settings: InsertVoiceSettings): Promise<VoiceSettings> {
+    const result = await db.insert(voiceSettings).values(settings).returning();
+    return result[0];
+  }
+
+  async updateVoiceSettings(id: number, settings: Partial<InsertVoiceSettings>): Promise<VoiceSettings | undefined> {
+    const result = await db.update(voiceSettings).set(settings).where(eq(voiceSettings.id, id)).returning();
+    return result[0];
+  }
+
+  async deleteVoiceSettings(id: number): Promise<boolean> {
+    await db.delete(voiceSettings).where(eq(voiceSettings.id, id));
+    return true;
   }
 }

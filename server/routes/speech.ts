@@ -5,7 +5,7 @@ import multer from "multer";
 import path from "path";
 import { speechToText, speechToTextFromUrl } from "../lib/whisper";
 import { textToSpeech, AVAILABLE_VOICES } from "../lib/elevenlabs";
-import { User } from "@shared/schema";
+import { User, insertVoiceSettingsSchema, VoiceSettings } from "@shared/schema";
 import { randomUUID } from "crypto";
 import * as fs from "fs";
 
