@@ -131,6 +131,12 @@ function formatTime(date: Date): string {
 
 // Format a date to a time slot string for comparison (e.g., "09:00")
 function formatTimeSlot(date: Date): string {
+  // Ensure we're working with a valid date
+  if (!(date instanceof Date) || isNaN(date.getTime())) {
+    console.error("Invalid date passed to formatTimeSlot:", date);
+    return "";
+  }
+  
   const hours = date.getHours().toString().padStart(2, '0');
   const minutes = date.getMinutes().toString().padStart(2, '0');
   return `${hours}:${minutes}`;
