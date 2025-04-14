@@ -322,8 +322,9 @@ async function fallbackTextToSpeech(
     // Write to file system
     await writeFileAsync(filepath, validMinimalMp3);
     
-    // Return a URL that points to this file
-    const fallbackUrl = `/audio/fallback/${filename}`;
+    // Return a URL that points to our API endpoint
+    const audioId = `fallback_${safeText}_${timestamp}`;
+    const fallbackUrl = `/api/audio/${audioId}`;
     
     await storage.createSystemActivity({
       module: "Speech Engines",
@@ -403,8 +404,8 @@ export async function textToSpeech(
       // Generate a unique ID for this audio
       const audioId = `${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
       
-      // Create a URL path for the audio file (use API endpoint instead of static file)
-      const audioUrl = `/api/speech/audio/${audioId}`;
+      // Create a URL path for the audio file (use direct API endpoint)
+      const audioUrl = `/api/audio/${audioId}`;
       
       try {
         // Generate audio using the ElevenLabs API

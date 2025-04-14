@@ -54,7 +54,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     fs.mkdirSync(fallbackDir, { recursive: true });
   }
   
-  // Serve audio files without authentication
+  // Direct audio serving endpoint
+  app.get('/api/audio/:audioId', (req, res) => {
+    const { audioId } = req.params;
+    
+    if (!audioId) {
+      return res.status(400).json({ success: false, error: 'Audio ID required' });
+    }
+    
+    // Check for any file extension like .mp3 and remove it
+    const baseAudioId = audioId.replace(/\.[^/.]+$/, "");
+    
+    // Try different audio paths
+    const possiblePaths = [
+      path.join(ttsDir, `${baseAudioId}.mp3`),
+      path.join(fallbackDir, `${baseAudioId}.mp3`),
+      path.join(audioDir, `${baseAudioId}.mp3`)
+    ];
+    
+    // Find the first valid path
+    let filepath = null;
+    for (const possiblePath of possiblePaths) {
+      if (fs.existsSync(possiblePath)) {
+        filepath = possiblePath;
+        break;
+      }
+    }
+    
+    if (filepath) {
+      console.log(`Serving audio file from direct API endpoint: ${filepath}`);
+      
+      // Set proper headers for audio streaming
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.setHeader('Content-Disposition', `inline; filename="${baseAudioId}.mp3"`);
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
+      
+      // Stream the file
+      fs.createReadStream(filepath).pipe(res);
+    } else {
+      console.error(`Audio file not found: ${baseAudioId}`);
+      res.status(404).json({ 
+        success: false, 
+        error: 'Audio file not found',
+        audioId: baseAudioId
+      });
+    }
+  });
+  
+  // Serve audio files without authentication (as fallback)
   app.use('/audio', express.static(audioDir));
   
   // Apply authentication middleware to all other routes
