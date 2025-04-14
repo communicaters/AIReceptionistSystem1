@@ -176,10 +176,10 @@ export function initElevenLabs() {
       // Use default voices from our collection if none specified
       // Maps to actual ElevenLabs voice IDs
       const voiceMap: Record<string, string> = {
-        "emma": "EXAVITQu4vr4xnSDxMaL",    // Nicole voice
-        "michael": "g9S4m9E1veCUU0PpgKIE", // Sam voice  
-        "olivia": "pNInz6obpgDQGcFmaJgB",  // Grace voice
-        "james": "pqHfZKP75CvOlQylNhV4"    // Daniel voice
+        "emma": "EXAVITQu4vr4xnSDxMaL",     // Female voice
+        "michael": "ErXwobaYiN019PkySvjV",  // Male voice (Adam)
+        "olivia": "pNInz6obpgDQGcFmaJgB",   // Female voice
+        "james": "TxGEqnHWrfWFTfGW9XjX"     // Male voice (Josh)
       };
       
       // Get the actual ElevenLabs voice ID
