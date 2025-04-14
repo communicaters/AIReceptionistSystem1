@@ -1,249 +1,223 @@
+import { google } from 'googleapis';
 import { storage } from '../storage';
 
-// This would normally use the Google API client library
-// For demo purposes, we'll use a mock implementation
+// Google Calendar API setup
+const calendar = google.calendar('v3');
 
-// Initialize Google Calendar API
+// Initialize the Google Calendar API
 export function initGoogleCalendar() {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-  
-  if (!clientId || !clientSecret) {
-    console.warn("Google Calendar API credentials not available. Calendar functionality will be limited.");
-    return null;
-  }
-  
-  console.log("Google Calendar API initialized");
-  return { clientId, clientSecret };
+  console.log('Google Calendar API initialized');
 }
 
-// Check if a time slot is available
-export async function checkAvailability(
-  startTime: Date,
-  endTime: Date,
-  calendarId?: string
-): Promise<boolean> {
+// Create a new OAuth2 client with the given credentials
+export function createOAuth2Client(clientId: string, clientSecret: string) {
+  const redirectUri = `${process.env.HOST_URL || 'http://localhost:5000'}/api/calendar/auth/callback`;
+  return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+}
+
+// Get a new access token using the refresh token
+export async function getAccessToken(userId: number) {
   try {
-    // Get calendar configuration
-    const userId = 1; // For demo purposes
-    const calendarConfig = await storage.getCalendarConfigByUserId(userId);
+    // Get user's calendar config
+    const config = await storage.getCalendarConfigByUserId(userId);
     
-    if (!calendarConfig) {
-      throw new Error("Calendar configuration not found");
+    if (!config || !config.googleClientId || !config.googleClientSecret || !config.googleRefreshToken) {
+      throw new Error('Google Calendar not properly configured');
     }
     
-    // Use provided calendar ID or default from config
-    const targetCalendarId = calendarId || calendarConfig.googleCalendarId;
+    // Create OAuth client
+    const oauth2Client = createOAuth2Client(config.googleClientId, config.googleClientSecret);
     
-    // In a real implementation, you would:
-    // 1. Get an access token using the refresh token
-    // 2. Call Google Calendar API to check for existing events
+    // Set refresh token
+    oauth2Client.setCredentials({
+      refresh_token: config.googleRefreshToken
+    });
     
-    // For demo, simulate availability check with 80% chance of availability
-    const isAvailable = Math.random() < 0.8;
+    // Request new access token
+    const { token } = await oauth2Client.getAccessToken();
     
-    console.log(`Checked availability for ${startTime.toISOString()} - ${endTime.toISOString()}: ${isAvailable ? 'Available' : 'Not available'}`);
+    if (!token) {
+      throw new Error('Failed to get access token');
+    }
     
-    return isAvailable;
+    return { 
+      token,
+      oauth2Client
+    };
   } catch (error) {
-    console.error("Error checking calendar availability:", error);
+    console.error('Error getting Google access token:', error);
     throw error;
   }
 }
 
-// Schedule a meeting
-export async function scheduleMeeting(
-  meeting: {
-    subject: string;
+// List calendar events
+export async function listEvents(userId: number, timeMin: Date, timeMax: Date) {
+  try {
+    const { oauth2Client } = await getAccessToken(userId);
+    
+    const response = await calendar.events.list({
+      auth: oauth2Client,
+      calendarId: 'primary',
+      timeMin: timeMin.toISOString(),
+      timeMax: timeMax.toISOString(),
+      singleEvents: true,
+      orderBy: 'startTime',
+    });
+    
+    return response.data.items;
+  } catch (error) {
+    console.error('Error listing calendar events:', error);
+    throw error;
+  }
+}
+
+// Create a calendar event
+export async function createEvent(
+  userId: number, 
+  event: {
+    summary: string;
     description?: string;
-    startTime: Date;
-    endTime: Date;
-    attendees: string[];
+    start: { dateTime: string };
+    end: { dateTime: string };
+    attendees?: { email: string }[];
   }
-): Promise<{ success: boolean; eventId?: string }> {
+) {
   try {
-    // Get calendar configuration
-    const userId = 1; // For demo purposes
-    const calendarConfig = await storage.getCalendarConfigByUserId(userId);
+    const { oauth2Client } = await getAccessToken(userId);
     
-    if (!calendarConfig) {
-      throw new Error("Calendar configuration not found");
-    }
+    // Get user's calendar config to determine which calendar to use
+    const config = await storage.getCalendarConfigByUserId(userId);
+    const calendarId = config?.googleCalendarId || 'primary';
     
-    // Check if the time slot is available
-    const isAvailable = await checkAvailability(meeting.startTime, meeting.endTime);
-    
-    if (!isAvailable) {
-      return { success: false };
-    }
-    
-    // In a real implementation, you would:
-    // 1. Get an access token using the refresh token
-    // 2. Call Google Calendar API to create an event
-    
-    // For demo, generate a fake event ID
-    const eventId = `event_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-    
-    // Log the meeting
-    const meetingLog = await storage.createMeetingLog({
-      userId,
-      subject: meeting.subject,
-      description: meeting.description,
-      startTime: meeting.startTime,
-      endTime: meeting.endTime,
-      attendees: meeting.attendees,
-      googleEventId: eventId,
-      status: "scheduled",
+    const response = await calendar.events.insert({
+      auth: oauth2Client,
+      calendarId,
+      requestBody: event,
+      sendUpdates: 'all', // Send email updates to attendees
     });
     
-    // Create system activity record
-    await storage.createSystemActivity({
-      module: "Calendar",
-      event: "Meeting Scheduled",
-      status: "Completed",
-      timestamp: new Date(),
-      details: {
-        subject: meeting.subject,
-        startTime: meeting.startTime.toISOString(),
-        attendees: meeting.attendees,
-      }
-    });
-    
-    console.log(`Scheduled meeting: ${meeting.subject} at ${meeting.startTime.toISOString()}`);
-    
-    return { success: true, eventId };
+    return response.data;
   } catch (error) {
-    console.error("Error scheduling meeting:", error);
-    
-    // Create system activity record for failure
-    await storage.createSystemActivity({
-      module: "Calendar",
-      event: "Meeting Scheduling Failed",
-      status: "Error",
-      timestamp: new Date(),
-      details: {
-        subject: meeting.subject,
-        error: (error as Error).message,
-      }
-    });
-    
-    return { success: false };
+    console.error('Error creating calendar event:', error);
+    throw error;
   }
 }
 
-// Cancel a meeting
-export async function cancelMeeting(
-  eventId: string
-): Promise<boolean> {
+// Get free/busy info for a specific day
+export async function getFreebusy(
+  userId: number,
+  timeMin: Date,
+  timeMax: Date
+) {
   try {
-    // Find the meeting log with this event ID
-    // In a real app, you would have a more efficient way to look this up
-    const userId = 1; // For demo purposes
-    const meetingLogs = await storage.getMeetingLogsByUserId(userId);
-    const meetingLog = meetingLogs.find(log => log.googleEventId === eventId);
+    const { oauth2Client } = await getAccessToken(userId);
     
-    if (!meetingLog) {
-      throw new Error("Meeting not found");
-    }
+    // Get user's calendar config
+    const config = await storage.getCalendarConfigByUserId(userId);
+    const calendarId = config?.googleCalendarId || 'primary';
     
-    // In a real implementation, you would:
-    // 1. Get an access token using the refresh token
-    // 2. Call Google Calendar API to delete or update the event
-    
-    // Update the meeting status
-    await storage.updateMeetingLog(meetingLog.id, {
-      status: "cancelled",
+    const response = await calendar.freebusy.query({
+      auth: oauth2Client,
+      requestBody: {
+        timeMin: timeMin.toISOString(),
+        timeMax: timeMax.toISOString(),
+        items: [{ id: calendarId }],
+      },
     });
     
-    // Create system activity record
-    await storage.createSystemActivity({
-      module: "Calendar",
-      event: "Meeting Cancelled",
-      status: "Completed",
-      timestamp: new Date(),
-      details: {
-        subject: meetingLog.subject,
-        eventId,
-      }
-    });
-    
-    console.log(`Cancelled meeting: ${meetingLog.subject} (${eventId})`);
-    
-    return true;
+    return response.data.calendars?.[calendarId]?.busy || [];
   } catch (error) {
-    console.error("Error cancelling meeting:", error);
-    
-    // Create system activity record for failure
-    await storage.createSystemActivity({
-      module: "Calendar",
-      event: "Meeting Cancellation Failed",
-      status: "Error",
-      timestamp: new Date(),
-      details: {
-        eventId,
-        error: (error as Error).message,
-      }
-    });
-    
-    return false;
+    console.error('Error getting freebusy data:', error);
+    throw error;
   }
 }
 
-// Get available time slots
+// Generate available time slots based on calendar busy periods
 export async function getAvailableTimeSlots(
+  userId: number,
   date: Date,
-  durationMinutes: number = 30
-): Promise<{ start: Date; end: Date }[]> {
+  slotDuration: number = 30
+) {
   try {
-    // Get calendar configuration
-    const userId = 1; // For demo purposes
-    const calendarConfig = await storage.getCalendarConfigByUserId(userId);
+    // Start with beginning of the selected day
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
     
-    if (!calendarConfig) {
-      throw new Error("Calendar configuration not found");
+    // End with end of the selected day
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+    
+    // Get user's calendar config
+    const config = await storage.getCalendarConfigByUserId(userId);
+    
+    if (!config) {
+      throw new Error('Calendar configuration not found');
     }
     
-    // Parse availability hours from configuration
-    const startHour = parseInt(calendarConfig.availabilityStartTime.split(':')[0]);
-    const startMinute = parseInt(calendarConfig.availabilityStartTime.split(':')[1]);
-    const endHour = parseInt(calendarConfig.availabilityEndTime.split(':')[0]);
-    const endMinute = parseInt(calendarConfig.availabilityEndTime.split(':')[1]);
+    // Extract business hours
+    const startHour = parseInt(config.availabilityStartTime.split(':')[0]);
+    const startMinute = parseInt(config.availabilityStartTime.split(':')[1]);
+    const endHour = parseInt(config.availabilityEndTime.split(':')[0]);
+    const endMinute = parseInt(config.availabilityEndTime.split(':')[1]);
     
-    // Create time slots
-    const slots: { start: Date; end: Date }[] = [];
-    const slotDuration = durationMinutes || calendarConfig.slotDuration;
+    // Set business hours start and end
+    const businessStart = new Date(date);
+    businessStart.setHours(startHour, startMinute, 0, 0);
     
-    // Set the start and end times for the specified date
-    const startTime = new Date(date);
-    startTime.setHours(startHour, startMinute, 0, 0);
+    const businessEnd = new Date(date);
+    businessEnd.setHours(endHour, endMinute, 0, 0);
     
-    const endTime = new Date(date);
-    endTime.setHours(endHour, endMinute, 0, 0);
+    // Get busy slots from Google Calendar
+    const busySlots = await getFreebusy(userId, businessStart, businessEnd);
     
-    // Generate time slots
-    let currentSlotStart = new Date(startTime);
-    
-    while (currentSlotStart < endTime) {
-      const currentSlotEnd = new Date(currentSlotStart);
-      currentSlotEnd.setMinutes(currentSlotStart.getMinutes() + slotDuration);
+    // Create map of busy times
+    const busyTimes = new Map();
+    busySlots.forEach(slot => {
+      const start = new Date(slot.start as string);
+      const end = new Date(slot.end as string);
       
-      if (currentSlotEnd <= endTime) {
-        // In a real implementation, you would check against existing events
-        // For demo, add 80% of slots as available
-        if (Math.random() < 0.8) {
-          slots.push({
-            start: new Date(currentSlotStart),
-            end: new Date(currentSlotEnd),
-          });
+      // Convert to minutes since start of day for easier comparison
+      const startMinutes = start.getHours() * 60 + start.getMinutes();
+      const endMinutes = end.getHours() * 60 + end.getMinutes();
+      
+      // Mark all minutes in the busy slot
+      for (let minute = startMinutes; minute < endMinutes; minute++) {
+        busyTimes.set(minute, true);
+      }
+    });
+    
+    // Generate available slots
+    const availableSlots = [];
+    const businessStartMinutes = startHour * 60 + startMinute;
+    const businessEndMinutes = endHour * 60 + endMinute;
+    
+    for (let minute = businessStartMinutes; minute < businessEndMinutes; minute += slotDuration) {
+      // Check if the entire slot is available
+      let isAvailable = true;
+      for (let i = 0; i < slotDuration; i++) {
+        if (busyTimes.has(minute + i)) {
+          isAvailable = false;
+          break;
         }
       }
       
-      currentSlotStart = currentSlotEnd;
+      // Format time for display
+      const hours = Math.floor(minute / 60);
+      const mins = minute % 60;
+      const period = hours >= 12 ? 'PM' : 'AM';
+      const formattedHours = hours % 12 || 12;
+      const formattedMinutes = mins.toString().padStart(2, '0');
+      
+      availableSlots.push({
+        time: `${formattedHours}:${formattedMinutes} ${period}`,
+        available: isAvailable
+      });
     }
     
-    return slots;
+    return availableSlots;
   } catch (error) {
-    console.error("Error getting available time slots:", error);
+    console.error('Error generating available time slots:', error);
+    // Return empty array in case of error
     return [];
   }
 }

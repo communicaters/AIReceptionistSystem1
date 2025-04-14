@@ -60,6 +60,7 @@ type CalendarConfigForm = {
   availabilityEndTime: string;
   slotDuration: number;
   isActive: boolean;
+  googleRefreshToken: string | null;
 };
 
 type NewMeetingForm = {
@@ -85,7 +86,8 @@ const Calendar = () => {
     availabilityStartTime: "09:00",
     availabilityEndTime: "17:00",
     slotDuration: 30,
-    isActive: true
+    isActive: true,
+    googleRefreshToken: null
   });
 
   // New meeting form state
@@ -198,10 +200,60 @@ const Calendar = () => {
         availabilityStartTime: calendarConfig.availabilityStartTime,
         availabilityEndTime: calendarConfig.availabilityEndTime,
         slotDuration: calendarConfig.slotDuration,
-        isActive: calendarConfig.isActive
+        isActive: calendarConfig.isActive,
+        googleRefreshToken: calendarConfig.googleRefreshToken
       });
     }
   }, [calendarConfig]);
+  
+  // Handle query parameters for OAuth flow notifications
+  useEffect(() => {
+    // Check for OAuth success/error parameters
+    const params = new URLSearchParams(window.location.search);
+    const connected = params.get('connected');
+    const error = params.get('error');
+    
+    if (connected === 'true') {
+      toast({
+        title: "Google Calendar Connected",
+        description: "Your Google Calendar account has been successfully connected.",
+      });
+      
+      // Refresh calendar config to get the updated refresh token
+      queryClient.invalidateQueries({ queryKey: ["/api/calendar/config"] });
+      
+      // Clean up the URL
+      window.history.replaceState({}, '', '/calendar');
+    } else if (error) {
+      let errorMessage = "An error occurred during Google Calendar connection";
+      
+      switch (error) {
+        case 'invalid_state':
+          errorMessage = "Security validation failed. Please try again.";
+          break;
+        case 'missing_config':
+          errorMessage = "Calendar configuration is missing. Please save your credentials first.";
+          break;
+        case 'token_exchange_failed':
+          errorMessage = "Failed to exchange authorization code for tokens.";
+          break;
+        case 'callback_error':
+          errorMessage = "Error occurred during authentication callback.";
+          break;
+        default:
+          errorMessage = `Google Calendar error: ${error}`;
+      }
+      
+      toast({
+        title: "Connection Failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
+      
+      // Clean up the URL
+      window.history.replaceState({}, '', '/calendar');
+    }
+  }, [toast, queryClient]);
 
   // Handle calendar config form changes
   const handleConfigChange = (field: keyof CalendarConfigForm, value: string | boolean | number) => {
@@ -355,6 +407,9 @@ const Calendar = () => {
                       value={configForm.googleClientId}
                       onChange={(e) => handleConfigChange('googleClientId', e.target.value)}
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Get this from the <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Google Cloud Console</a>
+                    </p>
                   </div>
 
                   <div className="space-y-2">
@@ -367,6 +422,71 @@ const Calendar = () => {
                       onChange={(e) => handleConfigChange('googleClientSecret', e.target.value)}
                     />
                   </div>
+                  
+                  {/* Google Account Connection Status */}
+                  {configForm.googleRefreshToken ? (
+                    <div className="rounded-md bg-green-50 p-4 my-4">
+                      <div className="flex">
+                        <div className="flex-shrink-0">
+                          <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                        <div className="ml-3">
+                          <h3 className="text-sm font-medium text-green-800">Google Account Connected</h3>
+                          <div className="mt-2 text-sm text-green-700">
+                            <p>Your Google Calendar account is connected and ready to use.</p>
+                          </div>
+                          <div className="mt-4">
+                            <div className="-mx-2 -my-1.5 flex">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  // Clear refresh token
+                                  setConfigForm(prev => ({
+                                    ...prev,
+                                    googleRefreshToken: null,
+                                    isActive: false
+                                  }));
+                                }}
+                                className="rounded-md bg-green-50 px-2 py-1.5 text-sm font-medium text-green-800 hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-600 focus:ring-offset-2 focus:ring-offset-green-50"
+                              >
+                                Disconnect Account
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-md bg-blue-50 p-4 my-4">
+                      <div className="flex">
+                        <div className="flex-shrink-0">
+                          <svg className="h-5 w-5 text-blue-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                        <div className="ml-3">
+                          <h3 className="text-sm font-medium text-blue-800">Google Account Not Connected</h3>
+                          <div className="mt-2 text-sm text-blue-700">
+                            <p>Save your Google Client ID and Secret, then connect your Google Calendar account to enable scheduling.</p>
+                          </div>
+                          <div className="mt-4">
+                            <div className="-mx-2 -my-1.5 flex">
+                              <button
+                                type="button"
+                                onClick={() => window.open("/api/calendar/auth/authorize", "_blank")}
+                                disabled={!configForm.googleClientId || !configForm.googleClientSecret || saveConfigMutation.isPending}
+                                className="rounded-md bg-blue-50 px-2 py-1.5 text-sm font-medium text-blue-800 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 focus:ring-offset-blue-50 disabled:opacity-50"
+                              >
+                                Connect Google Account
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="space-y-2">
                     <Label htmlFor="calendar-id">Calendar ID</Label>
@@ -376,6 +496,9 @@ const Calendar = () => {
                       value={configForm.googleCalendarId || "primary"}
                       onChange={(e) => handleConfigChange('googleCalendarId', e.target.value || "primary")}
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Use "primary" for your main calendar or enter a specific calendar ID
+                    </p>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
