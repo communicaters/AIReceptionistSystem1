@@ -365,3 +365,165 @@ speechRouter.post("/stt/url", withAuth(async (req, res, user) => {
     res.status(400).json({ success: false, error: error.message });
   }
 }));
+
+// Voice Settings Management
+
+// Get voice settings for the current user
+speechRouter.get("/voice-settings", withAuth(async (req, res, user) => {
+  try {
+    const settings = await storage.getVoiceSettingsByUserId(user.id);
+    
+    if (settings && settings.length > 0) {
+      res.json({ success: true, settings });
+    } else {
+      res.json({ success: true, settings: [] });
+    }
+  } catch (error: any) {
+    console.error("Error fetching voice settings:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+}));
+
+// Get a specific voice setting by ID
+speechRouter.get("/voice-settings/:id", withAuth(async (req, res, user) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ success: false, error: "Invalid voice setting ID" });
+    }
+    
+    const setting = await storage.getVoiceSettings(id);
+    
+    if (!setting) {
+      return res.status(404).json({ success: false, error: "Voice setting not found" });
+    }
+    
+    // Check if the setting belongs to the user
+    if (setting.userId !== user.id) {
+      return res.status(403).json({ success: false, error: "Unauthorized access to voice setting" });
+    }
+    
+    res.json({ success: true, setting });
+  } catch (error: any) {
+    console.error("Error fetching voice setting:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+}));
+
+// Create a new voice setting
+speechRouter.post("/voice-settings", withAuth(async (req, res, user) => {
+  try {
+    // Validate the input
+    const validatedData = insertVoiceSettingsSchema.parse({
+      ...req.body,
+      userId: user.id // Force the user ID to be the current user's ID
+    });
+    
+    // Create the voice setting
+    const setting = await storage.createVoiceSettings(validatedData);
+    
+    // Create system activity log
+    await storage.createSystemActivity({
+      module: "Speech Engines",
+      event: "Voice Setting Created",
+      status: "Completed",
+      timestamp: new Date(),
+      details: {
+        voiceId: setting.voiceId,
+        displayName: setting.displayName
+      }
+    });
+    
+    res.status(201).json({ success: true, setting });
+  } catch (error: any) {
+    console.error("Error creating voice setting:", error);
+    res.status(400).json({ success: false, error: error.message });
+  }
+}));
+
+// Update a voice setting
+speechRouter.put("/voice-settings/:id", withAuth(async (req, res, user) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ success: false, error: "Invalid voice setting ID" });
+    }
+    
+    // Check if the setting exists and belongs to the user
+    const existingSetting = await storage.getVoiceSettings(id);
+    
+    if (!existingSetting) {
+      return res.status(404).json({ success: false, error: "Voice setting not found" });
+    }
+    
+    if (existingSetting.userId !== user.id) {
+      return res.status(403).json({ success: false, error: "Unauthorized access to voice setting" });
+    }
+    
+    // Never allow changing the user ID
+    const { userId, ...updateData } = req.body;
+    
+    // Update the setting
+    const updatedSetting = await storage.updateVoiceSettings(id, updateData);
+    
+    // Create system activity log
+    if (updatedSetting) {
+      await storage.createSystemActivity({
+        module: "Speech Engines",
+        event: "Voice Setting Updated",
+        status: "Completed",
+        timestamp: new Date(),
+        details: {
+          voiceId: updatedSetting.voiceId,
+          displayName: updatedSetting.displayName
+        }
+      });
+    }
+    
+    res.json({ success: true, setting: updatedSetting });
+  } catch (error: any) {
+    console.error("Error updating voice setting:", error);
+    res.status(400).json({ success: false, error: error.message });
+  }
+}));
+
+// Delete a voice setting
+speechRouter.delete("/voice-settings/:id", withAuth(async (req, res, user) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ success: false, error: "Invalid voice setting ID" });
+    }
+    
+    // Check if the setting exists and belongs to the user
+    const existingSetting = await storage.getVoiceSettings(id);
+    
+    if (!existingSetting) {
+      return res.status(404).json({ success: false, error: "Voice setting not found" });
+    }
+    
+    if (existingSetting.userId !== user.id) {
+      return res.status(403).json({ success: false, error: "Unauthorized access to voice setting" });
+    }
+    
+    // Delete the setting
+    await storage.deleteVoiceSettings(id);
+    
+    // Create system activity log
+    await storage.createSystemActivity({
+      module: "Speech Engines",
+      event: "Voice Setting Deleted",
+      status: "Completed",
+      timestamp: new Date(),
+      details: {
+        voiceId: existingSetting.voiceId,
+        name: existingSetting.name
+      }
+    });
+    
+    res.json({ success: true, message: "Voice setting deleted successfully" });
+  } catch (error: any) {
+    console.error("Error deleting voice setting:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+}));
