@@ -1,0 +1,54 @@
+import * as fs from 'fs';
+import * as path from 'path';
+import { promisify } from 'util';
+
+const writeFileAsync = promisify(fs.writeFile);
+
+/**
+ * Creates a minimal valid MP3 file for testing audio features
+ */
+export async function createSampleMp3(voiceName: string): Promise<void> {
+  // Ensure directory exists
+  const samplesDir = path.join(process.cwd(), 'public', 'audio', 'samples');
+  if (!fs.existsSync(samplesDir)) {
+    fs.mkdirSync(samplesDir, { recursive: true });
+  }
+  
+  // Create a minimal valid MP3 file with some silent audio frames
+  const validMinimalMp3 = Buffer.from([
+    // MP3 header
+    0xFF, 0xFB, 0x90, 0x44, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    // Additional frames to make it valid for browsers
+    0xFF, 0xFB, 0x90, 0x44, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFB, 0x90, 0x44, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFB, 0x90, 0x44, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFB, 0x90, 0x44, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFB, 0x90, 0x44, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+  ]);
+  
+  const filepath = path.join(samplesDir, `${voiceName}.mp3`);
+  await writeFileAsync(filepath, validMinimalMp3);
+  
+  console.log(`Created sample MP3 for voice ${voiceName} at ${filepath}`);
+}
+
+// Create sample MP3 files for all voice samples
+export async function createAllSampleMp3s(): Promise<void> {
+  try {
+    const voices = ['emma', 'michael', 'olivia', 'james'];
+    
+    for (const voice of voices) {
+      await createSampleMp3(voice);
+    }
+    
+    console.log('Successfully created all sample MP3 files');
+  } catch (error) {
+    console.error('Error creating sample MP3 files:', error);
+  }
+}

@@ -109,8 +109,8 @@ class AudioCache {
   async set(text: string, voiceId: string, params: Record<string, any>, audioData: Buffer): Promise<string> {
     const key = this.generateCacheKey(text, voiceId, params);
     
-    // Generate unique audio URL for the server to serve
-    const audioUrl = `/audio/${key}.mp3`;
+    // Generate unique audio URL for the server to serve using our direct API endpoint
+    const audioUrl = `/api/audio/${key}`;
     
     // Save the audio file to the cache directory
     const filePath = path.join(this.cacheDir, `${key}.mp3`);
@@ -242,28 +242,28 @@ export const AVAILABLE_VOICES = [
     name: "Emma", 
     accent: "American",
     description: "Professional female voice",
-    previewUrl: "/audio/samples/emma.mp3"
+    previewUrl: "/api/audio/samples_emma"
   },
   { 
     id: "michael", 
     name: "Michael", 
     accent: "American",
     description: "Professional male voice",
-    previewUrl: "/audio/samples/michael.mp3"
+    previewUrl: "/api/audio/samples_michael"
   },
   { 
     id: "olivia", 
     name: "Olivia", 
     accent: "British",
     description: "Friendly female voice",
-    previewUrl: "/audio/samples/olivia.mp3"
+    previewUrl: "/api/audio/samples_olivia"
   },
   { 
     id: "james", 
     name: "James", 
     accent: "British",
     description: "Friendly male voice",
-    previewUrl: "/audio/samples/james.mp3"
+    previewUrl: "/api/audio/samples_james"
   },
 ];
 

@@ -8,6 +8,7 @@ import { initSendgrid } from "./lib/sendgrid";
 import { initGoogleCalendar } from "./lib/google-calendar";
 import { initElevenLabs } from "./lib/elevenlabs";
 import { initWhisperAPI } from "./lib/whisper";
+import { createAllSampleMp3s } from "./lib/create-sample-mp3";
 import { setupWebsocketHandlers } from "./lib/websocket";
 import { aiRouter } from "./routes/ai";
 import { speechRouter } from "./routes/speech";
@@ -64,6 +65,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     // Check for any file extension like .mp3 and remove it
     const baseAudioId = audioId.replace(/\.[^/.]+$/, "");
+    
+    // Check if this is a sample voice request
+    if (baseAudioId.startsWith('samples_')) {
+      const voiceName = baseAudioId.replace('samples_', '');
+      const samplesDir = path.join(process.cwd(), 'public', 'audio', 'samples');
+      const samplePath = path.join(samplesDir, `${voiceName}.mp3`);
+      
+      if (fs.existsSync(samplePath)) {
+        console.log(`Serving sample voice audio: ${samplePath}`);
+        
+        // Set proper headers for audio
+        res.setHeader('Content-Type', 'audio/mpeg');
+        res.setHeader('Content-Disposition', `inline; filename="${voiceName}.mp3"`);
+        res.setHeader('Accept-Ranges', 'bytes');
+        res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
+        
+        // Stream the file
+        return fs.createReadStream(samplePath).pipe(res);
+      }
+    }
     
     // Try different audio paths
     const possiblePaths = [
