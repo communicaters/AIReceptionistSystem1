@@ -88,22 +88,35 @@ const SpeechEngines = () => {
   // Save voice settings mutation
   const saveVoiceSettingsMutation = useMutation({
     mutationFn: async () => {
-      // Find the currently selected voice
-      const selectedVoiceData = ttsVoices.find(v => v.id === selectedVoice);
+      // For editing mode, we don't need to check if the voice exists in the predefined list
+      // This allows users to input custom ElevenLabs voice IDs
+      let selectedVoiceData;
       
-      if (!selectedVoiceData) {
-        throw new Error("Selected voice not found");
+      if (isEditingVoice) {
+        // In edit mode, we'll use the user-provided values without validation
+        selectedVoiceData = {
+          id: selectedVoice,
+          name: editVoiceName,
+          accent: editVoiceAccent,
+          description: editVoiceDescription
+        };
+      } else {
+        // Only validate against the predefined list if not in edit mode
+        selectedVoiceData = ttsVoices.find(v => v.id === selectedVoice);
+        if (!selectedVoiceData) {
+          throw new Error("Selected voice not found");
+        }
       }
       
       // Check if we already have settings for this voice
       const existingSettings = voiceSettingsData?.settings.find(s => s.voiceId === selectedVoice);
       
       const payload = {
-        voiceId: selectedVoice,
-        externalVoiceId: selectedVoice, // External voice ID (for API calls)
-        displayName: isEditingVoice ? editVoiceName : selectedVoiceData.name,
-        accent: isEditingVoice ? editVoiceAccent : (selectedVoiceData.accent || ""),
-        description: isEditingVoice ? editVoiceDescription : (selectedVoiceData.description || ""),
+        voiceId: selectedVoice, // This can now be a custom voice ID
+        externalVoiceId: selectedVoice, // Use the same ID for external API calls
+        displayName: selectedVoiceData.name,
+        accent: selectedVoiceData.accent || "",
+        description: selectedVoiceData.description || "",
         stability: stability / 100, // Convert to 0-1 range
         similarityBoost: similarityBoost / 100, // Convert to 0-1 range
         isDefault: false,
