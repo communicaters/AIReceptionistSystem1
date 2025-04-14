@@ -11,6 +11,7 @@ import Products from "@/pages/products";
 import AITraining from "@/pages/ai-training";
 import SpeechEngines from "@/pages/speech-engines";
 import Settings from "@/pages/settings";
+import OAuthCallback from "@/pages/oauth-callback";
 import { ConnectionStatus } from "@/components/ui/connection-status";
 import { WebSocketProvider } from "@/components/providers/websocket-provider";
 
@@ -83,6 +84,7 @@ function App() {
             </DashboardLayout>
           )}
         </Route>
+        <Route path="/oauth-callback" component={OAuthCallback} />
         <Route component={NotFound} />
       </Switch>
     </WebSocketProvider>

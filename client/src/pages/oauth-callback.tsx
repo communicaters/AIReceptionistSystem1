@@ -2,111 +2,104 @@
  * Google OAuth Callback Handler
  * This page handles the OAuth callback and communicates the result to the parent window.
  */
-
-import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2 } from "lucide-react";
+import { useEffect, useState } from 'react';
+import { useLocation } from 'wouter';
+import { Loader2, CheckCircle, XCircle } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 
 export default function OAuthCallback() {
-  const [status, setStatus] = useState<"processing" | "success" | "error">("processing");
-  const [errorMessage, setErrorMessage] = useState<string>("");
+  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [, setLocation] = useLocation();
 
   useEffect(() => {
-    // Parse query parameters to check for success or failure
+    // Parse query parameters
     const params = new URLSearchParams(window.location.search);
     const connected = params.get('connected');
     const error = params.get('error');
-
+    
+    // Determine status based on URL parameters
     if (connected === 'true') {
-      setStatus("success");
+      setStatus('success');
       
-      // Notify the opener window of successful authentication
-      if (window.opener && window.opener.postMessage) {
-        window.opener.postMessage(
-          { type: "GOOGLE_OAUTH_SUCCESS" }, 
-          window.location.origin
-        );
+      // Notify parent window that authentication was successful
+      if (window.opener) {
+        window.opener.postMessage({ 
+          type: 'GOOGLE_OAUTH_SUCCESS' 
+        }, window.location.origin);
+        
+        // Close the popup window after a short delay
+        setTimeout(() => {
+          window.close();
+        }, 2000);
       }
-      
-      // Close the popup window automatically after a short delay
-      setTimeout(() => {
-        window.close();
-      }, 2000);
     } else if (error) {
-      setStatus("error");
-      setErrorMessage(error);
+      setStatus('error');
+      setErrorMessage(decodeURIComponent(error));
       
-      // Notify the opener window of the authentication error
-      if (window.opener && window.opener.postMessage) {
-        window.opener.postMessage(
-          { type: "GOOGLE_OAUTH_ERROR", error }, 
-          window.location.origin
-        );
+      // Notify parent window about the error
+      if (window.opener) {
+        window.opener.postMessage({ 
+          type: 'GOOGLE_OAUTH_ERROR', 
+          error: decodeURIComponent(error) 
+        }, window.location.origin);
+        
+        // Keep the window open for a bit longer so user can see the error
+        setTimeout(() => {
+          window.close();
+        }, 5000);
       }
-      
-      // Close the popup window automatically after a short delay
-      setTimeout(() => {
-        window.close();
-      }, 3000);
     }
   }, []);
-
+  
+  // If this page is not opened in a popup, provide navigation
+  const handleClose = () => {
+    if (window.opener) {
+      window.close();
+    } else {
+      setLocation('/calendar');
+    }
+  };
+  
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
-      <Card className="w-[400px]">
+      <Card className="w-[350px] shadow-lg">
         <CardHeader>
-          <CardTitle className="text-center">
-            {status === "processing" && "Connecting to Google..."}
-            {status === "success" && "Google Account Connected"}
-            {status === "error" && "Connection Failed"}
+          <CardTitle className="text-center text-xl">
+            Google Calendar Connection
           </CardTitle>
+          <CardDescription className="text-center">
+            {status === 'loading' && 'Processing your request...'}
+            {status === 'success' && 'Successfully connected!'}
+            {status === 'error' && 'Connection failed'}
+          </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col items-center justify-center py-6">
-          {status === "processing" && (
+          {status === 'loading' && (
+            <Loader2 className="h-16 w-16 text-primary animate-spin mb-4" />
+          )}
+          
+          {status === 'success' && (
+            <CheckCircle className="h-16 w-16 text-green-500 mb-4" />
+          )}
+          
+          {status === 'error' && (
             <>
-              <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-              <p className="text-center text-muted-foreground">
-                Please wait while we complete the connection to your Google account...
+              <XCircle className="h-16 w-16 text-red-500 mb-4" />
+              <p className="text-red-500 text-center mb-4">
+                {errorMessage || 'An unknown error occurred'}
               </p>
             </>
           )}
           
-          {status === "success" && (
-            <>
-              <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center mb-4">
-                <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-              <p className="text-center text-muted-foreground">
-                Your Google Calendar account has been successfully connected.
-              </p>
-              <p className="text-center text-sm text-muted-foreground mt-4">
-                This window will close automatically.
-              </p>
-            </>
-          )}
-          
-          {status === "error" && (
-            <>
-              <div className="h-12 w-12 rounded-full bg-red-100 flex items-center justify-center mb-4">
-                <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </div>
-              <p className="text-center text-muted-foreground">
-                An error occurred while connecting to Google Calendar.
-              </p>
-              {errorMessage && (
-                <p className="text-center text-sm text-red-500 mt-2">
-                  {errorMessage}
-                </p>
-              )}
-              <p className="text-center text-sm text-muted-foreground mt-4">
-                This window will close automatically.
-              </p>
-            </>
-          )}
+          <Button 
+            onClick={handleClose}
+            className="mt-4"
+            variant={status === 'error' ? 'destructive' : 'default'}
+          >
+            {window.opener ? 'Close Window' : 'Return to Calendar'}
+          </Button>
         </CardContent>
       </Card>
     </div>

@@ -10,78 +10,61 @@
  */
 export function openGoogleAuthPopup(): Promise<void> {
   return new Promise((resolve, reject) => {
-    // Google OAuth popup configuration
+    // Window size and position
     const width = 600;
     const height = 700;
     const left = window.screenX + (window.outerWidth - width) / 2;
-    const top = window.screenY + (window.outerHeight - height) / 2.5;
-    const url = "/api/calendar/auth/authorize";
+    const top = window.screenY + (window.outerHeight - height) / 2;
     
-    // Open popup window with specified dimensions and position
+    // OAuth endpoint URL - this will be handled by our server-side route
+    const url = '/api/calendar/auth';
+    
+    // Open the popup window
     const popup = window.open(
       url,
-      "googleOAuth",
-      `width=${width},height=${height},left=${left},top=${top},popup=true,menubar=no,toolbar=no,location=no,status=no`
+      'googleAuthPopup',
+      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=yes`
     );
     
     if (!popup) {
-      reject(new Error("Popup blocked. Please allow popups for this site."));
+      reject(new Error('Failed to open popup. It may have been blocked by the browser.'));
       return;
     }
     
-    // Check if popup was closed without completing the OAuth flow
-    const checkClosed = setInterval(() => {
+    // Check if popup was closed manually by the user
+    const popupClosedChecker = setInterval(() => {
       if (popup.closed) {
-        clearInterval(checkClosed);
-        clearInterval(checkConnected);
-        reject(new Error("Authentication was cancelled."));
+        clearInterval(popupClosedChecker);
+        reject(new Error('Authentication was canceled'));
       }
-    }, 500);
+    }, 1000);
     
-    // Setup message listener for OAuth completion
+    // Listen for messages from the popup window
     const messageHandler = (event: MessageEvent) => {
-      // Only accept messages from our application domain
-      if (event.origin !== window.location.origin) return;
+      // Verify origin for security
+      if (event.origin !== window.location.origin) {
+        return;
+      }
       
-      // Check for OAuth success/error message
-      if (event.data?.type === "GOOGLE_OAUTH_SUCCESS") {
-        clearInterval(checkClosed);
-        clearInterval(checkConnected);
-        window.removeEventListener("message", messageHandler);
-        if (popup && !popup.closed) popup.close();
-        resolve();
-      } else if (event.data?.type === "GOOGLE_OAUTH_ERROR") {
-        clearInterval(checkClosed);
-        clearInterval(checkConnected);
-        window.removeEventListener("message", messageHandler);
-        if (popup && !popup.closed) popup.close();
-        reject(new Error(event.data.error || "Authentication failed."));
+      // Process the message
+      if (event.data && event.data.type) {
+        switch (event.data.type) {
+          case 'GOOGLE_OAUTH_SUCCESS':
+            clearInterval(popupClosedChecker);
+            window.removeEventListener('message', messageHandler);
+            resolve();
+            break;
+            
+          case 'GOOGLE_OAUTH_ERROR':
+            clearInterval(popupClosedChecker);
+            window.removeEventListener('message', messageHandler);
+            reject(new Error(event.data.error || 'Authentication failed'));
+            break;
+        }
       }
     };
     
-    window.addEventListener("message", messageHandler);
-    
-    // Poll the popup window's location to detect when it's redirected to the callback URL
-    // This is a fallback mechanism since postMessage is more reliable
-    const checkConnected = setInterval(() => {
-      try {
-        // This will throw an error when the popup is redirected to a different domain
-        if (popup.location.href.includes("/api/calendar/auth/callback")) {
-          // We've detected the callback page - wait for it to process and post a message
-          // But we'll add a safety timeout in case the message never comes
-          setTimeout(() => {
-            clearInterval(checkClosed);
-            clearInterval(checkConnected);
-            window.removeEventListener("message", messageHandler);
-            if (popup && !popup.closed) popup.close();
-            
-            // For safety, we'll complete the promise after giving ample time for the message to arrive
-            resolve();
-          }, 3000);
-        }
-      } catch (e) {
-        // Cross-origin error - ignore as this is expected during the OAuth flow
-      }
-    }, 500);
+    // Add the message listener
+    window.addEventListener('message', messageHandler);
   });
 }
