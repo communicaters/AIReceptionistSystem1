@@ -58,6 +58,14 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     const removeMessageListener = websocketService.addMessageListener(handleMessage);
     const removeStatusListener = websocketService.addConnectionStatusListener(handleConnectionStatus);
     
+    // Listen for local messages (for immediate user message display)
+    const handleLocalMessage = (event: CustomEvent) => {
+      setMessages((prevMessages) => [...prevMessages, event.detail]);
+    };
+    
+    // Add event listener for local messages
+    window.addEventListener('local-message', handleLocalMessage as EventListener);
+    
     // Get initial values
     setConnected(websocketService.isConnected());
     setSessionId(websocketService.getSessionId());
@@ -66,6 +74,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     return () => {
       removeMessageListener();
       removeStatusListener();
+      window.removeEventListener('local-message', handleLocalMessage as EventListener);
     };
   }, [handleMessage, handleConnectionStatus]);
 

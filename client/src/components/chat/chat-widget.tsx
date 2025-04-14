@@ -50,8 +50,27 @@ export function ChatWidget({
       return;
     }
     
-    const success = sendChatMessage(message);
+    // Store the message to use in the local message object
+    const userMessage = message.trim();
+    
+    const success = sendChatMessage(userMessage);
     if (success) {
+      // Add the user message to the local messages state
+      const localUserMessage = {
+        type: 'chat',
+        message: userMessage,
+        sender: 'user',
+        timestamp: new Date().toISOString(),
+        sessionId
+      };
+      
+      // Update the WebSocketContext with this message
+      // This hack ensures the user's message displays immediately
+      // even if the WebSocket message handling is delayed
+      window.dispatchEvent(new CustomEvent('local-message', { 
+        detail: localUserMessage 
+      }));
+      
       setMessage("");
     } else {
       toast({
