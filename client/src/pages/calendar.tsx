@@ -369,7 +369,15 @@ const Calendar = () => {
           </p>
         </div>
         <Button 
-          onClick={() => setShowNewMeetingDialog(true)}
+          onClick={() => {
+            // Reset the selected slot to enforce selection
+            setNewMeetingForm(prev => ({
+              ...prev,
+              selectedSlot: null
+            }));
+            // Show the dialog
+            setShowNewMeetingDialog(true);
+          }}
           disabled={!isConfigured}
         >
           <Plus className="mr-2 h-4 w-4" />
@@ -828,14 +836,18 @@ const Calendar = () => {
                       onClick={() => handleSelectTimeSlot(slot)}
                       className={`flex items-center space-x-2 p-2 rounded-md border ${
                         slot.available 
-                          ? 'hover:bg-neutral-50 cursor-pointer' 
+                          ? newMeetingForm.selectedSlot === slot.time
+                            ? 'bg-blue-50 border-blue-200 shadow-sm' 
+                            : 'hover:bg-neutral-50 hover:border-primary hover:shadow-sm cursor-pointer transition-all' 
                           : 'bg-neutral-100 opacity-50 cursor-not-allowed'
                       }`}
                     >
-                      <Clock className="h-4 w-4 text-neutral-500" />
-                      <span>{slot.time}</span>
-                      {!slot.available && (
-                        <span className="ml-auto text-xs text-neutral-500">Unavailable</span>
+                      <Clock className={`h-4 w-4 ${slot.available ? 'text-primary' : 'text-neutral-500'}`} />
+                      <span className={slot.available ? 'font-medium' : ''}>{slot.time}</span>
+                      {slot.available ? (
+                        <span className="ml-auto text-xs px-2 py-0.5 rounded bg-green-50 text-green-600 border border-green-100">Available</span>
+                      ) : (
+                        <span className="ml-auto text-xs px-2 py-0.5 rounded bg-neutral-50 text-neutral-500 border border-neutral-100">Unavailable</span>
                       )}
                     </div>
                   ))}
@@ -906,7 +918,15 @@ const Calendar = () => {
             </div>
             {!newMeetingForm.selectedSlot && (
               <div className="grid gap-2">
-                <Label>Please select a time slot from the calendar</Label>
+                <div className="border border-amber-200 bg-amber-50 p-3 rounded-md text-amber-800">
+                  <div className="flex items-center">
+                    <Clock className="h-5 w-5 mr-2 text-amber-600" />
+                    <span className="font-medium">Time Slot Required</span>
+                  </div>
+                  <p className="text-sm mt-1">
+                    Please close this dialog and select an available time slot from the calendar view first.
+                  </p>
+                </div>
               </div>
             )}
           </div>
