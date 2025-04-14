@@ -184,6 +184,36 @@ export const getWhatsappLogs = async (
   return response.json();
 };
 
+export const getWhatsappConfig = async (): Promise<WhatsappConfig> => {
+  const response = await apiRequest("GET", "/api/whatsapp/config");
+  return response.json();
+};
+
+export const saveWhatsappConfig = async (
+  config: Partial<WhatsappConfig>
+): Promise<WhatsappConfig> => {
+  const response = await apiRequest("POST", "/api/whatsapp/config", config);
+  return response.json();
+};
+
+export const testWhatsappConnection = async (): Promise<{success: boolean, message: string}> => {
+  const response = await apiRequest("POST", "/api/whatsapp/test");
+  return response.json();
+};
+
+export const sendWhatsappMessage = async (
+  phoneNumber: string, 
+  message: string, 
+  mediaUrl?: string
+): Promise<{success: boolean, messageId: number, message: string}> => {
+  const response = await apiRequest("POST", "/api/whatsapp/send", {
+    phoneNumber,
+    message,
+    mediaUrl
+  });
+  return response.json();
+};
+
 export const getMeetingLogs = async (limit?: number): Promise<MeetingLog[]> => {
   const queryParams = limit ? `?limit=${limit}` : "";
   const response = await apiRequest("GET", `/api/calendar/meetings${queryParams}`);
