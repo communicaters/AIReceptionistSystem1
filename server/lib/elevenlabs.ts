@@ -169,7 +169,59 @@ export function initElevenLabs() {
   }
   
   console.log("ElevenLabs API initialized");
-  return { apiKey };
+  return { 
+    apiKey,
+    // Method to generate speech using the API
+    async generateSpeech(text: string, voiceId: string, options: any = {}) {
+      // Use default voices from our collection if none specified
+      // Maps to actual ElevenLabs voice IDs
+      const voiceMap: Record<string, string> = {
+        "emma": "EXAVITQu4vr4xnSDxMaL",    // Nicole voice
+        "michael": "g9S4m9E1veCUU0PpgKIE", // Sam voice  
+        "olivia": "pNInz6obpgDQGcFmaJgB",  // Grace voice
+        "james": "pqHfZKP75CvOlQylNhV4"    // Daniel voice
+      };
+      
+      // Get the actual ElevenLabs voice ID
+      const actualVoiceId = voiceMap[voiceId] || voiceMap["emma"];
+      
+      // Construct the API URL
+      const apiUrl = `https://api.elevenlabs.io/v1/text-to-speech/${actualVoiceId}/stream`;
+      
+      // Prepare the request body
+      const requestBody = {
+        text,
+        model_id: "eleven_monolingual_v1",
+        voice_settings: {
+          stability: options.stability || 0.5,
+          similarity_boost: options.similarityBoost || 0.75
+        }
+      };
+      
+      // Make the API request
+      console.log(`Making ElevenLabs API request for text: "${text.substring(0, 30)}..."`);
+      
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Accept': 'audio/mpeg',
+          'Content-Type': 'application/json',
+          'xi-api-key': apiKey
+        },
+        body: JSON.stringify(requestBody)
+      });
+      
+      // Check if the request was successful
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`ElevenLabs API error: ${response.status} - ${errorText}`);
+      }
+      
+      // Get the audio data as a buffer
+      const audioArrayBuffer = await response.arrayBuffer();
+      return Buffer.from(audioArrayBuffer);
+    }
+  };
 }
 
 // Get ElevenLabs client (lazy initialization)
@@ -333,10 +385,6 @@ export async function textToSpeech(
     try {
       const client = getElevenLabsClient();
       
-      // In a real implementation, you would:
-      // 1. Call ElevenLabs API to convert text to speech
-      // 2. Store or return the audio data
-      
       // Create a directory for TTS audio files if it doesn't exist
       const ttsDir = path.join(process.cwd(), 'cache', 'audio', 'tts');
       if (!fs.existsSync(ttsDir)) {
@@ -349,34 +397,29 @@ export async function textToSpeech(
       const filename = `tts_${safeText}_${timestamp}.mp3`;
       const filepath = path.join(ttsDir, filename);
       
-      // For demo purposes, create a valid minimal MP3 file that browsers can play
-      // In a real implementation, this would be audio data from the ElevenLabs API
-      const demoAudioBuffer = Buffer.from([
-        // MP3 header
-        0xFF, 0xFB, 0x90, 0x44, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        // Additional frames to make it valid for browsers
-        0xFF, 0xFB, 0x90, 0x44, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0xFF, 0xFB, 0x90, 0x44, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0xFF, 0xFB, 0x90, 0x44, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0xFF, 0xFB, 0x90, 0x44, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0xFF, 0xFB, 0x90, 0x44, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-      ]);
-      
-      // Write the file to disk
-      await writeFileAsync(filepath, demoAudioBuffer);
+      // Call the actual ElevenLabs API to generate speech
+      console.log(`Generating speech with ElevenLabs for text: "${text.substring(0, 30)}..."`);
       
       // Create a URL path for the audio file
       const audioUrl = `/audio/tts/${filename}`;
       
-      // Cache the audio data if caching is enabled
-      if (useCache) {
-        await audioCache.set(text, voiceId, { stability, similarityBoost }, demoAudioBuffer);
+      try {
+        // Generate audio using the ElevenLabs API
+        const audioBuffer = await client.generateSpeech(text, voiceId, {
+          stability,
+          similarityBoost
+        });
+        
+        // Write the audio buffer to disk
+        await writeFileAsync(filepath, audioBuffer);
+        
+        // Cache the audio data if caching is enabled
+        if (useCache) {
+          await audioCache.set(text, voiceId, { stability, similarityBoost }, audioBuffer);
+        }
+      } catch (apiError) {
+        console.error("Error calling ElevenLabs API:", apiError);
+        throw apiError;
       }
       
       // Create system activity record
@@ -393,7 +436,11 @@ export async function textToSpeech(
       
       console.log(`Generated speech for text: "${text.substring(0, 30)}..."`);
       
-      return { success: true, audioUrl, fromCache: false };
+      return { 
+        success: true, 
+        audioUrl: audioUrl, 
+        fromCache: false 
+      };
     } catch (error) {
       console.warn("ElevenLabs TTS failed, falling back to alternative:", error);
       
