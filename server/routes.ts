@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer } from "ws";
 import { storage } from "./storage";
+import { pool } from "./db"; // Add database pool import for direct queries
 import { setupTwilioWebhooks } from "./lib/twilio";
 import { initOpenAI } from "./lib/openai";
 import { initSendgrid } from "./lib/sendgrid";
@@ -1127,11 +1128,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return apiResponse(res, { error: "Date parameter is required" }, 400);
       }
       
-      // Parse the date
+      // Parse the date ensuring we have a clean date without time component
       const date = new Date(dateStr);
       if (isNaN(date.getTime())) {
         return apiResponse(res, { error: "Invalid date format" }, 400);
       }
+      
+      // Create a normalized date for consistent comparison (year, month, day only)
+      const normalizedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
       
       // Get calendar config
       const config = await storage.getCalendarConfigByUserId(userId);
@@ -1143,26 +1147,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }, 404);
       }
       
-      // Get meetings for the date
-      const meetings = await storage.getMeetingLogsByUserId(userId);
+      // Get meetings using SQL date filtering instead of JavaScript filtering
+      // This ensures we get the correct meetings for the requested date
+      const query = `
+        SELECT * FROM meeting_logs 
+        WHERE user_id = $1 
+        AND start_time::date = $2::date
+      `;
       
-      // Filter meetings for the current date only
-      const datesMeetings = meetings.filter(meeting => {
-        const meetingDate = new Date(meeting.startTime);
-        return meetingDate.toDateString() === date.toDateString();
-      });
+      const { rows: datesMeetings } = await pool.query(query, [userId, normalizedDate.toISOString().split('T')[0]]);
       
-      console.log(`Found ${datesMeetings.length} meetings for ${date.toDateString()}:`, 
-        datesMeetings.map(m => `${formatTime(new Date(m.startTime))} - ${formatTime(new Date(m.endTime))} [${m.subject}]`));
-      
-      // Use the getAvailableTimeSlots function imported at the top of the file
+      console.log(`Using database query to find meetings for ${normalizedDate.toISOString().split('T')[0]}`);
+      console.log(`Found ${datesMeetings.length} meetings:`, 
+        datesMeetings.map(m => `${formatTime(new Date(m.start_time))} - ${formatTime(new Date(m.end_time))} [${m.subject}]`));
       
       // If calendar is connected to Google (has refresh token), use Google Calendar API
       if (config.googleRefreshToken) {
         try {
-          console.log(`Getting available time slots from Google Calendar for ${date.toDateString()}`);
+          console.log(`Getting available time slots from Google Calendar for ${normalizedDate.toDateString()}`);
           // Get slots from Google Calendar based on free/busy data
-          const slots = await getAvailableTimeSlots(userId, date, config.slotDuration);
+          const slots = await getAvailableTimeSlots(userId, normalizedDate, config.slotDuration);
           apiResponse(res, slots);
           return;
         } catch (googleError) {
@@ -1176,28 +1180,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const endHour = parseInt(config.availabilityEndTime.split(':')[0]);
       const slotDuration = config.slotDuration;
       
-      const slots = [];
-      const occupied = new Set();
+      // Create a map of all 24-hour time slots in the day (HH:MM format)
+      const timeSlots = new Map();
       
-      // Mark occupied slots from local meetings
+      // Generate all time slots first with available=true
+      for (let hour = startHour; hour < endHour; hour++) {
+        for (let minute = 0; minute < 60; minute += slotDuration) {
+          const slotTime = new Date(normalizedDate);
+          slotTime.setHours(hour, minute, 0, 0);
+          
+          const timeKey = formatTimeSlot(slotTime);
+          const formattedTime = formatTime(slotTime);
+          
+          timeSlots.set(timeKey, {
+            time: formattedTime,
+            available: true,
+            key: timeKey // For debugging
+          });
+        }
+      }
+      
+      // Mark time slots as unavailable based on meetings
       datesMeetings.forEach(meeting => {
-        const startTime = new Date(meeting.startTime);
-        const endTime = new Date(meeting.endTime);
+        // Convert database times to JavaScript Date objects
+        const startTime = new Date(meeting.start_time);
+        const endTime = new Date(meeting.end_time);
         
         console.log(`Processing meeting: ${formatTime(startTime)} - ${formatTime(endTime)} [${meeting.subject}]`);
         
-        // Mark all slots that overlap with this meeting as occupied
-        // Start with a clean date object to avoid timezone issues
-        let currentSlot = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-        currentSlot.setHours(startTime.getHours(), startTime.getMinutes(), 0, 0);
-        
-        // Track occupied slots for debugging
+        // Find all slots that overlap with this meeting and mark them as unavailable
+        // Create a slot iterator that starts at the meeting start time and continues until end time
+        let currentSlot = new Date(startTime);
         const occupiedSlots = [];
         
         while (currentSlot < endTime) {
           const timeKey = formatTimeSlot(currentSlot);
-          occupied.add(timeKey);
-          occupiedSlots.push(formatTime(currentSlot));
+          if (timeSlots.has(timeKey)) {
+            timeSlots.get(timeKey).available = false;
+            occupiedSlots.push(formatTime(currentSlot));
+          }
           
           // Move to the next slot
           currentSlot = new Date(currentSlot.getTime() + slotDuration * 60000);
@@ -1206,32 +1227,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`Marked as occupied: ${occupiedSlots.join(', ')}`);
       });
       
-      // Generate all slots based on business hours
-      let currentTime = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-      currentTime.setHours(startHour, 0, 0, 0);
+      // Convert the map values to an array
+      const slots = Array.from(timeSlots.values());
       
-      const endTime = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-      endTime.setHours(endHour, 0, 0, 0);
-      
-      // Debug the occupied set
-      console.log('Occupied time slots:', Array.from(occupied));
-      
-      while (currentTime < endTime) {
-        const timeKey = formatTimeSlot(currentTime);
-        const isOccupied = occupied.has(timeKey);
+      // Sort slots by time
+      slots.sort((a, b) => {
+        const timeA = a.key.split(':').map(Number);
+        const timeB = b.key.split(':').map(Number);
         
-        slots.push({
-          time: formatTime(currentTime),
-          available: !isOccupied,
-          // Include key for debugging
-          key: timeKey
-        });
-        
-        // Move to next slot
-        currentTime = new Date(currentTime.getTime() + slotDuration * 60000);
-      }
+        // Compare hours first, then minutes
+        if (timeA[0] !== timeB[0]) {
+          return timeA[0] - timeB[0];
+        }
+        return timeA[1] - timeB[1];
+      });
       
+      // Debug output
       console.log(`Generated ${slots.length} time slots, ${slots.filter(s => !s.available).length} are occupied`);
+      console.log('Occupied time slots:', slots.filter(s => !s.available).map(s => s.key));
       
       // Remove debugging fields before sending the response
       const cleanedSlots = slots.map(slot => ({
