@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Receptionist Chat Widget Demo</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      color: #333;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    h1 {
+      color: #2563eb;
+      margin-bottom: 10px;
+    }
+    .section {
+      margin-bottom: 40px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 20px;
+    }
+    h2 {
+      margin-top: 0;
+    }
+    pre {
+      background-color: #f7f7f7;
+      padding: 15px;
+      border-radius: 5px;
+      overflow-x: auto;
+      font-size: 14px;
+    }
+    code {
+      font-family: Consolas, Monaco, 'Andale Mono', monospace;
+    }
+    .config-option {
+      margin-bottom: 10px;
+      padding: 10px;
+      background-color: #f0f9ff;
+      border-radius: 5px;
+    }
+    .option-name {
+      font-weight: bold;
+    }
+    .customization {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 500;
+    }
+    input {
+      width: 100%;
+      padding: 8px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      margin-bottom: 15px;
+    }
+    button {
+      background-color: #2563eb;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #1d4ed8;
+    }
+    .color-picker {
+      height: 40px;
+    }
+  </style>
+  
+  <!-- Widget Configuration -->
+  <script>
+    // Configuration for the AI Receptionist Chat Widget
+    window.AR_SERVER_URL = window.location.origin; // Using the current origin
+    window.AR_WIDGET_TITLE = "AI Receptionist";
+    window.AR_PRIMARY_COLOR = "#2563eb";
+    window.AR_GREETING_MESSAGE = "Hello! I'm your AI receptionist. How can I help you today?";
+    
+    // Function to update widget configuration
+    function updateWidgetConfig() {
+      // Remove existing widget
+      const existingWidget = document.querySelector('.ar-chat-widget-container');
+      if (existingWidget) {
+        existingWidget.remove();
+      }
+      
+      // Get values from input fields
+      window.AR_WIDGET_TITLE = document.getElementById('widget-title').value;
+      window.AR_PRIMARY_COLOR = document.getElementById('primary-color').value;
+      window.AR_GREETING_MESSAGE = document.getElementById('greeting-message').value;
+      
+      // Reload the script to reinitialize the widget
+      const oldScript = document.getElementById('chat-widget-script');
+      if (oldScript) {
+        oldScript.remove();
+      }
+      
+      const script = document.createElement('script');
+      script.id = 'chat-widget-script';
+      script.src = '/embed-chat.js';
+      document.body.appendChild(script);
+    }
+  </script>
+</head>
+<body>
+  <header>
+    <h1>AI Receptionist Chat Widget</h1>
+    <p>A lightweight, customizable chat widget that can be embedded on any website</p>
+  </header>
+  
+  <div class="section">
+    <h2>Integration Instructions</h2>
+    <p>To add the AI Receptionist chat widget to your website, simply add the following script tag to your HTML before the closing <code>&lt;/body&gt;</code> tag:</p>
+    
+    <pre><code>&lt;!-- AI Receptionist Chat Widget --&gt;
+&lt;script&gt;
+  // Configuration (Optional)
+  window.AR_SERVER_URL = "https://your-server-url.com"; // Your AI Receptionist server URL
+  window.AR_WIDGET_TITLE = "Your Company Name";         // Chat widget title
+  window.AR_PRIMARY_COLOR = "#2563eb";                  // Primary color (hex code)
+  window.AR_GREETING_MESSAGE = "Hello! How can I help you today?"; // Initial greeting
+&lt;/script&gt;
+&lt;script src="https://your-server-url.com/embed-chat.js"&gt;&lt;/script&gt;</code></pre>
+  </div>
+  
+  <div class="section">
+    <h2>Configuration Options</h2>
+    <p>The following configuration options are available:</p>
+    
+    <div class="config-option">
+      <div class="option-name">window.AR_SERVER_URL</div>
+      <p>The URL of your AI Receptionist server. If not specified, the script will use the current origin.</p>
+    </div>
+    
+    <div class="config-option">
+      <div class="option-name">window.AR_WIDGET_TITLE</div>
+      <p>The title displayed in the chat header. Default: "AI Receptionist"</p>
+    </div>
+    
+    <div class="config-option">
+      <div class="option-name">window.AR_PRIMARY_COLOR</div>
+      <p>The primary color used for the chat bubble, header, and buttons. Default: "#2563eb" (blue)</p>
+    </div>
+    
+    <div class="config-option">
+      <div class="option-name">window.AR_GREETING_MESSAGE</div>
+      <p>The initial greeting message displayed when the chat is opened. Default: "Hello! How can I assist you today?"</p>
+    </div>
+  </div>
+  
+  <div class="section">
+    <h2>Customize Demo Widget</h2>
+    <p>Try customizing the chat widget below:</p>
+    
+    <div class="customization">
+      <div>
+        <label for="widget-title">Widget Title:</label>
+        <input type="text" id="widget-title" value="AI Receptionist">
+      </div>
+      
+      <div>
+        <label for="primary-color">Primary Color:</label>
+        <input type="color" id="primary-color" value="#2563eb" class="color-picker">
+      </div>
+      
+      <div>
+        <label for="greeting-message">Greeting Message:</label>
+        <input type="text" id="greeting-message" value="Hello! I'm your AI receptionist. How can I help you today?">
+      </div>
+      
+      <div style="display: flex; align-items: flex-end;">
+        <button onclick="updateWidgetConfig()">Update Widget</button>
+      </div>
+    </div>
+  </div>
+  
+  <div class="section">
+    <h2>Security & Privacy</h2>
+    <p>The chat widget includes the following security features:</p>
+    <ul>
+      <li>Unique session IDs for each visitor, stored in localStorage</li>
+      <li>Secure WebSocket connection (wss:// on HTTPS sites)</li>
+      <li>No sensitive data is exposed in the console or DOM</li>
+      <li>Automatic reconnection with exponential backoff</li>
+      <li>Heartbeat mechanism to keep connections alive</li>
+    </ul>
+  </div>
+  
+  <!-- Load the chat widget script -->
+  <script id="chat-widget-script" src="/embed-chat.js"></script>
+</body>
+</html>

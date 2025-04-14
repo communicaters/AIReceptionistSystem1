@@ -131,6 +131,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Serve audio files without authentication (as fallback)
   app.use('/audio', express.static(audioDir));
   
+  // Serve the chat widget demo page (no auth required)
+  app.get('/chat-widget-demo', (req, res) => {
+    res.sendFile(path.join(process.cwd(), 'public', 'chat-widget-demo.html'));
+  });
+  
+  // Serve the embeddable chat widget script (no auth required)
+  app.get('/embed-chat.js', (req, res) => {
+    res.setHeader('Content-Type', 'application/javascript');
+    res.setHeader('Cache-Control', 'max-age=3600'); // Cache for 1 hour
+    res.sendFile(path.join(process.cwd(), 'public', 'embed-chat.js'));
+  });
+
   // Apply authentication middleware to all other routes
   app.use(authenticate);
 
