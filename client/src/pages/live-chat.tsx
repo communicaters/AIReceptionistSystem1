@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getChatLogs } from "@/lib/api";
 import { ChatWidget } from "@/components/chat/chat-widget";
@@ -23,16 +23,31 @@ import {
   Settings2, 
   RefreshCw, 
   Users,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Code,
+  Copy,
+  Check,
+  X
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogClose
+} from "@/components/ui/dialog";
 import { useWebSocketContext } from "@/components/providers/websocket-provider";
 
 const LiveChatContent = () => {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [embedDialogOpen, setEmbedDialogOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   const { toast } = useToast();
   const { connected, sendChatMessage } = useWebSocketContext();
   const { 
@@ -121,6 +136,52 @@ const LiveChatContent = () => {
       handleSendMessage();
     }
   };
+  
+  // Get current URL for embed code 
+  const getHostUrl = () => {
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      return `${url.protocol}//${url.host}`;
+    }
+    return '';
+  };
+  
+  // Generate embed code based on current chat configuration
+  const getEmbedCode = () => {
+    const hostUrl = getHostUrl();
+    return `<!-- AI Receptionist Chat Widget -->
+<script>
+  // Configuration
+  window.AR_SERVER_URL = "${hostUrl}"; // Your server URL
+  window.AR_WIDGET_TITLE = "${chatConfig.widgetTitle}"; // Chat widget title
+  window.AR_PRIMARY_COLOR = "${chatConfig.widgetColor}"; // Primary color (hex code)
+  window.AR_GREETING_MESSAGE = "${chatConfig.greetingMessage}"; // Initial greeting
+</script>
+<script src="${hostUrl}/embed-chat.js"></script>`;
+  };
+  
+  // Handle copying embed code to clipboard
+  const handleCopyCode = () => {
+    const code = getEmbedCode();
+    navigator.clipboard.writeText(code)
+      .then(() => {
+        setCopied(true);
+        toast({
+          title: "Copied!",
+          description: "Embed code copied to clipboard",
+        });
+        
+        // Reset copied state after 2 seconds
+        setTimeout(() => setCopied(false), 2000);
+      })
+      .catch(() => {
+        toast({
+          title: "Copy failed",
+          description: "Could not copy code to clipboard",
+          variant: "destructive",
+        });
+      });
+  };
 
   return (
     <div className="space-y-6">
@@ -131,10 +192,19 @@ const LiveChatContent = () => {
             Manage chat widget, view conversations, and configure auto-responses
           </p>
         </div>
-        <Button onClick={toggleWidget}>
-          <MessageCircle className="mr-2 h-4 w-4" />
-          Open Chat Widget
-        </Button>
+        <div className="flex space-x-2">
+          <Button 
+            variant="outline" 
+            onClick={() => setEmbedDialogOpen(true)}
+          >
+            <Code className="mr-2 h-4 w-4" />
+            Embed Code
+          </Button>
+          <Button onClick={toggleWidget}>
+            <MessageCircle className="mr-2 h-4 w-4" />
+            Open Chat Widget
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -393,6 +463,50 @@ const LiveChatContent = () => {
           onClose={toggleWidget}
         />
       )}
+      
+      {/* Embed Code Dialog */}
+      <Dialog open={embedDialogOpen} onOpenChange={setEmbedDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Chat Widget Embed Code</DialogTitle>
+            <DialogDescription>
+              Add this code to your website to embed the AI Receptionist chat widget.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="bg-neutral-50 rounded-md p-4 relative">
+            <pre className="text-xs sm:text-sm overflow-x-auto whitespace-pre-wrap">
+              {getEmbedCode()}
+            </pre>
+            <div className="absolute top-2 right-2">
+              <Button 
+                size="sm" 
+                variant="ghost" 
+                className="w-8 h-8 p-0" 
+                onClick={handleCopyCode}
+              >
+                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              </Button>
+            </div>
+          </div>
+          
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p><strong>Instructions:</strong></p>
+            <ol className="list-decimal pl-4 space-y-1">
+              <li>Copy the code above</li>
+              <li>Paste it before the closing <code className="text-primary">&lt;/body&gt;</code> tag on any page where you want the chat widget to appear</li>
+              <li>You can customize the appearance by modifying the configuration variables</li>
+            </ol>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEmbedDialogOpen(false)}>Close</Button>
+            <Button onClick={handleCopyCode}>
+              {copied ? 'Copied!' : 'Copy Code'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
