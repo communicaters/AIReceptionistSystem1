@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useWebSocketContext } from "@/components/providers/websocket-provider";
+import { useChatContext } from "@/components/providers/chat-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,6 +36,7 @@ export function ChatWidget({
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { sessionId, connected, messages, sendChatMessage } = useWebSocketContext();
+  const { chatConfig, getCurrentSessionId } = useChatContext();
   const { toast } = useToast();
   
   // Initialize with greeting message if no messages exist
@@ -100,12 +102,13 @@ export function ChatWidget({
     }
     
     // Create user message
+    const currentSessionId = getCurrentSessionId() || sessionId;
     const userMessageObj: ChatMessage = {
       type: 'chat',
       message: message.trim(),
       sender: 'user',
       timestamp: new Date().toISOString(),
-      sessionId: sessionId || undefined
+      sessionId: currentSessionId
     };
     
     // Add to chat history immediately (before server response)

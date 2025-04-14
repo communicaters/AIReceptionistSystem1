@@ -85,6 +85,10 @@ class WebSocketService {
 
   private getWebSocketUrl(): string {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    // If we have a sessionId, append it to the URL so the server can maintain the session
+    if (this.sessionId) {
+      return `${protocol}//${window.location.host}/ws?sessionId=${this.sessionId}`;
+    }
     return `${protocol}//${window.location.host}/ws`;
   }
 

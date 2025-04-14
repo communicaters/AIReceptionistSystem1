@@ -1,7 +1,8 @@
-import { createContext, useContext, useState, ReactNode, useEffect } from "react";
+import { createContext, useContext, useState, ReactNode, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useWebSocket } from "@/lib/websocket";
 
 interface ChatConfig {
   id?: number;
@@ -16,6 +17,12 @@ interface ChatConfig {
   humanHandoffDelay: number;
 }
 
+interface ChatSession {
+  sessionId: string;
+  lastActivity: Date;
+  isActive: boolean;
+}
+
 interface ChatContextType {
   chatConfig: ChatConfig;
   isLoading: boolean;
@@ -25,6 +32,9 @@ interface ChatContextType {
   isSaving: boolean;
   showWidget: boolean;
   toggleWidget: () => void;
+  chatSessions: ChatSession[];
+  activeChatSessions: number;
+  getCurrentSessionId: () => string | null;
 }
 
 const defaultConfig: ChatConfig = {
@@ -43,8 +53,10 @@ const ChatContext = createContext<ChatContextType | null>(null);
 export function ChatProvider({ children }: { children: ReactNode }) {
   const [chatConfig, setChatConfig] = useState<ChatConfig>(defaultConfig);
   const [showWidget, setShowWidget] = useState(false);
+  const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const websocket = useWebSocket();
 
   // Fetch chat configuration
   const { 
@@ -61,6 +73,58 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       return response.json();
     }
   });
+  
+  // Fetch chat logs to get sessions
+  const { 
+    data: chatLogsData,
+    isLoading: isLoadingLogs,
+  } = useQuery({
+    queryKey: ["/api/chat/logs"],
+    queryFn: async () => {
+      const response = await fetch("/api/chat/logs");
+      if (!response.ok) {
+        throw new Error("Failed to fetch chat logs");
+      }
+      return response.json();
+    },
+    refetchInterval: 10000 // Refresh every 10 seconds to keep session list updated
+  });
+  
+  // Update chat sessions when logs data changes
+  useEffect(() => {
+    if (chatLogsData && Array.isArray(chatLogsData)) {
+      // Get unique session IDs and create session objects
+      const sessionsMap = new Map<string, ChatSession>();
+      
+      chatLogsData.forEach(log => {
+        if (!sessionsMap.has(log.sessionId)) {
+          sessionsMap.set(log.sessionId, {
+            sessionId: log.sessionId,
+            lastActivity: new Date(log.timestamp),
+            isActive: true
+          });
+        } else {
+          // Update last activity if this log is newer
+          const session = sessionsMap.get(log.sessionId)!;
+          const logTime = new Date(log.timestamp);
+          if (logTime > session.lastActivity) {
+            session.lastActivity = logTime;
+            sessionsMap.set(log.sessionId, session);
+          }
+        }
+      });
+      
+      // Convert map to array and sort by most recent activity
+      const sessionsArray = Array.from(sessionsMap.values()).sort(
+        (a, b) => b.lastActivity.getTime() - a.lastActivity.getTime()
+      );
+      
+      setChatSessions(sessionsArray);
+      
+      // Log for debugging
+      console.log(`Updated chat sessions: found ${sessionsArray.length} unique sessions`);
+    }
+  }, [chatLogsData]);
   
   // Update chat config when data changes
   useEffect(() => {
@@ -101,18 +165,26 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const toggleWidget = () => {
     setShowWidget(prev => !prev);
   };
+  
+  // Get the current WebSocket session ID
+  const getCurrentSessionId = useCallback(() => {
+    return websocket.getSessionId();
+  }, [websocket]);
 
   return (
     <ChatContext.Provider
       value={{
         chatConfig,
-        isLoading,
+        isLoading: isLoading || isLoadingLogs,
         error: error instanceof Error ? error : null,
         setChatConfig: (config) => setChatConfig(prev => ({ ...prev, ...config })),
         saveConfig,
         isSaving,
         showWidget,
-        toggleWidget
+        toggleWidget,
+        chatSessions,
+        activeChatSessions: chatSessions.length,
+        getCurrentSessionId
       }}
     >
       {children}

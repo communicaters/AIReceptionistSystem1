@@ -84,10 +84,9 @@ const LiveChatContent = () => {
     }
   };
 
-  // Get unique session IDs for the dropdown from all logs
-  const uniqueSessions = allChatLogs 
-    ? [...new Set(allChatLogs.map(log => log.sessionId))]
-    : [];
+  // Use the chatSessions from our ChatContext instead of deriving from logs
+  const { chatSessions } = useChatContext();
+  const uniqueSessions = chatSessions.map(session => session.sessionId);
 
   // Handle sending a message
   const handleSendMessage = () => {
