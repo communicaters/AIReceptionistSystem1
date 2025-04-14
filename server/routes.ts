@@ -1161,6 +1161,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`Found ${datesMeetings.length} meetings:`, 
         datesMeetings.map(m => `${formatTime(new Date(m.start_time))} - ${formatTime(new Date(m.end_time))} [${m.subject}]`));
       
+      // For debugging purposes, log the exact values in ISO format
+      console.log("Meetings in raw database format:", 
+        datesMeetings.map(m => ({ 
+          start: new Date(m.start_time).toISOString(), 
+          end: new Date(m.end_time).toISOString(),
+          subject: m.subject
+        })));
+      
       // If calendar is connected to Google (has refresh token), use Google Calendar API
       if (config.googleRefreshToken) {
         try {
@@ -1207,24 +1215,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const endTime = new Date(meeting.end_time);
         
         console.log(`Processing meeting: ${formatTime(startTime)} - ${formatTime(endTime)} [${meeting.subject}]`);
+        console.log(`Meeting raw times - Start: ${startTime.toISOString()}, End: ${endTime.toISOString()}`);
         
-        // Find all slots that overlap with this meeting and mark them as unavailable
-        // Create a slot iterator that starts at the meeting start time and continues until end time
-        let currentSlot = new Date(startTime);
-        const occupiedSlots = [];
-        
-        while (currentSlot < endTime) {
-          const timeKey = formatTimeSlot(currentSlot);
-          if (timeSlots.has(timeKey)) {
-            timeSlots.get(timeKey).available = false;
-            occupiedSlots.push(formatTime(currentSlot));
-          }
+        // Create a more robust approach to check overlap with all time slots
+        Array.from(timeSlots.entries()).forEach(([timeKey, slot]) => {
+          // Parse the time slot's hour and minute from the key (HH:MM format)
+          const [slotHour, slotMinute] = timeKey.split(':').map(Number);
           
-          // Move to the next slot
-          currentSlot = new Date(currentSlot.getTime() + slotDuration * 60000);
-        }
-        
-        console.log(`Marked as occupied: ${occupiedSlots.join(', ')}`);
+          // Create a date object for this slot
+          const slotDate = new Date(normalizedDate);
+          slotDate.setHours(slotHour, slotMinute, 0, 0);
+          
+          // Calculate the end of this time slot based on slot duration
+          const slotEndDate = new Date(slotDate.getTime() + slotDuration * 60 * 1000);
+          
+          // Check if this slot overlaps with the meeting
+          // A slot overlaps if it starts before the meeting ends AND ends after the meeting starts
+          const overlaps = slotDate < endTime && slotEndDate > startTime;
+          
+          if (overlaps) {
+            slot.available = false;
+            console.log(`Marking slot ${timeKey} (${formatTime(slotDate)}) as unavailable due to overlap with meeting`);
+          }
+        });
       });
       
       // Convert the map values to an array

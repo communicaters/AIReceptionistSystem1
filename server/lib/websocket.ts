@@ -463,24 +463,29 @@ async function handleMeetingScheduling(message: string, userId: number, sessionI
     const endTime = new Date(startTime.getTime() + duration * 60000);
     
     // Check if the time slot is available
-    const date = new Date(meetingData.date);
-    const formattedDate = date.toISOString().split('T')[0];
+    const formattedDate = meetingData.date; // Already in YYYY-MM-DD format
     
-    // Query to check availability at this specific time
+    // Query to check for overlapping meetings
     const checkQuery = `
       SELECT COUNT(*) as count FROM meeting_logs 
       WHERE user_id = $1 
       AND start_time::date = $2::date
-      AND $3::time BETWEEN start_time::time AND end_time::time
+      AND (
+        ($3::timestamp, $4::timestamp) OVERLAPS (start_time, end_time)
+      )
     `;
     
     const { rows } = await pool.query(checkQuery, [
       userId, 
-      formattedDate, 
-      meetingData.time + ':00'
+      formattedDate,
+      startTime.toISOString(),
+      endTime.toISOString()
     ]);
     
+    console.log(`Checking for meetings that overlap with ${startTime.toISOString()} to ${endTime.toISOString()}`);
     const isSlotTaken = parseInt(rows[0].count) > 0;
+    console.log(`Time slot availability check: ${isSlotTaken ? 'Slot is taken' : 'Slot is available'}`);
+    
     if (isSlotTaken) {
       return {
         success: false,
