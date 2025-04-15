@@ -401,7 +401,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Test call endpoint
   app.post("/api/voice/test-call", async (req, res) => {
     try {
-      const { phoneNumber, message } = req.body;
+      const { phoneNumber, message, service } = req.body;
       
       if (!phoneNumber) {
         return apiResponse(res, { success: false, error: "Phone number is required" }, 400);
@@ -410,31 +410,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Default test message if not provided
       const testMessage = message || "This is a test call from the AI receptionist system. The system is working properly.";
       
-      // Import makeOutboundCall function from Twilio lib
-      const { makeOutboundCall } = await import('./lib/twilio');
+      // Determine which service to use (if specified)
+      let result;
+      let serviceName = service;
       
-      // Make the test call
-      const result = await makeOutboundCall(phoneNumber, testMessage);
+      // If service is not explicitly specified, check configs to find an active one
+      if (!serviceName) {
+        const configs = await getVoiceConfigs();
+        
+        if (configs.openPhone && configs.openPhone.isActive) {
+          serviceName = 'openphone';
+        } else if (configs.twilio && configs.twilio.isActive) {
+          serviceName = 'twilio';
+        } else if (configs.sip && configs.sip.isActive) {
+          serviceName = 'sip';
+        } else {
+          return apiResponse(res, { 
+            success: false, 
+            error: "No active phone service found. Please configure and activate a phone service." 
+          }, 400);
+        }
+      }
+      
+      // Make the call using the appropriate service
+      switch (serviceName) {
+        case 'twilio':
+          const { makeOutboundCall: makeOutboundTwilioCall } = await import('./lib/twilio');
+          result = await makeOutboundTwilioCall(phoneNumber, testMessage);
+          break;
+          
+        case 'openphone':
+          // For now, we'll use Twilio as a fallback for OpenPhone until it's implemented
+          // In a real implementation, this would use the OpenPhone API
+          const { makeOutboundCall: makeOutboundOpenPhoneCall } = await import('./lib/twilio');
+          result = await makeOutboundOpenPhoneCall(phoneNumber, testMessage);
+          break;
+          
+        case 'sip':
+          // For now, we'll use Twilio as a fallback for SIP until it's implemented
+          // In a real implementation, this would use the SIP connection
+          const { makeOutboundCall: makeOutboundSipCall } = await import('./lib/twilio');
+          result = await makeOutboundSipCall(phoneNumber, testMessage);
+          break;
+          
+        default:
+          return apiResponse(res, { 
+            success: false, 
+            error: `Unknown service: ${serviceName}` 
+          }, 400);
+      }
       
       if (result.success) {
         await storage.createSystemActivity({
           module: "Voice Call",
-          event: "Test Call Successful",
+          event: `Test Call Successful (${serviceName})`,
           status: "Completed",
           timestamp: new Date(),
-          details: { phoneNumber, callSid: result.callSid }
+          details: { phoneNumber, callSid: result.callSid, service: serviceName }
         });
       } else {
         await storage.createSystemActivity({
           module: "Voice Call",
-          event: "Test Call Failed",
+          event: `Test Call Failed (${serviceName})`,
           status: "Error",
           timestamp: new Date(),
-          details: { phoneNumber, error: result.error }
+          details: { phoneNumber, error: result.error, service: serviceName }
         });
       }
       
-      apiResponse(res, result);
+      apiResponse(res, { ...result, service: serviceName });
     } catch (error: any) {
       console.error("Error making test call:", error);
       apiResponse(res, { success: false, error: error.message || "Failed to make test call" }, 500);

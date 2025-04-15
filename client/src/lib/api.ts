@@ -203,11 +203,13 @@ export const saveOpenPhoneConfig = async (config: Partial<OpenPhoneConfig>): Pro
 
 export const makeTestCall = async (
   phoneNumber: string, 
-  message?: string
+  message?: string,
+  service?: 'twilio' | 'sip' | 'openphone'
 ): Promise<{ success: boolean; error?: string; callSid?: string }> => {
   const response = await apiRequest("POST", "/api/voice/test-call", { 
     phoneNumber, 
-    message 
+    message,
+    service
   });
   return response.json();
 };
