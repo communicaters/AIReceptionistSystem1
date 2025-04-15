@@ -38,7 +38,10 @@ export class ZenderService {
   async initialize(): Promise<boolean> {
     try {
       // Get the WhatsApp configuration for this user
-      this.config = await storage.getWhatsappConfigByUserId(this.userId);
+      const config = await storage.getWhatsappConfigByUserId(this.userId);
+      
+      // Update to handle undefined vs null correctly to fix LSP error
+      this.config = config || null;
       
       if (!this.config || !this.config.apiSecret || !this.config.accountId) {
         console.error('Zender configuration not found or incomplete');

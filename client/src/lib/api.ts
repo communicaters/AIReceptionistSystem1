@@ -529,6 +529,23 @@ export const getWhatsappLogs = async (
   return response.json();
 };
 
+// WhatsApp config interface
+export interface WhatsappConfig {
+  id: number;
+  userId: number;
+  // Meta/Facebook API fields
+  phoneNumberId: string | null;
+  accessToken: string | null;
+  businessAccountId: string | null;
+  webhookVerifyToken: string | null;
+  // Zender specific fields
+  apiSecret: string | null;
+  accountId: string | null;
+  zenderUrl: string | null;
+  provider: string | null;
+  isActive: boolean;
+}
+
 export const getWhatsappConfig = async (): Promise<WhatsappConfig> => {
   const response = await apiRequest("GET", "/api/whatsapp/config");
   return response.json();
@@ -541,7 +558,7 @@ export const saveWhatsappConfig = async (
   return response.json();
 };
 
-export const testWhatsappConnection = async (): Promise<{success: boolean, message: string}> => {
+export const testWhatsappConnection = async (): Promise<{success: boolean, message: string, provider?: string}> => {
   const response = await apiRequest("POST", "/api/whatsapp/test");
   return response.json();
 };
