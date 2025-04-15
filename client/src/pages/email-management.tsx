@@ -542,6 +542,12 @@ const ScheduledEmailForm = ({
   onSave: (email: Partial<ScheduledEmail>) => void;
   isPending: boolean;
 }) => {
+  // Get the email configs to determine from_email
+  const { data: emailConfigs } = useQuery({
+    queryKey: ["/api/email/configs"],
+    queryFn: getEmailConfigs
+  });
+  
   const [to, setTo] = useState(scheduledEmail?.to || '');
   const [subject, setSubject] = useState(scheduledEmail?.subject || '');
   const [body, setBody] = useState(scheduledEmail?.body || '');

@@ -1200,7 +1200,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/email/scheduled", async (req, res) => {
     try {
       const userId = 1; // For demo, use fixed user ID
-      const { to, subject, body, scheduledTime, service, templateId } = req.body;
+      const { to, subject, body, scheduledTime, service, templateId, fromName } = req.body;
       
       if (!to || !scheduledTime || (!body && !templateId) || !service) {
         return apiResponse(res, { error: "Missing required fields" }, 400);
@@ -1220,16 +1220,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
         emailBody = body || template.body;
       }
       
+      // Get the appropriate 'from' email address based on the selected service
+      let fromEmail = "";
+      if (service === "sendgrid") {
+        const sendgridConfig = await storage.getSendgridConfig(userId);
+        if (sendgridConfig) {
+          fromEmail = sendgridConfig.fromEmail;
+        }
+      } else if (service === "smtp") {
+        const smtpConfig = await storage.getSmtpConfig(userId);
+        if (smtpConfig) {
+          fromEmail = smtpConfig.fromEmail;
+        }
+      } else if (service === "mailgun") {
+        const mailgunConfig = await storage.getMailgunConfig(userId);
+        if (mailgunConfig) {
+          fromEmail = mailgunConfig.fromEmail;
+        }
+      }
+      
+      if (!fromEmail) {
+        return apiResponse(res, { error: "No 'from' email configured for the selected service" }, 400);
+      }
+      
       const newEmail = await storage.createScheduledEmail({
         userId,
         to,
+        from: fromEmail,
+        fromName: fromName || null,
         subject: emailSubject,
         body: emailBody,
         scheduledTime: new Date(scheduledTime),
         service,
         status: "pending",
         createdAt: new Date(),
-        templateId: templateId ? parseInt(templateId) : null
+        templateId: templateId ? parseInt(templateId) : null,
+        isRecurring: req.body.isRecurring || false,
+        recurringRule: req.body.recurringRule || null
       });
       
       apiResponse(res, newEmail, 201);
@@ -1243,6 +1270,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const emailId = parseInt(req.params.id);
       const email = await storage.getScheduledEmail(emailId);
+      const userId = 1; // For demo, use fixed user ID
       
       if (!email) {
         return apiResponse(res, { error: "Scheduled email not found" }, 404);
@@ -1253,7 +1281,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return apiResponse(res, { error: "Cannot update an email that has already been sent" }, 400);
       }
       
-      const updatedEmail = await storage.updateScheduledEmail(emailId, req.body);
+      const updateData = { ...req.body };
+      
+      // If service is changing, we need to update the from email
+      if (updateData.service && updateData.service !== email.service) {
+        // Get the appropriate 'from' email address based on the selected service
+        let fromEmail = "";
+        if (updateData.service === "sendgrid") {
+          const sendgridConfig = await storage.getSendgridConfig(userId);
+          if (sendgridConfig) {
+            fromEmail = sendgridConfig.fromEmail;
+          }
+        } else if (updateData.service === "smtp") {
+          const smtpConfig = await storage.getSmtpConfig(userId);
+          if (smtpConfig) {
+            fromEmail = smtpConfig.fromEmail;
+          }
+        } else if (updateData.service === "mailgun") {
+          const mailgunConfig = await storage.getMailgunConfig(userId);
+          if (mailgunConfig) {
+            fromEmail = mailgunConfig.fromEmail;
+          }
+        }
+        
+        if (fromEmail) {
+          updateData.from = fromEmail;
+        }
+      }
+      
+      const updatedEmail = await storage.updateScheduledEmail(emailId, updateData);
       
       apiResponse(res, updatedEmail);
     } catch (error) {
