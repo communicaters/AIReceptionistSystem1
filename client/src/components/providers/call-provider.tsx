@@ -25,6 +25,7 @@ export const CallProvider: React.FC<CallProviderProps> = ({ children }) => {
         phoneNumber={callState.callState.phoneNumber}
         callSid={callState.callState.callSid}
         service={callState.callState.service}
+        duration={callState.duration}
         onHangup={callState.hangupCall}
         onMute={callState.toggleMute}
         onHold={callState.toggleHold}

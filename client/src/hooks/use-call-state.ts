@@ -16,6 +16,7 @@ interface UseCallStateReturn {
   callState: CallState;
   isCallActive: boolean;
   showCallUI: boolean;
+  duration: number;
   initiateCall: (phoneNumber: string, message?: string, service?: 'twilio' | 'sip' | 'openphone' | undefined) => Promise<void>;
   hangupCall: () => void;
   toggleMute: (muted: boolean) => void;
@@ -192,6 +193,7 @@ export function useCallState(): UseCallStateReturn {
     callState,
     isCallActive,
     showCallUI,
+    duration,
     initiateCall,
     hangupCall,
     toggleMute,

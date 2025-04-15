@@ -19,6 +19,7 @@ export interface CallOverlayProps {
   phoneNumber: string;
   callSid?: string;
   service?: string;
+  duration: number;
   onHangup: () => void;
   onMute?: (muted: boolean) => void;
   onHold?: (held: boolean) => void;
@@ -35,6 +36,7 @@ const CallOverlay: React.FC<CallOverlayProps> = ({
   phoneNumber,
   callSid,
   service,
+  duration,
   onHangup,
   onMute,
   onHold,
@@ -44,14 +46,10 @@ const CallOverlay: React.FC<CallOverlayProps> = ({
 }) => {
   // State management
   const [callState, setCallState] = useState<CallState>('dialing');
-  const [duration, setDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isOnHold, setIsOnHold] = useState(false);
   const [isSpeakerOn, setIsSpeakerOn] = useState(false);
   const [isRecording, setIsRecording] = useState(true);
-  
-  // Timer interval reference
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Format number for display
   const formatPhoneNumber = (number: string) => {
@@ -109,7 +107,6 @@ const CallOverlay: React.FC<CallOverlayProps> = ({
   const handleRedial = () => {
     if (onRedial) {
       setCallState('dialing');
-      setDuration(0);
       onRedial();
     }
   };
@@ -172,35 +169,10 @@ const CallOverlay: React.FC<CallOverlayProps> = ({
     }
   }, [isVisible, callState, phoneNumber, callSid, service]);
 
-  // Effect to manage call duration timer
+  // Handle any side effects when call state changes
   useEffect(() => {
-    if (callState === 'connected') {
-      timerRef.current = setInterval(() => {
-        setDuration(prev => prev + 1);
-      }, 1000);
-    } else {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-    }
-    
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-    };
+    // This effect can be used to handle any side effects when call state changes
   }, [callState]);
-
-  // Effect to clean up on unmount
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-    };
-  }, []);
 
   // Don't render anything if not visible
   if (!isVisible) return null;
