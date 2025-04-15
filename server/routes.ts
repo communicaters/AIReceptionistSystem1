@@ -1066,6 +1066,105 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Send email from the composer
+  app.post("/api/email/send", async (req, res) => {
+    try {
+      const userId = 1; // For demo, use fixed user ID
+      const { to, subject, body, templateId, htmlBody, service } = req.body;
+      
+      if (!to || !subject || (!body && !htmlBody)) {
+        return apiResponse(res, { 
+          success: false, 
+          message: "To address, subject, and body are required" 
+        }, 400);
+      }
+      
+      // Get the selected email service config or default to the first available
+      let serviceToUse = service || 'smtp';
+      let fromEmail = '';
+      let fromName = '';
+      
+      // Get the appropriate 'from' email address based on the selected service
+      if (serviceToUse === 'sendgrid') {
+        const sendgridConfig = await storage.getSendgridConfigByUserId(userId);
+        if (sendgridConfig) {
+          fromEmail = sendgridConfig.fromEmail;
+          fromName = sendgridConfig.fromName;
+        } else {
+          serviceToUse = 'smtp'; // Fall back to SMTP if SendGrid isn't configured
+        }
+      }
+      
+      if (serviceToUse === 'smtp') {
+        const smtpConfig = await storage.getSmtpConfigByUserId(userId);
+        if (smtpConfig) {
+          fromEmail = smtpConfig.fromEmail;
+        } else {
+          serviceToUse = 'mailgun'; // Fall back to Mailgun if SMTP isn't configured
+        }
+      }
+      
+      if (serviceToUse === 'mailgun') {
+        const mailgunConfig = await storage.getMailgunConfigByUserId(userId);
+        if (mailgunConfig) {
+          fromEmail = mailgunConfig.fromEmail;
+          fromName = mailgunConfig.fromName || '';
+        }
+      }
+      
+      if (!fromEmail) {
+        return apiResponse(res, { 
+          success: false, 
+          message: "No email service is properly configured" 
+        }, 400);
+      }
+      
+      // Actually send the email using the appropriate service
+      let success = false;
+      let message = '';
+      
+      try {
+        if (serviceToUse === 'sendgrid') {
+          const result = await sendgridService.sendEmail(fromEmail, to, subject, body, fromName);
+          success = result.success;
+          message = result.message;
+        } else if (serviceToUse === 'smtp') {
+          const result = await smtpService.sendEmail(fromEmail, to, subject, body);
+          success = result.success;
+          message = result.message;
+        } else if (serviceToUse === 'mailgun') {
+          const result = await mailgunService.sendEmail(fromEmail, to, subject, body, fromName);
+          success = result.success;
+          message = result.message;
+        }
+      } catch (sendError) {
+        console.error("Error sending email via service:", sendError);
+        success = false;
+        message = `Failed to send email: ${sendError.message}`;
+      }
+      
+      // Log the email regardless of whether it was sent successfully
+      await storage.createEmailLog({
+        userId,
+        from: fromEmail,
+        to,
+        subject,
+        body,
+        status: success ? "sent" : "failed",
+        timestamp: new Date(),
+        service: serviceToUse
+      });
+      
+      apiResponse(res, { success, message });
+    } catch (error) {
+      console.error("Error sending email:", error);
+      apiResponse(res, { 
+        success: false, 
+        message: `Failed to send email: ${error.message}` 
+      }, 500);
+    }
+  });
+  
   // Email Templates
   app.get("/api/email/templates", async (req, res) => {
     try {
