@@ -734,6 +734,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Sync emails from IMAP server
+  app.post("/api/email/sync", async (req, res) => {
+    try {
+      const userId = 1; // For demo, use fixed user ID
+      
+      // Import the IMAP functions
+      const { syncEmails, verifyImapConnection } = await import('./lib/imap');
+      
+      // First verify the connection
+      const isConnected = await verifyImapConnection(userId);
+      
+      if (!isConnected) {
+        return apiResponse(res, { 
+          success: false, 
+          message: "Cannot connect to IMAP server. Please check your email configuration." 
+        }, 400);
+      }
+      
+      // Perform the sync
+      const emailCount = await syncEmails(userId);
+      
+      await storage.createSystemActivity({
+        module: "Email",
+        event: "EmailSync",
+        status: "completed",
+        timestamp: new Date(),
+        details: { userId, count: emailCount }
+      });
+      
+      apiResponse(res, { 
+        success: true, 
+        message: `Synced ${emailCount} new emails`, 
+        count: emailCount 
+      });
+    } catch (error) {
+      console.error("Error syncing emails:", error);
+      
+      await storage.createSystemActivity({
+        module: "Email",
+        event: "EmailSync",
+        status: "failed",
+        timestamp: new Date(),
+        details: { error: (error as Error).message }
+      });
+      
+      apiResponse(res, { 
+        success: false, 
+        message: `Failed to sync emails: ${(error as Error).message}` 
+      }, 500);
+    }
+  });
+  
+  // Verify IMAP connection
+  app.get("/api/email/imap-status", async (req, res) => {
+    try {
+      const userId = 1; // For demo, use fixed user ID
+      
+      // Import the IMAP verification function
+      const { verifyImapConnection } = await import('./lib/imap');
+      
+      // Check connection
+      const isConnected = await verifyImapConnection(userId);
+      
+      apiResponse(res, { 
+        success: true, 
+        connected: isConnected,
+        message: isConnected ? "Successfully connected to IMAP server" : "Not connected to IMAP server"
+      });
+    } catch (error) {
+      console.error("Error checking IMAP connection:", error);
+      apiResponse(res, { 
+        success: false, 
+        connected: false,
+        message: `Failed to check IMAP connection: ${(error as Error).message}` 
+      }, 500);
+    }
+  });
+  
   app.get("/api/email/configs", async (req, res) => {
     try {
       const userId = 1; // For demo, use fixed user ID

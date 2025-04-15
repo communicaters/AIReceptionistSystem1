@@ -129,17 +129,45 @@ export async function fetchEmails(userId: number, folder: string = 'INBOX', limi
                     simpleParser(buffer).then((parsed) => {
                       // Handle different address formats
                       if (parsed.from) {
-                        email.from = typeof parsed.from.text === 'string' 
-                          ? parsed.from.text 
-                          : parsed.from.value?.[0]?.address || '';
+                        // Type guard for array vs. single object
+                        if (Array.isArray(parsed.from)) {
+                          // It's an array of address objects
+                          email.from = parsed.from.map((addr: any) => addr.address).join(', ');
+                        } else if (typeof parsed.from === 'object') {
+                          // It's a single address object or wrapper
+                          if (typeof parsed.from.text === 'string') {
+                            email.from = parsed.from.text;
+                          } else if (Array.isArray(parsed.from.value)) {
+                            email.from = parsed.from.value.map((addr: any) => addr.address).join(', ');
+                          } else if (parsed.from.value && typeof parsed.from.value === 'object') {
+                            email.from = parsed.from.value.address || '';
+                          } else {
+                            email.from = '';
+                          }
+                        } else {
+                          email.from = '';
+                        }
                       }
                       
                       if (parsed.to) {
-                        email.to = typeof parsed.to.text === 'string'
-                          ? parsed.to.text
-                          : Array.isArray(parsed.to.value) 
-                            ? parsed.to.value.map(addr => addr.address).join(', ')
-                            : '';
+                        // Type guard for array vs. single object
+                        if (Array.isArray(parsed.to)) {
+                          // It's an array of address objects
+                          email.to = parsed.to.map((addr: any) => addr.address).join(', ');
+                        } else if (typeof parsed.to === 'object') {
+                          // It's a single address object or wrapper
+                          if (typeof parsed.to.text === 'string') {
+                            email.to = parsed.to.text;
+                          } else if (Array.isArray(parsed.to.value)) {
+                            email.to = parsed.to.value.map((addr: any) => addr.address).join(', ');
+                          } else if (parsed.to.value && typeof parsed.to.value === 'object') {
+                            email.to = parsed.to.value.address || '';
+                          } else {
+                            email.to = '';
+                          }
+                        } else {
+                          email.to = '';
+                        }
                       }
                       
                       email.subject = parsed.subject || '';
@@ -287,7 +315,7 @@ export async function verifyImapConnection(userId: number): Promise<boolean> {
         resolve(true);
       });
       
-      imapClient.once('error', () => {
+      imapClient.once('error', (err: Error) => {
         resolve(false);
       });
       
