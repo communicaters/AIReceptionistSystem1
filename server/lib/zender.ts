@@ -175,9 +175,18 @@ export class ZenderService {
         console.log('Zender API response:', response.data);
         
         // Check for success
-        if (response.data && response.data.status === 'success') {
-          // Get message ID from response
-          const messageId = response.data.data?.id || response.data.data?.message_id;
+        // Based on the logs, even with status 200, Zender might return a queued or success message
+        // Examples: "WhatsApp chat has been queued for sending!"
+        if (response.data && 
+            (response.data.status === 'success' || 
+             response.data.status === 200 || 
+             (response.data.message && response.data.message.includes('queued')))) {
+          
+          // Get message ID from response - paths may vary depending on response format
+          const messageId = response.data.data?.id || 
+                           response.data.data?.message_id || 
+                           response.data.data?.messageId;
+                           
           console.log(`Message sent successfully, ID: ${messageId}`);
           
           // Update the message log with the external ID and 'sent' status
@@ -193,6 +202,31 @@ export class ZenderService {
         } else {
           // The API returned a response but it wasn't successful
           const errorMsg = response.data?.message || 'Unknown error from Zender API';
+          
+          // Don't mark as error if it contains positive language like "queued" or "sent"
+          if (errorMsg.toLowerCase().includes('queued') || 
+              errorMsg.toLowerCase().includes('sent') ||
+              errorMsg.toLowerCase().includes('success')) {
+            
+            console.log(`Message appears successful despite non-standard response: ${errorMsg}`);
+            
+            // Try to extract any message ID
+            const messageId = response.data.data?.id || 
+                             response.data.data?.message_id || 
+                             response.data.data?.messageId;
+            
+            // Update as sent with ID if available
+            await storage.updateWhatsappLog(loggedMessage.id, {
+              status: 'sent',
+              externalId: messageId || null
+            });
+            
+            return {
+              success: true,
+              messageId: messageId
+            };
+          }
+          
           console.error(`Zender API returned error: ${errorMsg}`);
           
           // Update message status to failed

@@ -2273,20 +2273,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const result = await zenderService.sendMessage(messageParams);
           
           if (result.success) {
+            console.log(`Message sent successfully via Zender, ID: ${result.messageId}`);
+            
             // Get the logged message ID from the database to return to client
-            const recentMessage = await storage.getMostRecentWhatsappLogByExternalId(result.messageId);
+            // Note: if service reports success but no message ID is returned,
+            // we'll still return success and use the initial log
+            const recentMessage = result.messageId 
+              ? await storage.getMostRecentWhatsappLogByExternalId(result.messageId) 
+              : initialLog;
             
             apiResponse(res, { 
               success: true,
-              messageId: result.messageId,
-              logId: recentMessage?.id || null,
+              messageId: result.messageId || `local_${initialLog.id}`,
+              logId: recentMessage?.id || initialLog.id,
               provider: 'zender'
             });
           } else {
-            apiResponse(res, { 
-              success: false, 
-              error: result.error || "Failed to send message via Zender"
-            }, 500);
+            console.error(`Failed to send message via Zender: ${result.error}`);
+            
+            // Don't consider queue messages as errors - the message is marked as 'sent' in the database
+            if (result.error && (
+                result.error.includes('queued') || 
+                result.error.includes('success')
+            )) {
+              apiResponse(res, { 
+                success: true,
+                messageId: `queued_${initialLog.id}`,
+                logId: initialLog.id,
+                provider: 'zender',
+                status: 'queued'
+              });
+            } else {
+              apiResponse(res, { 
+                success: false, 
+                error: result.error || "Failed to send message via Zender"
+              }, 500);
+            }
           }
           
           return;
