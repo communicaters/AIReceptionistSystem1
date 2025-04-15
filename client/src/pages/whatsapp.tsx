@@ -746,7 +746,7 @@ const WhatsApp = () => {
           </Card>
         </TabsContent>
         <TabsContent value="logs">
-          <Card>
+          <Card className="flex flex-col h-[600px] overflow-hidden">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <div className="space-y-1">
                 <CardTitle>Message Logs</CardTitle>
@@ -754,66 +754,94 @@ const WhatsApp = () => {
                   View message history and conversation logs
                 </CardDescription>
               </div>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => refetchLogs()}
-              >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh
-              </Button>
+              <div className="flex space-x-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setSelectedNumber(null)}
+                  disabled={!selectedNumber}
+                >
+                  View All Conversations
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => refetchLogs()}
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh
+                </Button>
+              </div>
             </CardHeader>
-            <CardContent>
-              {isLoadingLogs ? (
-                <Skeleton className="h-64 w-full" />
-              ) : logsError ? (
-                <div className="bg-red-50 p-4 rounded-md text-red-600">
-                  Failed to load WhatsApp message logs
-                </div>
-              ) : !whatsappLogs?.length ? (
-                <div className="text-center py-8 text-neutral-500">
-                  No WhatsApp messages found
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {whatsappLogs.map((log) => (
-                    <div key={log.id} className="border rounded-md p-4">
-                      <div className="flex justify-between">
-                        <div className="flex items-center">
-                          <span className={`px-2 py-1 text-xs rounded-full ${
-                            log.direction === 'inbound' 
-                              ? 'bg-blue-100 text-blue-800' 
-                              : 'bg-green-100 text-green-800'
-                          }`}>
-                            {log.direction === 'inbound' ? 'Received' : 'Sent'}
-                          </span>
-                          <span className="ml-2 text-sm font-medium">{log.phoneNumber}</span>
+            
+            {!selectedNumber ? (
+              // Show conversation list
+              <CardContent className="flex-1 overflow-y-auto">
+                {isLoadingLogs ? (
+                  <Skeleton className="h-64 w-full" />
+                ) : logsError ? (
+                  <div className="bg-red-50 p-4 rounded-md text-red-600">
+                    Failed to load WhatsApp message logs
+                  </div>
+                ) : !whatsappLogs?.length ? (
+                  <div className="text-center py-8 text-neutral-500">
+                    No WhatsApp conversations found
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {/* Group messages by phone number and show the latest for each */}
+                    {getUniqueConversations(whatsappLogs).map((conversation) => (
+                      <div 
+                        key={conversation.phoneNumber} 
+                        className="flex items-center justify-between p-3 rounded-md hover:bg-accent/50 cursor-pointer"
+                        onClick={() => handleViewConversation(conversation.phoneNumber)}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <Avatar className="h-10 w-10">
+                            <AvatarFallback className="bg-primary/10">
+                              {conversation.phoneNumber.substring(0, 2)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-medium">{conversation.phoneNumber}</p>
+                            <p className="text-sm text-muted-foreground truncate max-w-[240px]">
+                              {conversation.lastMessage}
+                            </p>
+                          </div>
                         </div>
-                        <span className="text-xs text-neutral-500">
-                          {formatDistanceToNow(new Date(log.timestamp))} ago
+                        <span className="text-xs text-muted-foreground">
+                          {formatDistanceToNow(new Date(conversation.timestamp))} ago
                         </span>
                       </div>
-                      <p className="mt-2 text-sm">{log.message}</p>
-                      {log.mediaUrl && (
-                        <div className="mt-2">
-                          <Button variant="outline" size="sm">View Media</Button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-            <CardFooter>
-              <Button 
-                variant="outline" 
-                className="w-full"
-                onClick={() => refetchLogs()}
-              >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Load More
-              </Button>
-            </CardFooter>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            ) : (
+              // Show individual conversation
+              <div className="flex-1 overflow-hidden">
+                <WhatsAppChat 
+                  phoneNumber={selectedNumber}
+                  messages={filterMessagesByPhoneNumber(whatsappLogs || [], selectedNumber)}
+                  isLoading={isLoadingLogs}
+                  onBack={() => setSelectedNumber(null)}
+                  onRefresh={refetchLogs}
+                />
+              </div>
+            )}
+            
+            {!selectedNumber && (
+              <CardFooter>
+                <Button 
+                  variant="outline" 
+                  className="w-full"
+                  onClick={() => refetchLogs()}
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Load More
+                </Button>
+              </CardFooter>
+            )}
           </Card>
         </TabsContent>
       </Tabs>
