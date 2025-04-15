@@ -19,10 +19,53 @@ export interface SystemActivity {
   details: Record<string, any> | null;
 }
 
+export interface TwilioConfig {
+  id: number;
+  userId: number;
+  accountSid: string;
+  authToken: string;
+  phoneNumber: string;
+  callbackUrl: string | null;
+  isActive: boolean;
+  connectionStatus?: 'connected' | 'disconnected' | 'pending';
+}
+
+export interface SipConfig {
+  id: number;
+  userId: number;
+  username: string;
+  password: string;
+  serverDomain: string;
+  outboundProxy: string | null;
+  port: number;
+  transportProtocol: 'UDP' | 'TCP' | 'TLS';
+  registrationExpiryTime: number;
+  callerId: string;
+  stunServer: string | null;
+  dtmfMode: 'RFC2833' | 'SIP INFO' | 'IN-BAND';
+  audioCodecs: string[]; // e.g., ['G.711', 'G.722', 'Opus']
+  voicemailUri: string | null;
+  sipUri: string | null;
+  keepAliveInterval: number;
+  tlsCertPath: string | null;
+  isActive: boolean;
+  connectionStatus?: 'connected' | 'disconnected' | 'pending';
+}
+
+export interface OpenPhoneConfig {
+  id: number;
+  userId: number;
+  apiKey: string;
+  teamId: string;
+  callbackUrl: string | null;
+  isActive: boolean;
+  connectionStatus?: 'connected' | 'disconnected' | 'pending';
+}
+
 export interface VoiceConfig {
-  twilio: any;
-  sip: any;
-  openPhone: any;
+  twilio: TwilioConfig | null;
+  sip: SipConfig | null;
+  openPhone: OpenPhoneConfig | null;
 }
 
 export interface EmailConfig {

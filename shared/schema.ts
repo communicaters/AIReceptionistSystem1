@@ -47,10 +47,22 @@ export const usersRelations = relations(users, ({ many }) => ({
 export const sipConfig = pgTable("sip_phone_settings", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
-  serverUrl: text("server_url").notNull(),
   username: text("username").notNull(),
   password: text("password").notNull(),
-  extension: text("extension"),
+  serverDomain: text("server_domain").notNull(),
+  outboundProxy: text("outbound_proxy"),
+  port: integer("port").notNull().default(5060),
+  transportProtocol: text("transport_protocol").notNull().default("UDP"),
+  registrationExpiryTime: integer("registration_expiry_time").notNull().default(3600),
+  callerId: text("caller_id").notNull(),
+  stunServer: text("stun_server"),
+  dtmfMode: text("dtmf_mode").notNull().default("RFC2833"),
+  audioCodecs: text("audio_codecs").array().default(['G.711', 'G.722', 'Opus']),
+  voicemailUri: text("voicemail_uri"),
+  sipUri: text("sip_uri"),
+  keepAliveInterval: integer("keep_alive_interval").notNull().default(30),
+  tlsCertPath: text("tls_cert_path"),
+  callbackUrl: text("callback_url"),
   isActive: boolean("is_active").notNull().default(true),
 });
 
@@ -71,6 +83,7 @@ export const twilioConfig = pgTable("twilio_config", {
   accountSid: text("account_sid").notNull(),
   authToken: text("auth_token").notNull(),
   phoneNumber: text("phone_number").notNull(),
+  callbackUrl: text("callback_url"),
   isActive: boolean("is_active").notNull().default(true),
 });
 
@@ -89,7 +102,9 @@ export const openPhoneConfig = pgTable("openphone_config", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   apiKey: text("api_key").notNull(),
+  teamId: text("team_id").notNull(),
   phoneNumber: text("phone_number").notNull(),
+  callbackUrl: text("callback_url"),
   isActive: boolean("is_active").notNull().default(true),
 });
 
