@@ -48,6 +48,7 @@ export interface SipConfig {
   sipUri: string | null;
   keepAliveInterval: number;
   tlsCertPath: string | null;
+  callbackUrl: string | null;
   isActive: boolean;
   connectionStatus?: 'connected' | 'disconnected' | 'pending';
 }
@@ -57,6 +58,7 @@ export interface OpenPhoneConfig {
   userId: number;
   apiKey: string;
   teamId: string;
+  phoneNumber: string;
   callbackUrl: string | null;
   isActive: boolean;
   connectionStatus?: 'connected' | 'disconnected' | 'pending';
@@ -205,7 +207,7 @@ export const makeTestCall = async (
   phoneNumber: string, 
   message?: string,
   service?: 'twilio' | 'sip' | 'openphone'
-): Promise<{ success: boolean; error?: string; callSid?: string }> => {
+): Promise<{ success: boolean; error?: string; callSid?: string; service?: string }> => {
   const response = await apiRequest("POST", "/api/voice/test-call", { 
     phoneNumber, 
     message,
