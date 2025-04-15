@@ -133,7 +133,9 @@ export function WhatsAppChat({
       message: newMessage,
       mediaUrl: null,
       direction: 'outbound',
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      status: 'pending', // Add pending status for outgoing messages
+      externalId: null
     };
     
     // Add the optimistic message to local state
@@ -210,10 +212,12 @@ export function WhatsAppChat({
               <div className="flex justify-end items-center mt-1">
                 {msg.direction === 'outbound' && (
                   <span className="mr-1 text-[10px]">
+                    {msg.status === 'pending' && <span className="text-gray-400">⏱️</span>}
                     {msg.status === 'sent' && <span className="text-green-500">✓</span>}
                     {msg.status === 'delivered' && <span className="text-green-500">✓✓</span>}
                     {msg.status === 'read' && <span className="text-blue-500">✓✓</span>}
                     {msg.status === 'failed' && <span className="text-red-500">⚠️</span>}
+                    {!msg.status && <span className="text-gray-400">⏱️</span>}
                   </span>
                 )}
                 <p className="text-[10px] text-muted-foreground">

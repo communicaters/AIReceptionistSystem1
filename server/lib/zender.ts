@@ -236,17 +236,8 @@ export class ZenderService {
     } catch (error: any) {
       console.error('Unexpected error sending WhatsApp message via Zender:', error);
       
-      // Try to update message status to failed if loggedMessage exists
-      try {
-        if (loggedMessage && loggedMessage.id) {
-          await storage.updateWhatsappLog(loggedMessage.id, {
-            status: 'failed'
-          });
-          console.log(`Updated message ${loggedMessage.id} status to failed due to error`);
-        }
-      } catch (updateError) {
-        console.error('Failed to update message status after error:', updateError);
-      }
+      // We don't have access to loggedMessage here as the error happened before it was assigned
+      // We should log the error but can't easily update the message status in this case
       
       return {
         success: false,
