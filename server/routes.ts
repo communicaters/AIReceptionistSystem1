@@ -9,6 +9,7 @@ import { initSendgrid } from "./lib/sendgrid";
 import { initSmtp } from "./lib/smtp";
 import { initMailgun } from "./lib/mailgun";
 import { initEmailServices, sendTestEmail, processIncomingEmail } from "./lib/email-controller";
+import nodemailer from "nodemailer";
 import { initGoogleCalendar, createOAuth2Client, createEvent, getAvailableTimeSlots } from "./lib/google-calendar";
 import { initElevenLabs } from "./lib/elevenlabs";
 import { initWhisperAPI } from "./lib/whisper";
@@ -860,11 +861,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/email/config/mailgun", async (req, res) => {
     try {
       const userId = 1; // For demo, use fixed user ID
-      const { apiKey, domain, fromEmail, isActive } = req.body;
+      const { apiKey, domain, fromEmail, fromName, isActive } = req.body;
       
       if (!apiKey || !domain || !fromEmail) {
         return apiResponse(res, { error: "Required fields missing" }, 400);
       }
+      
+      // Set default fromName if not provided
+      const defaultFromName = fromName || "AI Receptionist";
       
       // Check if config already exists
       const existingConfig = await storage.getMailgunConfigByUserId(userId);
@@ -876,6 +880,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           apiKey,
           domain,
           fromEmail,
+          fromName: fromName || defaultFromName,
           isActive: isActive !== undefined ? isActive : true
         });
       } else {
@@ -885,6 +890,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           apiKey,
           domain,
           fromEmail,
+          fromName: fromName || defaultFromName,
           isActive: isActive !== undefined ? isActive : true
         });
       }
@@ -917,7 +923,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (host && port && username && password) {
         // Create a temporary transporter for verification only
-        const nodemailer = require('nodemailer');
         const transporter = nodemailer.createTransport({
           host,
           port: parseInt(port),
@@ -947,8 +952,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }, 404);
         }
         
-        // Import and initialize SMTP service
-        const { verifySmtpConnection } = require('./lib/smtp');
+        // Initialize SMTP service
+        const { verifySmtpConnection } = await import('./lib/smtp');
         const isVerified = await verifySmtpConnection(userId);
         
         apiResponse(res, { 
