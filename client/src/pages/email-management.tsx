@@ -680,16 +680,30 @@ const ScheduledEmailForm = ({
       )}
       
       <Button 
-        onClick={() => onSave({ 
-          to, 
-          subject, 
-          body, 
-          templateId: templateId || null, 
-          scheduledTime: new Date(scheduledTime).toISOString(),
-          service,
-          isRecurring,
-          recurringRule: isRecurring ? recurringRule : null
-        })}
+        onClick={() => {
+          // Get from email information based on selected service
+          let fromName = '';
+          
+          if (emailConfigs) {
+            if (service === 'sendgrid' && emailConfigs.sendgrid) {
+              fromName = emailConfigs.sendgrid.fromName;
+            } else if (service === 'mailgun' && emailConfigs.mailgun && emailConfigs.mailgun.fromName) {
+              fromName = emailConfigs.mailgun.fromName;
+            }
+          }
+          
+          onSave({ 
+            to, 
+            subject, 
+            body, 
+            templateId: templateId || null, 
+            scheduledTime: new Date(scheduledTime).toISOString(),
+            service,
+            isRecurring,
+            recurringRule: isRecurring ? recurringRule : null,
+            fromName: fromName || null
+          });
+        }}
         disabled={isPending || !to || !subject || !body || !scheduledTime}
       >
         {isPending ? (
