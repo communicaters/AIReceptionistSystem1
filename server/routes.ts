@@ -2240,11 +2240,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return apiResponse(res, { error: "Failed to initialize Zender service" }, 500);
           }
           
+          // Create a basic log entry first so we can track this message
+          const initialLog = await storage.createWhatsappLog({
+            userId,
+            phoneNumber,
+            message,
+            mediaUrl,
+            direction: "outbound",
+            timestamp: new Date(),
+            status: 'pending'
+          });
+          
           // Prepare message parameters
           const messageParams: any = {
             recipient: phoneNumber,
             message,
-            type: type || 'text'
+            type: type || 'text',
+            logId: initialLog.id
           };
           
           // Add optional parameters if provided
@@ -2261,11 +2273,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const result = await zenderService.sendMessage(messageParams);
           
           if (result.success) {
-            // Already logged in the zenderService.sendMessage method
+            // Get the logged message ID from the database to return to client
+            const recentMessage = await storage.getMostRecentWhatsappLogByExternalId(result.messageId);
             
             apiResponse(res, { 
               success: true,
               messageId: result.messageId,
+              logId: recentMessage?.id || null,
               provider: 'zender'
             });
           } else {
@@ -2306,6 +2320,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       apiResponse(res, { 
         success: true, 
         messageId: whatsappLog.id,
+        logId: whatsappLog.id,
         message: "Message queued for delivery",
         provider: 'facebook'
       });

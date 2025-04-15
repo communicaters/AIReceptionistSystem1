@@ -209,6 +209,8 @@ export interface WhatsappLog {
   mediaUrl: string | null;
   direction: string;
   timestamp: string;
+  status?: string; // 'sent', 'delivered', 'read', 'failed'
+  externalId?: string | null; // ID from external service like Zender or Facebook
 }
 
 export interface MeetingLog {

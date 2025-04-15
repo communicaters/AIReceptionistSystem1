@@ -454,6 +454,14 @@ export class DatabaseStorage implements IStorage {
     const result = await db.insert(whatsappLogs).values(log).returning();
     return result[0];
   }
+  
+  async getMostRecentWhatsappLogByExternalId(externalId: string): Promise<WhatsappLog | undefined> {
+    const result = await db.select().from(whatsappLogs)
+      .where(eq(whatsappLogs.externalId, externalId))
+      .orderBy(desc(whatsappLogs.timestamp))
+      .limit(1);
+    return result[0];
+  }
 
   // Meeting Logs
   async getMeetingLog(id: number): Promise<MeetingLog | undefined> {
