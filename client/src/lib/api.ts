@@ -372,6 +372,85 @@ export const processIncomingEmail = async (
   return response.json();
 };
 
+// Email Templates API Functions
+export const getEmailTemplates = async (category?: string): Promise<EmailTemplate[]> => {
+  const queryParams = category ? `?category=${category}` : "";
+  const response = await apiRequest("GET", `/api/email/templates${queryParams}`);
+  return response.json();
+};
+
+export const getEmailTemplate = async (id: number): Promise<EmailTemplate> => {
+  const response = await apiRequest("GET", `/api/email/templates/${id}`);
+  return response.json();
+};
+
+export const createEmailTemplate = async (
+  template: Omit<EmailTemplate, "id" | "createdAt" | "lastUpdated">
+): Promise<EmailTemplate> => {
+  const response = await apiRequest("POST", "/api/email/templates", template);
+  return response.json();
+};
+
+export const updateEmailTemplate = async (
+  id: number,
+  template: Partial<EmailTemplate>
+): Promise<EmailTemplate> => {
+  const response = await apiRequest("PUT", `/api/email/templates/${id}`, template);
+  return response.json();
+};
+
+export const deleteEmailTemplate = async (id: number): Promise<{ success: boolean }> => {
+  const response = await apiRequest("DELETE", `/api/email/templates/${id}`);
+  return response.json();
+};
+
+// Scheduled Emails API Functions
+export const getScheduledEmails = async (): Promise<ScheduledEmail[]> => {
+  const response = await apiRequest("GET", "/api/email/scheduled");
+  return response.json();
+};
+
+export const getScheduledEmail = async (id: number): Promise<ScheduledEmail> => {
+  const response = await apiRequest("GET", `/api/email/scheduled/${id}`);
+  return response.json();
+};
+
+export const createScheduledEmail = async (
+  email: {
+    to: string;
+    subject: string;
+    body?: string;
+    scheduledTime: string;
+    service: 'sendgrid' | 'smtp' | 'mailgun';
+    templateId?: number;
+    fromName?: string;
+    htmlBody?: string;
+    isRecurring?: boolean;
+    recurringRule?: string;
+  }
+): Promise<ScheduledEmail> => {
+  const response = await apiRequest("POST", "/api/email/scheduled", email);
+  return response.json();
+};
+
+export const updateScheduledEmail = async (
+  id: number,
+  email: Partial<ScheduledEmail>
+): Promise<ScheduledEmail> => {
+  const response = await apiRequest("PUT", `/api/email/scheduled/${id}`, email);
+  return response.json();
+};
+
+export const deleteScheduledEmail = async (id: number): Promise<{ success: boolean }> => {
+  const response = await apiRequest("DELETE", `/api/email/scheduled/${id}`);
+  return response.json();
+};
+
+export const cancelScheduledEmail = async (id: number): Promise<ScheduledEmail> => {
+  const response = await apiRequest("POST", `/api/email/scheduled/${id}/cancel`);
+  return response.json();
+};
+
 export const getChatLogs = async (
   sessionId?: string,
   limit?: number

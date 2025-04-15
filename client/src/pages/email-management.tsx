@@ -8,9 +8,21 @@ import {
   verifySmtpConnection,
   sendTestEmail,
   processIncomingEmail,
+  getEmailTemplates,
+  getEmailTemplate,
+  createEmailTemplate,
+  updateEmailTemplate,
+  deleteEmailTemplate,
+  getScheduledEmails,
+  createScheduledEmail,
+  updateScheduledEmail,
+  deleteScheduledEmail,
+  cancelScheduledEmail,
   type SendgridConfig,
   type SmtpConfig,
-  type MailgunConfig
+  type MailgunConfig,
+  type EmailTemplate,
+  type ScheduledEmail
 } from "@/lib/api";
 import { 
   Card, 
@@ -364,6 +376,309 @@ const MailgunConfigForm = ({
   );
 };
 
+// Email Template Form
+const EmailTemplateForm = ({
+  template,
+  onSave,
+  isPending
+}: {
+  template?: Partial<EmailTemplate>;
+  onSave: (template: Partial<EmailTemplate>) => void;
+  isPending: boolean;
+}) => {
+  const [name, setName] = useState(template?.name || '');
+  const [subject, setSubject] = useState(template?.subject || '');
+  const [body, setBody] = useState(template?.body || '');
+  const [category, setCategory] = useState(template?.category || 'general');
+  const [description, setDescription] = useState(template?.description || '');
+  const [variables, setVariables] = useState(template?.variables || '');
+  const [isActive, setIsActive] = useState(template?.isActive ?? true);
+
+  return (
+    <div className="space-y-4">
+      <div className="grid w-full items-center gap-1.5">
+        <Label htmlFor="name">Template Name</Label>
+        <Input 
+          type="text" 
+          id="name" 
+          placeholder="Welcome Email" 
+          value={name}
+          onChange={e => setName(e.target.value)}
+        />
+      </div>
+      
+      <div className="grid w-full items-center gap-1.5">
+        <Label htmlFor="category">Category</Label>
+        <select 
+          id="category" 
+          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+          value={category}
+          onChange={e => setCategory(e.target.value)}
+        >
+          <option value="general">General</option>
+          <option value="support">Support</option>
+          <option value="sales">Sales</option>
+          <option value="marketing">Marketing</option>
+          <option value="notification">Notification</option>
+        </select>
+      </div>
+      
+      <div className="grid w-full items-center gap-1.5">
+        <Label htmlFor="subject">Subject</Label>
+        <Input 
+          type="text" 
+          id="subject" 
+          placeholder="Welcome to our service" 
+          value={subject}
+          onChange={e => setSubject(e.target.value)}
+        />
+      </div>
+      
+      <div className="grid w-full items-center gap-1.5">
+        <Label htmlFor="body">Email Body</Label>
+        <textarea 
+          id="body" 
+          className="flex min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+          placeholder="Hello {{name}}, welcome to our service..." 
+          value={body}
+          onChange={e => setBody(e.target.value)}
+        />
+        <p className="text-sm text-muted-foreground">
+          Use variables like {{name}}, {{company}}, etc. which will be replaced with actual data when the email is sent.
+        </p>
+      </div>
+      
+      <div className="grid w-full items-center gap-1.5">
+        <Label htmlFor="variables">Available Variables (comma separated)</Label>
+        <Input 
+          type="text" 
+          id="variables" 
+          placeholder="name,company,date" 
+          value={variables}
+          onChange={e => setVariables(e.target.value)}
+        />
+      </div>
+
+      <div className="grid w-full items-center gap-1.5">
+        <Label htmlFor="description">Description (Optional)</Label>
+        <Input 
+          type="text" 
+          id="description" 
+          placeholder="A brief description of this template" 
+          value={description}
+          onChange={e => setDescription(e.target.value)}
+        />
+      </div>
+      
+      <div className="flex items-center space-x-2">
+        <Switch 
+          id="isActive" 
+          checked={isActive} 
+          onCheckedChange={setIsActive} 
+        />
+        <Label htmlFor="isActive">Active</Label>
+      </div>
+      
+      <Button 
+        onClick={() => onSave({ 
+          name, 
+          subject, 
+          body, 
+          category, 
+          description: description || null, 
+          variables: variables || null, 
+          isActive 
+        })}
+        disabled={isPending || !name || !subject || !body || !category}
+      >
+        {isPending ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Saving...
+          </>
+        ) : (
+          <>
+            <Check className="mr-2 h-4 w-4" />
+            Save Template
+          </>
+        )}
+      </Button>
+    </div>
+  );
+};
+
+// Scheduled Email Form
+const ScheduledEmailForm = ({
+  scheduledEmail,
+  templates,
+  onSave,
+  isPending
+}: {
+  scheduledEmail?: Partial<ScheduledEmail>;
+  templates: EmailTemplate[];
+  onSave: (email: Partial<ScheduledEmail>) => void;
+  isPending: boolean;
+}) => {
+  const [to, setTo] = useState(scheduledEmail?.to || '');
+  const [subject, setSubject] = useState(scheduledEmail?.subject || '');
+  const [body, setBody] = useState(scheduledEmail?.body || '');
+  const [templateId, setTemplateId] = useState<number | null>(scheduledEmail?.templateId || null);
+  const [scheduledTime, setScheduledTime] = useState(
+    scheduledEmail?.scheduledTime 
+      ? new Date(scheduledEmail.scheduledTime).toISOString().slice(0, 16) 
+      : new Date(Date.now() + 3600000).toISOString().slice(0, 16)
+  );
+  const [service, setService] = useState<string>(scheduledEmail?.service || 'smtp');
+  const [isRecurring, setIsRecurring] = useState(scheduledEmail?.isRecurring || false);
+  const [recurringRule, setRecurringRule] = useState(scheduledEmail?.recurringRule || 'FREQ=DAILY');
+
+  // When a template is selected, update subject and body
+  const handleTemplateChange = (id: string) => {
+    const templateIdNum = parseInt(id);
+    setTemplateId(templateIdNum || null);
+    
+    if (templateIdNum) {
+      const selectedTemplate = templates.find(t => t.id === templateIdNum);
+      if (selectedTemplate) {
+        setSubject(selectedTemplate.subject);
+        setBody(selectedTemplate.body);
+      }
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="grid w-full items-center gap-1.5">
+        <Label htmlFor="to">Recipient Email</Label>
+        <Input 
+          type="email" 
+          id="to" 
+          placeholder="recipient@example.com" 
+          value={to}
+          onChange={e => setTo(e.target.value)}
+        />
+      </div>
+      
+      <div className="grid w-full items-center gap-1.5">
+        <Label htmlFor="templateId">Template (Optional)</Label>
+        <select 
+          id="templateId" 
+          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+          value={templateId || ''}
+          onChange={e => handleTemplateChange(e.target.value)}
+        >
+          <option value="">No Template</option>
+          {templates.map(template => (
+            <option key={template.id} value={template.id}>
+              {template.name} ({template.category})
+            </option>
+          ))}
+        </select>
+      </div>
+      
+      <div className="grid w-full items-center gap-1.5">
+        <Label htmlFor="subject">Subject</Label>
+        <Input 
+          type="text" 
+          id="subject" 
+          placeholder="Email Subject" 
+          value={subject}
+          onChange={e => setSubject(e.target.value)}
+        />
+      </div>
+      
+      <div className="grid w-full items-center gap-1.5">
+        <Label htmlFor="body">Email Body</Label>
+        <textarea 
+          id="body" 
+          className="flex min-h-[150px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+          placeholder="Email content..." 
+          value={body}
+          onChange={e => setBody(e.target.value)}
+        />
+      </div>
+      
+      <div className="grid w-full items-center gap-1.5">
+        <Label htmlFor="scheduledTime">Schedule Time</Label>
+        <Input 
+          type="datetime-local" 
+          id="scheduledTime" 
+          value={scheduledTime}
+          onChange={e => setScheduledTime(e.target.value)}
+        />
+      </div>
+      
+      <div className="grid w-full items-center gap-1.5">
+        <Label htmlFor="service">Email Service</Label>
+        <select 
+          id="service" 
+          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+          value={service}
+          onChange={e => setService(e.target.value)}
+        >
+          <option value="smtp">SMTP</option>
+          <option value="sendgrid">SendGrid</option>
+          <option value="mailgun">Mailgun</option>
+        </select>
+      </div>
+      
+      <div className="flex items-center space-x-2">
+        <Switch 
+          id="isRecurring" 
+          checked={isRecurring} 
+          onCheckedChange={setIsRecurring} 
+        />
+        <Label htmlFor="isRecurring">Recurring Email</Label>
+      </div>
+      
+      {isRecurring && (
+        <div className="grid w-full items-center gap-1.5">
+          <Label htmlFor="recurringRule">Recurrence Pattern</Label>
+          <select 
+            id="recurringRule" 
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            value={recurringRule}
+            onChange={e => setRecurringRule(e.target.value)}
+          >
+            <option value="FREQ=DAILY">Daily</option>
+            <option value="FREQ=WEEKLY;BYDAY=MO">Weekly on Monday</option>
+            <option value="FREQ=WEEKLY;BYDAY=WE">Weekly on Wednesday</option>
+            <option value="FREQ=WEEKLY;BYDAY=FR">Weekly on Friday</option>
+            <option value="FREQ=MONTHLY;BYMONTHDAY=1">Monthly (1st day)</option>
+            <option value="FREQ=MONTHLY;BYMONTHDAY=15">Monthly (15th day)</option>
+          </select>
+        </div>
+      )}
+      
+      <Button 
+        onClick={() => onSave({ 
+          to, 
+          subject, 
+          body, 
+          templateId: templateId || null, 
+          scheduledTime: new Date(scheduledTime).toISOString(),
+          service,
+          isRecurring,
+          recurringRule: isRecurring ? recurringRule : null
+        })}
+        disabled={isPending || !to || !subject || !body || !scheduledTime}
+      >
+        {isPending ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Scheduling...
+          </>
+        ) : (
+          <>
+            <Check className="mr-2 h-4 w-4" />
+            Schedule Email
+          </>
+        )}
+      </Button>
+    </div>
+  );
+};
+
 // Test Email Dialog
 const TestEmailDialog = ({
   onSend,
@@ -452,6 +767,9 @@ const EmailManagement = () => {
   const [configureSmtp, setConfigureSmtp] = useState(false);
   const [configureSendgrid, setConfigureSendgrid] = useState(false);
   const [configureMailgun, setConfigureMailgun] = useState(false);
+  const [createTemplateMode, setCreateTemplateMode] = useState(false);
+  const [editTemplateId, setEditTemplateId] = useState<number | null>(null);
+  const [createScheduledEmailMode, setCreateScheduledEmailMode] = useState(false);
   
   // Query for fetching email configurations
   const { 
