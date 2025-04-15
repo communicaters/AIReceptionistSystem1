@@ -1,0 +1,71 @@
+We need to integrate Zender into our AI Receptionist Agent to enable fully automated WhatsApp and SMS communication. The objective is to create an AI-powered chatbot that can handle two-way messaging (send/receive) seamlessly across these platforms.
+
+✅ Feature Scope:
+Integrate Zender Webhook:
+
+Set up an endpoint on our backend (e.g., /api/zender/incoming) to receive incoming messages from Zender via webhook.
+
+Parse the message payload (sender, message content, device ID, etc.)
+
+Forward the data to the AI engine for processing.
+
+Send Reply via Zender API:
+
+After processing, send replies using Zender's API.
+
+Use the authenticated endpoint (e.g., https://pakgame.store/WA/Install/api/send/whatsapp) with required parameters:
+
+
+const axios = require('axios');
+const FormData = require('form-data');
+
+// Define the API details
+const url = "https://pakgame.store/WA/Install/api/send/whatsapp";
+const form = new FormData();
+form.append('secret', 'YOUR_API_SECRET');
+form.append('account', 'WHATSAPP_ACCOUNT_UNIQUE_ID');
+form.append('recipient', 'RECIPIENT_PHONE_NUMBER');
+form.append('type', 'text');
+form.append('message', 'YOUR_MESSAGE');
+
+// Make the POST request
+axios.post(url, form, { headers: form.getHeaders() })
+    .then(response => {
+        console.log("Success:", response.data);
+    })
+    .catch(error => {
+        if (error.response) {
+            console.error("Error:", error.response.status, error.response.data);
+        } else {
+            console.error("Error:", error.message);
+        }
+    });
+
+
+
+Conversation Flow:
+
+AI detects intent, generates response.
+
+System sends response through Zender.
+
+Maintain chat history in our DB for future analytics and context awareness.
+
+Requirements:
+
+Ensure webhook security (token validation).
+
+Add error handling for message delivery failures.
+
+Log all incoming/outgoing messages with timestamps.
+
+🧠 Objective:
+To build a smart WhatsApp/SMS assistant that:
+
+Responds to FAQs automatically.
+
+Books appointments via AI.
+
+Sends follow-up messages and marketing campaigns.
+
+Supports both WhatsApp and SMS based on the client’s preference.

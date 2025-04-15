@@ -280,10 +280,16 @@ export const scheduledEmailsRelations = relations(scheduledEmails, ({ one }) => 
 export const whatsappConfig = pgTable("whatsapp_config", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
-  phoneNumberId: text("phone_number_id").notNull(),
-  accessToken: text("access_token").notNull(),
-  businessAccountId: text("business_account_id").notNull(),
-  webhookVerifyToken: text("webhook_verify_token").notNull(),
+  // Existing fields (can be used with other providers)
+  phoneNumberId: text("phone_number_id"),
+  accessToken: text("access_token"),
+  businessAccountId: text("business_account_id"),
+  webhookVerifyToken: text("webhook_verify_token"),
+  // Zender specific fields
+  apiSecret: text("api_secret"),
+  accountId: text("account_id"),
+  zenderUrl: text("zender_url").default("https://pakgame.store/WA/Install/api"),
+  provider: text("provider").default("zender"), // To allow switching between different WhatsApp providers
   isActive: boolean("is_active").notNull().default(true),
 });
 
