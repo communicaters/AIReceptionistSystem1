@@ -151,6 +151,20 @@ export class ZenderService {
       const sendUrl = `${this.baseUrl}/send/whatsapp`;
       console.log(`Sending message to Zender API: ${sendUrl}`);
       
+      // Log the message with 'pending' status before sending
+      const timestamp = new Date();
+      const loggedMessage = await storage.createWhatsappLog({
+        userId: this.userId,
+        phoneNumber: sanitizedRecipient,
+        message: params.message,
+        mediaUrl: params.media,
+        direction: 'outbound',
+        timestamp: timestamp,
+        status: 'pending'
+      });
+      
+      console.log(`Created outbound message log with ID ${loggedMessage.id} and pending status`);
+      
       try {
         // Make the POST request to Zender API with timeout
         const response = await axios.post(sendUrl, form, { 
@@ -166,14 +180,8 @@ export class ZenderService {
           const messageId = response.data.data?.id || response.data.data?.message_id;
           console.log(`Message sent successfully, ID: ${messageId}`);
           
-          // Log the successful message
-          await this.logMessage({
-            userId: this.userId,
-            phoneNumber: sanitizedRecipient,
-            message: params.message,
-            mediaUrl: params.media,
-            direction: 'outbound',
-            timestamp: new Date(),
+          // Update the message log with the external ID and 'sent' status
+          await storage.updateWhatsappLog(loggedMessage.id, {
             status: 'sent',
             externalId: messageId
           });
@@ -187,6 +195,11 @@ export class ZenderService {
           const errorMsg = response.data?.message || 'Unknown error from Zender API';
           console.error(`Zender API returned error: ${errorMsg}`);
           
+          // Update message status to failed
+          await storage.updateWhatsappLog(loggedMessage.id, {
+            status: 'failed'
+          });
+          
           return {
             success: false,
             error: errorMsg
@@ -194,31 +207,46 @@ export class ZenderService {
         }
       } catch (apiError: any) {
         // More detailed logging for API errors
+        let errorMsg = 'Unknown API error';
+        
         if (apiError.response) {
           // The request was made and the server responded with a status code outside of 2xx
+          errorMsg = `API error ${apiError.response.status}: ${JSON.stringify(apiError.response.data)}`;
           console.error(`Zender API error ${apiError.response.status}:`, apiError.response.data);
-          return {
-            success: false,
-            error: `API error ${apiError.response.status}: ${JSON.stringify(apiError.response.data)}`
-          };
         } else if (apiError.request) {
           // The request was made but no response was received
+          errorMsg = 'No response from WhatsApp service (timeout)';
           console.error('No response received from Zender API (timeout)');
-          return {
-            success: false,
-            error: 'No response from WhatsApp service (timeout)'
-          };
         } else {
           // Something happened in setting up the request
+          errorMsg = `Request setup error: ${apiError.message}`;
           console.error('Error setting up Zender request:', apiError.message);
-          return {
-            success: false,
-            error: `Request setup error: ${apiError.message}`
-          };
         }
+        
+        // Update message status to failed
+        await storage.updateWhatsappLog(loggedMessage.id, {
+          status: 'failed'
+        });
+        
+        return {
+          success: false,
+          error: errorMsg
+        };
       }
     } catch (error: any) {
       console.error('Unexpected error sending WhatsApp message via Zender:', error);
+      
+      // Try to update message status to failed if loggedMessage exists
+      try {
+        if (loggedMessage && loggedMessage.id) {
+          await storage.updateWhatsappLog(loggedMessage.id, {
+            status: 'failed'
+          });
+          console.log(`Updated message ${loggedMessage.id} status to failed due to error`);
+        }
+      } catch (updateError) {
+        console.error('Failed to update message status after error:', updateError);
+      }
       
       return {
         success: false,
@@ -301,6 +329,17 @@ export class ZenderService {
       
       console.log('Processing Zender webhook:', JSON.stringify(data, null, 2));
       
+      // Check if this is a status update webhook
+      if (data.type === 'status' || 
+          data.data?.type === 'status' || 
+          data['data[type]'] === 'status' ||
+          data.status || 
+          data.data?.status || 
+          data['data[status]']) {
+        return await this.processStatusUpdate(data);
+      }
+      
+      // Otherwise, process as a regular message webhook
       // Zender webhooks come in different formats depending on the configuration
       // Format 1: Direct data object with properties
       // Format 2: Form-like data with data[property] format
@@ -310,12 +349,14 @@ export class ZenderService {
       let message = '';
       let mediaUrl = null;
       let timestamp = new Date();
+      let messageId = null;
       
       // First, try to extract from direct properties (Format 1)
       if (data.from && data.message) {
         sender = data.from;
         message = data.message;
         mediaUrl = data.media_url || null;
+        messageId = data.id || data.message_id || null;
         if (data.timestamp) {
           timestamp = new Date(parseInt(data.timestamp) * 1000);
         }
@@ -325,6 +366,7 @@ export class ZenderService {
         sender = data.data.from || data.data.phone;
         message = data.data.message || '';
         mediaUrl = data.data.media_url || null;
+        messageId = data.data.id || data.data.message_id || null;
         if (data.data.timestamp) {
           timestamp = new Date(parseInt(data.data.timestamp) * 1000);
         }
@@ -346,6 +388,12 @@ export class ZenderService {
             mediaUrl = data[mediaKey];
           }
           
+          // Look for message ID
+          const idKey = keys.find(k => k === 'data[id]' || k === 'data[message_id]');
+          if (idKey) {
+            messageId = data[idKey];
+          }
+          
           // Look for timestamp
           const timestampKey = keys.find(k => k === 'data[timestamp]');
           if (timestampKey && data[timestampKey]) {
@@ -365,14 +413,16 @@ export class ZenderService {
       
       console.log(`Extracted webhook data - From: ${sender}, Message: ${message.substring(0, 30)}...`);
       
-      // Log the incoming message
-      await this.logMessage({
+      // Log the incoming message with status
+      await storage.createWhatsappLog({
         userId: this.userId,
         phoneNumber: sender,
         message: message,
         mediaUrl: mediaUrl,
         direction: 'inbound',
-        timestamp: timestamp
+        timestamp: timestamp,
+        status: 'received',
+        externalId: messageId
       });
       
       // Record system activity
