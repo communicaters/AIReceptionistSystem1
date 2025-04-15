@@ -355,11 +355,12 @@ export async function sendTestEmail(
       return false;
     }
     
-    // Create test email content
+    // Create test email content with service-specific parameters
     const testEmailParams: EmailParams = {
       to: testEmailAddress,
       from: fromEmail,
-      fromName: fromName,
+      // Only add fromName for services that support it (NOT for SMTP)
+      ...(service !== 'smtp' && { fromName: fromName }),
       subject: 'Test Email from AI Receptionist',
       text: `Hello ${username},\n\nThis is a test email from your AI Receptionist system to verify that the email service is working correctly.\n\nIf you're receiving this, your ${service} email service is properly configured!\n\nBest regards,\nAI Receptionist`,
       html: `

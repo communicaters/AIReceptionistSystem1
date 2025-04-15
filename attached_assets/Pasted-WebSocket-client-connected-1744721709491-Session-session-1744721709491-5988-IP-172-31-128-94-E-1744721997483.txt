@@ -1,0 +1,29 @@
+WebSocket client connected: 1744721709491, Session: session_1744721709491_5988, IP: 172.31.128.94
+Error sending SMTP email: Error: Message failed: 550-Your FROM address ( hr@earn365.online, sales@earn365.online ) must match
+550-your authenticated email user ( hr@earn365.online ). Treating this as a
+550 spoofed email.
+    at SMTPConnection._formatError (/home/runner/workspace/node_modules/nodemailer/lib/smtp-connection/index.js:809:19)
+    at SMTPConnection._actionSMTPStream (/home/runner/workspace/node_modules/nodemailer/lib/smtp-connection/index.js:1730:34)
+    at SMTPConnection.<anonymous> (/home/runner/workspace/node_modules/nodemailer/lib/smtp-connection/index.js:1198:22)
+    at SMTPConnection._processResponse (/home/runner/workspace/node_modules/nodemailer/lib/smtp-connection/index.js:993:20)
+    at SMTPConnection._onData (/home/runner/workspace/node_modules/nodemailer/lib/smtp-connection/index.js:774:14)
+    at SMTPConnection._onSocketData (/home/runner/workspace/node_modules/nodemailer/lib/smtp-connection/index.js:195:44)
+    at TLSSocket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+    at TLSWrap.onStreamRead (node:internal/stream_base_commons:191:23) {
+  code: 'EMESSAGE',
+  response: '550-Your FROM address ( hr@earn365.online, sales@earn365.online ) must match\n' +
+    '550-your authenticated email user ( hr@earn365.online ). Treating this as a\n' +
+    '550 spoofed email.',
+  responseCode: 550,
+  command: 'DATA'
+}
+12:58:50 PM [express] POST /api/email/test 500 in 3228ms :: {"success":false,"message":"Failed to sen…
+Error sending Mailgun email: [Ni [Error]: Forbidden] {
+  status: 403,
+  details: 'Domain sandbox5955de70c2e343d9bffa9ed7eed90521.mailgun.org is not allowed to send: Free accounts are for test purposes only. Please upgrade or add the address to authorized recipients in Account Settings.',
+  type: 'MailgunAPIError'
+}
+12:59:36 PM [express] POST /api/email/test 500 in 786ms :: {"success":false,"message":"Failed to send…

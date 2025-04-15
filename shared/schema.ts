@@ -169,6 +169,7 @@ export const mailgunConfig = pgTable("mailgun_config", {
   domain: text("domain").notNull(),
   fromEmail: text("from_email").notNull(),
   fromName: text("from_name").notNull(),
+  authorizedRecipients: text("authorized_recipients"), // Comma-separated list of emails authorized for sandbox domains
   isActive: boolean("is_active").notNull().default(true),
 });
 
