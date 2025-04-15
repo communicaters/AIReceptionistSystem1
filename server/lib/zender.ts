@@ -51,6 +51,10 @@ export class ZenderService {
       // Set the base URL for API calls
       this.baseUrl = this.config.zenderUrl || 'https://pakgame.store/WA/Install/api';
       
+      // Remove any trailing slashes from the URL to ensure consistent URL formatting
+      this.baseUrl = this.baseUrl.replace(/\/+$/, '');
+      
+      console.log(`Initialized Zender service with base URL: ${this.baseUrl}`);
       return true;
     } catch (error) {
       console.error('Error initializing Zender service:', error);
@@ -209,22 +213,75 @@ export class ZenderService {
   async processWebhook(data: any): Promise<boolean> {
     try {
       if (!data) {
+        console.error('No data received in Zender webhook');
         return false;
       }
       
-      // Each provider formats webhooks differently
-      // For Zender, we'll extract the key information
-      const messageData = data.data || data;
+      console.log('Processing Zender webhook:', JSON.stringify(data, null, 2));
       
-      if (!messageData.from || !messageData.message) {
-        console.error('Invalid webhook data format from Zender');
+      // Zender webhooks come in different formats depending on the configuration
+      // Format 1: Direct data object with properties
+      // Format 2: Form-like data with data[property] format
+      // Format 3: Nested data object
+      
+      let sender = '';
+      let message = '';
+      let mediaUrl = null;
+      let timestamp = new Date();
+      
+      // First, try to extract from direct properties (Format 1)
+      if (data.from && data.message) {
+        sender = data.from;
+        message = data.message;
+        mediaUrl = data.media_url || null;
+        if (data.timestamp) {
+          timestamp = new Date(parseInt(data.timestamp) * 1000);
+        }
+      } 
+      // Try nested data object (Format 3)
+      else if (data.data && (data.data.from || data.data.phone)) {
+        sender = data.data.from || data.data.phone;
+        message = data.data.message || '';
+        mediaUrl = data.data.media_url || null;
+        if (data.data.timestamp) {
+          timestamp = new Date(parseInt(data.data.timestamp) * 1000);
+        }
+      }
+      // Try form-like data (Format 2)
+      else {
+        // Check for form-encoded data with data[property] format
+        const keys = Object.keys(data);
+        const fromKey = keys.find(k => k === 'data[from]' || k === 'data[phone]' || k === 'data[wid]');
+        const messageKey = keys.find(k => k === 'data[message]');
+        
+        if (fromKey && messageKey) {
+          sender = data[fromKey];
+          message = data[messageKey];
+          
+          // Look for media URL
+          const mediaKey = keys.find(k => k === 'data[media_url]' || k === 'data[attachment]');
+          if (mediaKey) {
+            mediaUrl = data[mediaKey];
+          }
+          
+          // Look for timestamp
+          const timestampKey = keys.find(k => k === 'data[timestamp]');
+          if (timestampKey && data[timestampKey]) {
+            timestamp = new Date(parseInt(data[timestampKey]) * 1000);
+          }
+        }
+      }
+      
+      // Validate that we have the minimum required data
+      if (!sender || !message) {
+        console.error('Could not extract sender or message from Zender webhook data');
         return false;
       }
       
-      // Extract the key information
-      const sender = messageData.from;
-      const message = messageData.message;
-      const mediaUrl = messageData.media_url || null;
+      // Clean up phone number (sometimes Zender includes +)
+      sender = sender.replace(/^\+/, '');
+      
+      console.log(`Extracted webhook data - From: ${sender}, Message: ${message.substring(0, 30)}...`);
       
       // Log the incoming message
       await this.logMessage({
@@ -233,7 +290,7 @@ export class ZenderService {
         message: message,
         mediaUrl: mediaUrl,
         direction: 'inbound',
-        timestamp: new Date()
+        timestamp: timestamp
       });
       
       // Record system activity
