@@ -340,7 +340,7 @@ export async function sendTestEmail(
       case 'smtp':
         const smtpConfig = await storage.getSmtpConfigByUserId(userId);
         fromEmail = smtpConfig?.fromEmail || '';
-        fromName = smtpConfig?.fromName || fromName;
+        // SMTP doesn't have fromName in the schema, so we leave it as default
         break;
       
       case 'mailgun':

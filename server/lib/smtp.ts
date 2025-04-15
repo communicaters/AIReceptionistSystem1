@@ -78,8 +78,9 @@ export async function sendEmail(params: EmailParams, userId: number = 1): Promis
     }
     
     // Configure email message
+    // For SMTP, we need to be precise with the from field - it must match the authenticated user exactly
     const message = {
-      from: params.fromName ? `"${params.fromName}" <${params.from}>` : params.from,
+      from: params.from, // Use only the email address without the name to avoid SMTP errors
       to: params.to,
       subject: params.subject,
       text: params.text,
