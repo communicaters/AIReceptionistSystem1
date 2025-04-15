@@ -1665,6 +1665,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Zender WhatsApp/SMS Webhook Endpoint
+  app.post("/api/zender/incoming", async (req, res) => {
+    try {
+      const userId = 1; // For demo, use fixed user ID
+      const webhookData = req.body;
+      
+      console.log("Zender webhook received:", JSON.stringify(webhookData, null, 2));
+      
+      // Immediately respond with OK to acknowledge receipt
+      // Zender expects a quick response
+      res.status(200).send("OK");
+      
+      // Get the Zender service
+      const { getZenderService } = require('./lib/zender');
+      const zenderService = getZenderService(userId);
+      
+      // Process the webhook data
+      const processed = await zenderService.processWebhook(webhookData);
+      
+      if (processed) {
+        // Create system activity record for successful webhook processing
+        await storage.createSystemActivity({
+          module: "WhatsApp",
+          event: "Zender Webhook Processed",
+          status: "Completed",
+          timestamp: new Date(),
+          details: { 
+            from: webhookData.from || webhookData.data?.from || 'unknown',
+            messageContent: (webhookData.message || webhookData.data?.message || '').substring(0, 100) + 
+              ((webhookData.message || webhookData.data?.message || '').length > 100 ? '...' : '')
+          }
+        });
+      } else {
+        // Create system activity record for webhook processing failure
+        await storage.createSystemActivity({
+          module: "WhatsApp",
+          event: "Zender Webhook Processing Failed",
+          status: "Error",
+          timestamp: new Date(),
+          details: { error: "Invalid webhook data format" }
+        });
+      }
+    } catch (error) {
+      console.error("Error processing Zender webhook:", error);
+      
+      // We already sent a 200 response to Zender, so we just log the error
+      // Create system activity record for the error
+      await storage.createSystemActivity({
+        module: "WhatsApp",
+        event: "Zender Webhook Error",
+        status: "Error",
+        timestamp: new Date(),
+        details: { error: (error as Error).message }
+      });
+    }
+  });
+
   // WhatsApp module
   app.get("/api/whatsapp/config", async (req, res) => {
     try {
@@ -1790,7 +1847,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // WhatsApp message receiving webhook
+  // WhatsApp message receiving webhook (Meta/Facebook API)
   app.post("/api/whatsapp/webhook", async (req, res) => {
     try {
       // Facebook/WhatsApp requires a 200 response quickly to acknowledge receipt
@@ -1884,7 +1941,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/whatsapp/send", async (req, res) => {
     try {
       const userId = 1; // For demo, use fixed user ID
-      const { phoneNumber, message, mediaUrl } = req.body;
+      const { phoneNumber, message, mediaUrl, type = 'text', caption, filename, buttons, sections, templateName, templateLanguage, templateComponents } = req.body;
       
       if (!phoneNumber || !message) {
         return apiResponse(res, { error: "Phone number and message are required" }, 400);
@@ -1901,9 +1958,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return apiResponse(res, { error: "WhatsApp integration is not active" }, 400);
       }
       
-      // Here you would implement the actual sending of the message via WhatsApp API
-      // For now, we'll just log it and simulate success for the demo
-      console.log(`Sending WhatsApp message to ${phoneNumber}: ${message}`);
+      // Check if we should use Zender provider
+      if (config.provider === 'zender' && config.apiSecret && config.accountId) {
+        try {
+          // Use Zender service for sending messages
+          const { getZenderService } = require('./lib/zender');
+          const zenderService = getZenderService(userId);
+          
+          // Initialize the service
+          const initialized = await zenderService.initialize();
+          if (!initialized) {
+            return apiResponse(res, { error: "Failed to initialize Zender service" }, 500);
+          }
+          
+          // Prepare message parameters
+          const messageParams: any = {
+            recipient: phoneNumber,
+            message,
+            type: type || 'text'
+          };
+          
+          // Add optional parameters if provided
+          if (mediaUrl) messageParams.media = mediaUrl;
+          if (caption) messageParams.caption = caption;
+          if (filename) messageParams.filename = filename;
+          if (buttons) messageParams.buttons = buttons;
+          if (sections) messageParams.sections = sections;
+          if (templateName) messageParams.templateName = templateName;
+          if (templateLanguage) messageParams.templateLanguage = templateLanguage;
+          if (templateComponents) messageParams.templateComponents = templateComponents;
+          
+          // Send the message using Zender service
+          const result = await zenderService.sendMessage(messageParams);
+          
+          if (result.success) {
+            // Already logged in the zenderService.sendMessage method
+            
+            apiResponse(res, { 
+              success: true,
+              messageId: result.messageId,
+              provider: 'zender'
+            });
+          } else {
+            apiResponse(res, { 
+              success: false, 
+              error: result.error || "Failed to send message via Zender"
+            }, 500);
+          }
+          
+          return;
+        } catch (error) {
+          console.error("Error using Zender service:", error);
+          // Fall back to legacy provider
+        }
+      }
+      
+      // Legacy WhatsApp API (Facebook) provider - for backward compatibility
+      console.log(`Sending WhatsApp message to ${phoneNumber} using legacy provider: ${message}`);
       
       // Log the outgoing message
       const whatsappLog = await storage.createWhatsappLog({
@@ -1920,13 +2031,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         event: "MessageSent",
         status: "success",
         timestamp: new Date(),
-        details: { userId, phoneNumber, messageId: whatsappLog.id }
+        details: { userId, phoneNumber, messageId: whatsappLog.id, provider: 'facebook' }
       });
       
       apiResponse(res, { 
         success: true, 
         messageId: whatsappLog.id,
-        message: "Message queued for delivery"
+        message: "Message queued for delivery",
+        provider: 'facebook'
       });
     } catch (error) {
       console.error("Error sending WhatsApp message:", error);
@@ -1936,7 +2048,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         event: "MessageSendError",
         status: "error",
         timestamp: new Date(),
-        details: { error: error.message }
+        details: { error: (error as Error).message }
       });
       
       apiResponse(res, { error: "Failed to send WhatsApp message" }, 500);
@@ -1958,24 +2070,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }, 404);
       }
       
-      // For a real implementation, you would make a test call to the WhatsApp API here
-      // For now, we'll just simulate a connection test
+      let isSuccessful = false;
+      let provider = 'unknown';
       
-      const isSuccessful = config.isActive && config.accessToken && config.phoneNumberId;
+      // Check if we should use Zender provider
+      if (config.provider === 'zender' && config.apiSecret && config.accountId) {
+        try {
+          // Use Zender service to test connection
+          const { getZenderService } = require('./lib/zender');
+          const zenderService = getZenderService(userId);
+          
+          // Initialize and test the connection
+          await zenderService.initialize();
+          isSuccessful = await zenderService.testConnection();
+          provider = 'zender';
+        } catch (error) {
+          console.error("Error testing Zender connection:", error);
+          isSuccessful = false;
+        }
+      } else {
+        // Legacy Facebook/WhatsApp API test
+        isSuccessful = config.isActive && config.accessToken && config.phoneNumberId;
+        provider = 'facebook';
+      }
       
       await storage.createSystemActivity({
         module: "WhatsApp",
         event: "ConnectionTest",
         status: isSuccessful ? "success" : "error",
         timestamp: new Date(),
-        details: { userId, isSuccessful }
+        details: { userId, isSuccessful, provider }
       });
       
       apiResponse(res, { 
         success: isSuccessful,
+        provider,
         message: isSuccessful 
-          ? "WhatsApp connection successful" 
-          : "WhatsApp connection failed"
+          ? `WhatsApp connection successful using ${provider} provider` 
+          : `WhatsApp connection failed with ${provider} provider`
       });
     } catch (error) {
       console.error("Error testing WhatsApp connection:", error);
@@ -1985,7 +2117,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         event: "ConnectionTestError",
         status: "error",
         timestamp: new Date(),
-        details: { error: error.message }
+        details: { error: (error as Error).message }
       });
       
       apiResponse(res, { 
