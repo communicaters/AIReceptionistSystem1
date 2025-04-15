@@ -14,20 +14,22 @@ import Settings from "@/pages/settings";
 import OAuthCallback from "@/pages/oauth-callback";
 import { ConnectionStatus } from "@/components/ui/connection-status";
 import { WebSocketProvider } from "@/components/providers/websocket-provider";
+import { CallProvider } from "@/components/providers/call-provider";
 
 function App() {
   return (
     <WebSocketProvider>
-      <ConnectionStatus />
-      <Switch>
-        <Route path="/" component={Dashboard} />
-        <Route path="/voice-call">
-          {() => (
-            <DashboardLayout>
-              <VoiceCall />
-            </DashboardLayout>
-          )}
-        </Route>
+      <CallProvider>
+        <ConnectionStatus />
+        <Switch>
+          <Route path="/" component={Dashboard} />
+          <Route path="/voice-call">
+            {() => (
+              <DashboardLayout>
+                <VoiceCall />
+              </DashboardLayout>
+            )}
+          </Route>
         <Route path="/email-management">
           {() => (
             <DashboardLayout>
@@ -87,6 +89,7 @@ function App() {
         <Route path="/oauth-callback" component={OAuthCallback} />
         <Route component={NotFound} />
       </Switch>
+      </CallProvider>
     </WebSocketProvider>
   );
 }
