@@ -369,6 +369,7 @@ export class ZenderService {
       // Format 1: Direct data object with properties
       // Format 2: Form-like data with data[property] format
       // Format 3: Nested data object
+      // Format 4: New format from example with type=whatsapp and data array
       
       let sender = '';
       let message = '';
@@ -376,8 +377,29 @@ export class ZenderService {
       let timestamp = new Date();
       let messageId = null;
       
+      // Check for the new format from the example where type="whatsapp" and data is an array/object
+      if (data.type === 'whatsapp') {
+        console.log('Processing webhook in Zender whatsapp format');
+        
+        // Handle both array format and object format
+        const webhookData = typeof data.data === 'object' ? data.data : null;
+        
+        if (webhookData) {
+          // Extract data from the webhook format
+          sender = webhookData.wid || webhookData.phone || '';
+          message = webhookData.message || '';
+          mediaUrl = webhookData.attachment || null;
+          messageId = webhookData.id?.toString() || null;
+          
+          if (webhookData.timestamp) {
+            timestamp = new Date(parseInt(webhookData.timestamp) * 1000);
+          }
+          
+          console.log(`Extracted data from whatsapp webhook format: ${sender}, ${message}`);
+        }
+      }
       // First, try to extract from direct properties (Format 1)
-      if (data.from && data.message) {
+      else if (data.from && data.message) {
         sender = data.from;
         message = data.message;
         mediaUrl = data.media_url || null;
@@ -387,10 +409,10 @@ export class ZenderService {
         }
       } 
       // Try nested data object (Format 3)
-      else if (data.data && (data.data.from || data.data.phone)) {
-        sender = data.data.from || data.data.phone;
+      else if (data.data && (data.data.from || data.data.phone || data.data.wid)) {
+        sender = data.data.from || data.data.phone || data.data.wid;
         message = data.data.message || '';
-        mediaUrl = data.data.media_url || null;
+        mediaUrl = data.data.media_url || data.data.attachment || null;
         messageId = data.data.id || data.data.message_id || null;
         if (data.data.timestamp) {
           timestamp = new Date(parseInt(data.data.timestamp) * 1000);
@@ -439,7 +461,7 @@ export class ZenderService {
       console.log(`Extracted webhook data - From: ${sender}, Message: ${message.substring(0, 30)}...`);
       
       // Log the incoming message with status
-      await storage.createWhatsappLog({
+      const whatsappLog = await storage.createWhatsappLog({
         userId: this.userId,
         phoneNumber: sender,
         message: message,
@@ -449,6 +471,8 @@ export class ZenderService {
         status: 'received',
         externalId: messageId
       });
+      
+      console.log(`Created WhatsApp log entry with ID: ${whatsappLog.id}`);
       
       // Record system activity
       await storage.createSystemActivity({

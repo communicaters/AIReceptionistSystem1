@@ -1676,12 +1676,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log("Zender webhook received:", JSON.stringify(webhookData, null, 2));
       
-      // Immediately respond with OK to acknowledge receipt
-      // Zender expects a quick response
+      // Get WhatsApp configuration to check webhook secret
+      const config = await storage.getWhatsappConfigByUserId(userId);
+      
+      if (!config || !config.webhookSecret) {
+        console.error("Zender webhook validation failed: No webhook secret configured");
+        return res.status(403).json({ error: "Invalid webhook configuration" });
+      }
+      
+      // Validate webhook secret based on Zender's expected format
+      const receivedSecret = webhookData.secret;
+      
+      if (!receivedSecret || receivedSecret !== config.webhookSecret) {
+        console.error("Zender webhook validation failed: Invalid webhook secret");
+        await storage.createSystemActivity({
+          module: "WhatsApp",
+          event: "Zender Webhook Auth Failed",
+          status: "Error",
+          timestamp: new Date(),
+          details: { error: "Invalid webhook secret" }
+        });
+        
+        return res.status(403).json({ error: "Invalid webhook secret" });
+      }
+      
+      // Webhook is authenticated, send OK response immediately
       res.status(200).send("OK");
       
       // Get the Zender service
       const zenderService = getZenderService(userId);
+      
+      // Record webhook receipt in activity log
+      await storage.createSystemActivity({
+        module: "WhatsApp",
+        event: "Zender Webhook Received",
+        status: "Processing",
+        timestamp: new Date(),
+        details: { 
+          type: webhookData.type || 'unknown',
+          dataKeys: Object.keys(webhookData).filter(k => k.startsWith('data['))
+        }
+      });
       
       // Process the webhook data
       const processed = await zenderService.processWebhook(webhookData);
@@ -1694,9 +1729,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: "Completed",
           timestamp: new Date(),
           details: { 
-            from: webhookData.from || webhookData.data?.from || 'unknown',
-            messageContent: (webhookData.message || webhookData.data?.message || '').substring(0, 100) + 
-              ((webhookData.message || webhookData.data?.message || '').length > 100 ? '...' : '')
+            type: webhookData.type,
+            from: webhookData['data[phone]'] || webhookData['data[wid]'] || 'unknown',
+            messageId: webhookData['data[id]'] || 'unknown'
           }
         });
       } else {
@@ -1712,7 +1747,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error processing Zender webhook:", error);
       
-      // We already sent a 200 response to Zender, so we just log the error
+      // If we haven't sent a response yet, send an error
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Internal server error" });
+      }
+      
       // Create system activity record for the error
       await storage.createSystemActivity({
         module: "WhatsApp",

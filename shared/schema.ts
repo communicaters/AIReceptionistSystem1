@@ -289,6 +289,7 @@ export const whatsappConfig = pgTable("whatsapp_config", {
   apiSecret: text("api_secret"),
   accountId: text("account_id"),
   zenderUrl: text("zender_url").default("https://pakgame.store/WA/Install/api"),
+  webhookSecret: text("webhook_secret"), // Secret for authenticating Zender webhooks
   provider: text("provider").default("zender"), // To allow switching between different WhatsApp providers
   isActive: boolean("is_active").notNull().default(true),
 });
