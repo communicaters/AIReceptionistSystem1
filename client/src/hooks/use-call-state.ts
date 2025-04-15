@@ -7,7 +7,7 @@ interface CallState {
   status: CallStatus;
   phoneNumber: string;
   callSid?: string;
-  service?: 'twilio' | 'sip' | 'openphone' | null;
+  service?: 'twilio' | 'sip' | 'openphone' | undefined;
   message?: string;
   error?: string;
 }
@@ -16,7 +16,7 @@ interface UseCallStateReturn {
   callState: CallState;
   isCallActive: boolean;
   showCallUI: boolean;
-  initiateCall: (phoneNumber: string, message?: string, service?: 'twilio' | 'sip' | 'openphone' | null) => Promise<void>;
+  initiateCall: (phoneNumber: string, message?: string, service?: 'twilio' | 'sip' | 'openphone' | undefined) => Promise<void>;
   hangupCall: () => void;
   toggleMute: (muted: boolean) => void;
   toggleHold: (held: boolean) => void;
@@ -41,7 +41,7 @@ export function useCallState(): UseCallStateReturn {
   const initiateCall = async (
     phoneNumber: string,
     message?: string,
-    service?: 'twilio' | 'sip' | 'openphone' | null
+    service?: 'twilio' | 'sip' | 'openphone'
   ) => {
     try {
       setCallState({
@@ -55,11 +55,14 @@ export function useCallState(): UseCallStateReturn {
       const result = await makeTestCall(phoneNumber, message, service);
       
       if (result.success) {
+        // Cast the service type to ensure compatibility
+        const resultService = result.service as 'twilio' | 'sip' | 'openphone' | undefined;
+        
         setCallState(prev => ({
           ...prev,
           status: 'connecting',
           callSid: result.callSid,
-          service: result.service || service
+          service: resultService || service
         }));
         
         // In a real implementation, we would listen for call events
@@ -122,8 +125,11 @@ export function useCallState(): UseCallStateReturn {
   const redial = async () => {
     // Reuse the previous call settings
     if (callState.phoneNumber) {
-      await initiateCall(callState.phoneNumber, callState.message, 
-        callState.service as 'twilio' | 'sip' | 'openphone' | null | undefined);
+      await initiateCall(
+        callState.phoneNumber, 
+        callState.message, 
+        callState.service as 'twilio' | 'sip' | 'openphone' | undefined
+      );
     }
   };
 
