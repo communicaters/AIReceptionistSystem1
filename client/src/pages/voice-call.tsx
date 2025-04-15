@@ -362,6 +362,30 @@ const VoiceCall = () => {
       return;
     }
     
+    // Verify the selected service is actually active
+    if (selectedService === 'twilio' && !hasActiveTwilio) {
+      toast({
+        title: "Twilio service is not active",
+        description: "Please activate Twilio service in the configuration tab before making a call.",
+        variant: "destructive",
+      });
+      return;
+    } else if (selectedService === 'sip' && !hasActiveSip) {
+      toast({
+        title: "SIP service is not active",
+        description: "Please activate SIP service in the configuration tab before making a call.",
+        variant: "destructive",
+      });
+      return;
+    } else if (selectedService === 'openphone' && !hasActiveOpenPhone) {
+      toast({
+        title: "OpenPhone service is not active",
+        description: "Please activate OpenPhone service in the configuration tab before making a call.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     testCallMutation.mutate(testCall);
   };
   

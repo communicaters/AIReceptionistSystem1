@@ -414,10 +414,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let result;
       let serviceName = service;
       
+      // Get configurations to validate service status
+      const configs = await getVoiceConfigs();
+      
       // If service is not explicitly specified, check configs to find an active one
       if (!serviceName) {
-        const configs = await getVoiceConfigs();
-        
         if (configs.openPhone && configs.openPhone.isActive) {
           serviceName = 'openphone';
         } else if (configs.twilio && configs.twilio.isActive) {
@@ -430,6 +431,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
             error: "No active phone service found. Please configure and activate a phone service." 
           }, 400);
         }
+      } else {
+        // Verify the selected service is active
+        if (serviceName === 'twilio' && (!configs.twilio || !configs.twilio.isActive)) {
+          return apiResponse(res, { 
+            success: false, 
+            error: "Twilio service is not active. Please activate it in the configuration." 
+          }, 400);
+        } else if (serviceName === 'sip' && (!configs.sip || !configs.sip.isActive)) {
+          return apiResponse(res, { 
+            success: false, 
+            error: "SIP service is not active. Please activate it in the configuration." 
+          }, 400);
+        } else if (serviceName === 'openphone' && (!configs.openPhone || !configs.openPhone.isActive)) {
+          return apiResponse(res, { 
+            success: false, 
+            error: "OpenPhone service is not active. Please activate it in the configuration." 
+          }, 400);
+        }
       }
       
       // Make the call using the appropriate service
@@ -440,17 +459,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
           break;
           
         case 'openphone':
-          // For now, we'll use Twilio as a fallback for OpenPhone until it's implemented
-          // In a real implementation, this would use the OpenPhone API
-          const { makeOutboundCall: makeOutboundOpenPhoneCall } = await import('./lib/twilio');
-          result = await makeOutboundOpenPhoneCall(phoneNumber, testMessage);
+          // Use OpenPhone service if implemented, otherwise use mocked service
+          try {
+            const { makeOutboundCall: makeOutboundOpenPhoneCall } = await import('./lib/openphone');
+            result = await makeOutboundOpenPhoneCall(phoneNumber, testMessage);
+          } catch (error) {
+            // Fallback to Twilio for demo purposes only if it's active
+            if (configs.twilio && configs.twilio.isActive) {
+              console.log("OpenPhone service not implemented, using Twilio as fallback for demo");
+              const { makeOutboundCall: makeOutboundOpenPhoneCall } = await import('./lib/twilio');
+              result = await makeOutboundOpenPhoneCall(phoneNumber, testMessage);
+            } else {
+              return apiResponse(res, { 
+                success: false, 
+                error: "OpenPhone service is not fully implemented yet and no fallback is available." 
+              }, 500);
+            }
+          }
           break;
           
         case 'sip':
-          // For now, we'll use Twilio as a fallback for SIP until it's implemented
-          // In a real implementation, this would use the SIP connection
-          const { makeOutboundCall: makeOutboundSipCall } = await import('./lib/twilio');
-          result = await makeOutboundSipCall(phoneNumber, testMessage);
+          // Use SIP service if implemented, otherwise use mocked service
+          try {
+            const { makeOutboundCall: makeOutboundSipCall } = await import('./lib/sip');
+            result = await makeOutboundSipCall(phoneNumber, testMessage);
+          } catch (error) {
+            // Fallback to Twilio for demo purposes only if it's active
+            if (configs.twilio && configs.twilio.isActive) {
+              console.log("SIP service not implemented, using Twilio as fallback for demo");
+              const { makeOutboundCall: makeOutboundSipCall } = await import('./lib/twilio');
+              result = await makeOutboundSipCall(phoneNumber, testMessage);
+            } else {
+              return apiResponse(res, { 
+                success: false, 
+                error: "SIP service is not fully implemented yet and no fallback is available." 
+              }, 500);
+            }
+          }
           break;
           
         default:
