@@ -320,6 +320,11 @@ export async function sendTestEmail(
     service = await determinePreferredEmailService(userId);
   }
   
+  // For SMTP, use the specialized test function due to stricter format requirements
+  if (service === 'smtp') {
+    return await sendSmtpTestEmail(testEmailAddress, userId);
+  }
+  
   try {
     // Get user for personalization
     const user = await storage.getUser(userId);
@@ -337,16 +342,25 @@ export async function sendTestEmail(
         fromName = sendgridConfig?.fromName || fromName;
         break;
       
-      case 'smtp':
-        const smtpConfig = await storage.getSmtpConfigByUserId(userId);
-        fromEmail = smtpConfig?.fromEmail || '';
-        // SMTP doesn't have fromName in the schema, so we leave it as default
-        break;
-      
       case 'mailgun':
         const mailgunConfig = await storage.getMailgunConfigByUserId(userId);
         fromEmail = mailgunConfig?.fromEmail || '';
         fromName = mailgunConfig?.fromName || fromName;
+        
+        // Check if using Mailgun sandbox domain
+        if (mailgunConfig?.domain?.includes('sandbox')) {
+          // Verify the recipient is in the authorized list
+          const authorizedRecipients = mailgunConfig?.authorizedRecipients?.split(',').map(email => email.trim()) || [];
+          if (authorizedRecipients.length === 0) {
+            console.warn("Using Mailgun sandbox domain without authorized recipients.");
+            console.warn(`Please add ${testEmailAddress} to authorized recipients in Mailgun configuration.`);
+            // We'll still try to send, but will likely fail if recipient isn't authorized
+          } else if (!authorizedRecipients.includes(testEmailAddress)) {
+            console.warn(`Recipient ${testEmailAddress} is not in the authorized list for sandbox domain.`);
+            console.warn("Adding authorized recipients can be done in the email configuration page.");
+            // We'll still try to send, but will likely fail if recipient isn't authorized
+          }
+        }
         break;
     }
     
@@ -359,8 +373,7 @@ export async function sendTestEmail(
     const testEmailParams: EmailParams = {
       to: testEmailAddress,
       from: fromEmail,
-      // Only add fromName for services that support it (NOT for SMTP)
-      ...(service !== 'smtp' && { fromName: fromName }),
+      fromName: fromName,
       subject: 'Test Email from AI Receptionist',
       text: `Hello ${username},\n\nThis is a test email from your AI Receptionist system to verify that the email service is working correctly.\n\nIf you're receiving this, your ${service} email service is properly configured!\n\nBest regards,\nAI Receptionist`,
       html: `
@@ -381,6 +394,79 @@ export async function sendTestEmail(
     return await sendEmail(testEmailParams, service, userId);
   } catch (error) {
     console.error(`Error sending test email via ${service}:`, error);
+    return false;
+  }
+}
+
+// Specialized function for sending SMTP test emails
+// SMTP has stricter format requirements, so needs special handling
+async function sendSmtpTestEmail(
+  testEmailAddress: string,
+  userId: number = 1
+): Promise<boolean> {
+  try {
+    // Get user for personalization
+    const user = await storage.getUser(userId);
+    const username = user?.username || 'User';
+    
+    // Get SMTP configuration
+    const smtpConfig = await storage.getSmtpConfigByUserId(userId);
+    if (!smtpConfig || !smtpConfig.fromEmail) {
+      console.error('SMTP configuration not found or missing from email');
+      return false;
+    }
+    
+    // Generate HTML content
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+        <h2 style="color: #4a5568;">Test Email from AI Receptionist</h2>
+        <p>Hello ${username},</p>
+        <p>This is a test email from your AI Receptionist system to verify that the SMTP email service is working correctly.</p>
+        <p>If you're receiving this, your <strong>SMTP</strong> email service is properly configured!</p>
+        <p style="margin-top: 20px;">Best regards,<br>AI Receptionist</p>
+        <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0; color: #718096; font-size: 12px;">
+          <p>This is an automated message sent at ${new Date().toISOString()}</p>
+        </div>
+      </div>
+    `;
+    
+    // Text fallback version
+    const textContent = `Hello ${username},\n\nThis is a test email from your AI Receptionist system to verify that the SMTP email service is working correctly.\n\nIf you're receiving this, your SMTP email service is properly configured!\n\nBest regards,\nAI Receptionist`;
+    
+    // Create email parameters with the specific format required by SMTP
+    const params: EmailParams = {
+      to: testEmailAddress,
+      from: smtpConfig.fromEmail,
+      subject: 'Test Email from AI Receptionist (SMTP)',
+      text: textContent,
+      html: htmlContent
+    };
+    
+    // Send directly via the SMTP service
+    const result = await smtpService.sendEmail(params, userId);
+    
+    // Log the test result
+    await storage.createSystemActivity({
+      module: "Email",
+      event: "SMTP Test Email",
+      status: result ? "Completed" : "Failed",
+      timestamp: new Date(),
+      details: { recipient: testEmailAddress }
+    });
+    
+    return result;
+  } catch (error) {
+    console.error("Error sending SMTP test email:", error);
+    
+    // Log the failure
+    await storage.createSystemActivity({
+      module: "Email",
+      event: "SMTP Test Email",
+      status: "Failed",
+      timestamp: new Date(),
+      details: { error: (error as Error).message }
+    });
+    
     return false;
   }
 }

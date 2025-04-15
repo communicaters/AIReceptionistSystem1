@@ -861,7 +861,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/email/config/mailgun", async (req, res) => {
     try {
       const userId = 1; // For demo, use fixed user ID
-      const { apiKey, domain, fromEmail, fromName, isActive } = req.body;
+      const { apiKey, domain, fromEmail, fromName, authorizedRecipients, isActive } = req.body;
       
       if (!apiKey || !domain || !fromEmail) {
         return apiResponse(res, { error: "Required fields missing" }, 400);
@@ -869,6 +869,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Set default fromName if not provided
       const defaultFromName = fromName || "AI Receptionist";
+      
+      // Check if using sandbox domain (which requires authorized recipients)
+      const isSandboxDomain = domain.includes('sandbox');
+      if (isSandboxDomain && !authorizedRecipients) {
+        console.warn("Warning: Using Mailgun sandbox domain without authorized recipients.");
+        console.warn("Sandbox domains can only send to authorized recipients.");
+      }
       
       // Check if config already exists
       const existingConfig = await storage.getMailgunConfigByUserId(userId);
@@ -881,6 +888,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           domain,
           fromEmail,
           fromName: fromName || defaultFromName,
+          authorizedRecipients, // Include this field in updates
           isActive: isActive !== undefined ? isActive : true
         });
       } else {
@@ -891,6 +899,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           domain,
           fromEmail,
           fromName: fromName || defaultFromName,
+          authorizedRecipients, // Include this field in creation
           isActive: isActive !== undefined ? isActive : true
         });
       }
