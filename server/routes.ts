@@ -8,7 +8,7 @@ import { initOpenAI } from "./lib/openai";
 import { initSendgrid } from "./lib/sendgrid";
 import { initSmtp } from "./lib/smtp";
 import { initMailgun } from "./lib/mailgun";
-import { initEmailServices } from "./lib/email-controller";
+import { initEmailServices, sendTestEmail, processIncomingEmail } from "./lib/email-controller";
 import { initGoogleCalendar, createOAuth2Client, createEvent, getAvailableTimeSlots } from "./lib/google-calendar";
 import { initElevenLabs } from "./lib/elevenlabs";
 import { initWhisperAPI } from "./lib/whisper";
@@ -980,10 +980,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }, 400);
       }
       
-      // Import the email controller
-      const { sendTestEmail } = require('./lib/email-controller');
-      
-      // Send test email
+      // Send test email using the imported function
       const success = await sendTestEmail(to, userId, service);
       
       if (success) {
@@ -1027,10 +1024,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }, 400);
       }
       
-      // Import the email controller
-      const { processIncomingEmail } = require('./lib/email-controller');
-      
-      // Process the email
+      // Process the email using the imported function
       const success = await processIncomingEmail({
         from,
         to: to || 'receptionist@example.com',
