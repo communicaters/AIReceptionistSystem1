@@ -1,8 +1,9 @@
 import type { Express } from "express";
 import { storage } from "../storage";
 import { createChatCompletion, analyzeSentiment } from "./openai";
+import twilio from 'twilio';
 
-// Import type definitions
+// Import type definitions 
 import type { Twilio } from 'twilio';
 
 // Initialize Twilio client
@@ -76,9 +77,8 @@ export async function initTwilio(forceReconnect = false): Promise<{ client: Twil
       return { client: null, error: twilioInitializationError };
     }
 
-    // Import dynamically to avoid loading if not needed
-    const twilio = await import('twilio');
-    twilioClient = new twilio.Twilio(accountSid, authToken);
+    // Create Twilio client with credentials 
+    twilioClient = twilio(accountSid, authToken);
     
     console.log("Twilio client initialized successfully");
     
@@ -146,8 +146,8 @@ export function setupTwilioWebhooks(app: Express) {
   // Webhook for incoming voice calls
   app.post("/api/twilio/voice", async (req, res) => {
     try {
-      const { VoiceResponse } = await import('twilio').then(twilio => twilio.twiml);
-      const twiml = new VoiceResponse();
+      const twimlResponse = twilio.twiml;
+      const twiml = new twimlResponse.VoiceResponse();
       
       // Generate greeting message for caller
       twiml.say(
@@ -199,8 +199,8 @@ export function setupTwilioWebhooks(app: Express) {
   // Handle recording from caller
   app.post("/api/twilio/handle-recording", async (req, res) => {
     try {
-      const { VoiceResponse } = await import('twilio').then(twilio => twilio.twiml);
-      const twiml = new VoiceResponse();
+      const twimlResponse = twilio.twiml;
+      const twiml = new twimlResponse.VoiceResponse();
       
       // Thank the caller and say goodbye
       twiml.say(
@@ -341,8 +341,8 @@ export async function makeOutboundCall(to: string, message: string, retryCount =
     const from = twilioConfig.phoneNumber;
     
     // Create TwiML for the outbound call
-    const { VoiceResponse } = await import('twilio').then(twilio => twilio.twiml);
-    const twiml = new VoiceResponse();
+    const twimlResponse = twilio.twiml;
+    const twiml = new twimlResponse.VoiceResponse();
     twiml.say({ voice: 'alice' }, message);
     
     // Add fallback in case the call fails

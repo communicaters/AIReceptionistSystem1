@@ -158,8 +158,14 @@ export const saveOpenPhoneConfig = async (config: Partial<OpenPhoneConfig>): Pro
   return response.json();
 };
 
-export const makeTestCall = async (phoneNumber: string, message: string): Promise<{ success: boolean, callSid?: string, error?: string }> => {
-  const response = await apiRequest("POST", "/api/voice/test-call", { phoneNumber, message });
+export const makeTestCall = async (
+  phoneNumber: string, 
+  message?: string
+): Promise<{ success: boolean; error?: string; callSid?: string }> => {
+  const response = await apiRequest("POST", "/api/voice/test-call", { 
+    phoneNumber, 
+    message 
+  });
   return response.json();
 };
 
