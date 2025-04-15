@@ -1065,6 +1065,248 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }, 500);
     }
   });
+  
+  // Email Templates
+  app.get("/api/email/templates", async (req, res) => {
+    try {
+      const userId = 1; // For demo, use fixed user ID
+      const { category } = req.query;
+      
+      let templates;
+      if (category) {
+        templates = await storage.getEmailTemplatesByCategory(userId, category as string);
+      } else {
+        templates = await storage.getEmailTemplatesByUserId(userId);
+      }
+      
+      apiResponse(res, templates);
+    } catch (error) {
+      console.error("Error fetching email templates:", error);
+      apiResponse(res, { error: "Failed to fetch email templates" }, 500);
+    }
+  });
+  
+  app.get("/api/email/templates/:id", async (req, res) => {
+    try {
+      const templateId = parseInt(req.params.id);
+      const template = await storage.getEmailTemplate(templateId);
+      
+      if (!template) {
+        return apiResponse(res, { error: "Template not found" }, 404);
+      }
+      
+      apiResponse(res, template);
+    } catch (error) {
+      console.error("Error fetching email template:", error);
+      apiResponse(res, { error: "Failed to fetch email template" }, 500);
+    }
+  });
+  
+  app.post("/api/email/templates", async (req, res) => {
+    try {
+      const userId = 1; // For demo, use fixed user ID
+      const { name, subject, body, category } = req.body;
+      
+      if (!name || !subject || !body) {
+        return apiResponse(res, { error: "Missing required fields" }, 400);
+      }
+      
+      const newTemplate = await storage.createEmailTemplate({
+        userId,
+        name,
+        subject,
+        body,
+        category: category || "general",
+        createdAt: new Date(),
+        lastUpdated: new Date(),
+        isActive: true
+      });
+      
+      apiResponse(res, newTemplate, 201);
+    } catch (error) {
+      console.error("Error creating email template:", error);
+      apiResponse(res, { error: "Failed to create email template" }, 500);
+    }
+  });
+  
+  app.put("/api/email/templates/:id", async (req, res) => {
+    try {
+      const templateId = parseInt(req.params.id);
+      const template = await storage.getEmailTemplate(templateId);
+      
+      if (!template) {
+        return apiResponse(res, { error: "Template not found" }, 404);
+      }
+      
+      const updatedTemplate = await storage.updateEmailTemplate(templateId, {
+        ...req.body,
+        lastUpdated: new Date()
+      });
+      
+      apiResponse(res, updatedTemplate);
+    } catch (error) {
+      console.error("Error updating email template:", error);
+      apiResponse(res, { error: "Failed to update email template" }, 500);
+    }
+  });
+  
+  app.delete("/api/email/templates/:id", async (req, res) => {
+    try {
+      const templateId = parseInt(req.params.id);
+      const template = await storage.getEmailTemplate(templateId);
+      
+      if (!template) {
+        return apiResponse(res, { error: "Template not found" }, 404);
+      }
+      
+      await storage.deleteEmailTemplate(templateId);
+      
+      apiResponse(res, { success: true });
+    } catch (error) {
+      console.error("Error deleting email template:", error);
+      apiResponse(res, { error: "Failed to delete email template" }, 500);
+    }
+  });
+  
+  // Scheduled Emails
+  app.get("/api/email/scheduled", async (req, res) => {
+    try {
+      const userId = 1; // For demo, use fixed user ID
+      const emails = await storage.getScheduledEmailsByUserId(userId);
+      
+      apiResponse(res, emails);
+    } catch (error) {
+      console.error("Error fetching scheduled emails:", error);
+      apiResponse(res, { error: "Failed to fetch scheduled emails" }, 500);
+    }
+  });
+  
+  app.get("/api/email/scheduled/:id", async (req, res) => {
+    try {
+      const emailId = parseInt(req.params.id);
+      const email = await storage.getScheduledEmail(emailId);
+      
+      if (!email) {
+        return apiResponse(res, { error: "Scheduled email not found" }, 404);
+      }
+      
+      apiResponse(res, email);
+    } catch (error) {
+      console.error("Error fetching scheduled email:", error);
+      apiResponse(res, { error: "Failed to fetch scheduled email" }, 500);
+    }
+  });
+  
+  app.post("/api/email/scheduled", async (req, res) => {
+    try {
+      const userId = 1; // For demo, use fixed user ID
+      const { to, subject, body, scheduledTime, service, templateId } = req.body;
+      
+      if (!to || !scheduledTime || (!body && !templateId) || !service) {
+        return apiResponse(res, { error: "Missing required fields" }, 400);
+      }
+      
+      let emailSubject = subject;
+      let emailBody = body;
+      
+      // If templateId is provided, fetch the template and use its subject and body
+      if (templateId) {
+        const template = await storage.getEmailTemplate(parseInt(templateId));
+        if (!template) {
+          return apiResponse(res, { error: "Template not found" }, 404);
+        }
+        
+        emailSubject = subject || template.subject;
+        emailBody = body || template.body;
+      }
+      
+      const newEmail = await storage.createScheduledEmail({
+        userId,
+        to,
+        subject: emailSubject,
+        body: emailBody,
+        scheduledTime: new Date(scheduledTime),
+        service,
+        status: "pending",
+        createdAt: new Date(),
+        templateId: templateId ? parseInt(templateId) : null
+      });
+      
+      apiResponse(res, newEmail, 201);
+    } catch (error) {
+      console.error("Error creating scheduled email:", error);
+      apiResponse(res, { error: "Failed to create scheduled email" }, 500);
+    }
+  });
+  
+  app.put("/api/email/scheduled/:id", async (req, res) => {
+    try {
+      const emailId = parseInt(req.params.id);
+      const email = await storage.getScheduledEmail(emailId);
+      
+      if (!email) {
+        return apiResponse(res, { error: "Scheduled email not found" }, 404);
+      }
+      
+      // Only allow updates if the email hasn't been sent yet
+      if (email.status === "sent") {
+        return apiResponse(res, { error: "Cannot update an email that has already been sent" }, 400);
+      }
+      
+      const updatedEmail = await storage.updateScheduledEmail(emailId, req.body);
+      
+      apiResponse(res, updatedEmail);
+    } catch (error) {
+      console.error("Error updating scheduled email:", error);
+      apiResponse(res, { error: "Failed to update scheduled email" }, 500);
+    }
+  });
+  
+  app.delete("/api/email/scheduled/:id", async (req, res) => {
+    try {
+      const emailId = parseInt(req.params.id);
+      const email = await storage.getScheduledEmail(emailId);
+      
+      if (!email) {
+        return apiResponse(res, { error: "Scheduled email not found" }, 404);
+      }
+      
+      // Only allow deletion if the email hasn't been sent yet
+      if (email.status === "sent") {
+        return apiResponse(res, { error: "Cannot delete an email that has already been sent" }, 400);
+      }
+      
+      await storage.deleteScheduledEmail(emailId);
+      
+      apiResponse(res, { success: true });
+    } catch (error) {
+      console.error("Error deleting scheduled email:", error);
+      apiResponse(res, { error: "Failed to delete scheduled email" }, 500);
+    }
+  });
+  
+  app.post("/api/email/scheduled/:id/cancel", async (req, res) => {
+    try {
+      const emailId = parseInt(req.params.id);
+      const email = await storage.getScheduledEmail(emailId);
+      
+      if (!email) {
+        return apiResponse(res, { error: "Scheduled email not found" }, 404);
+      }
+      
+      // Only allow cancellation if the email hasn't been sent yet
+      if (email.status === "sent") {
+        return apiResponse(res, { error: "Cannot cancel an email that has already been sent" }, 400);
+      }
+      
+      const updatedEmail = await storage.updateScheduledEmailStatus(emailId, "cancelled");
+      
+      apiResponse(res, updatedEmail);
+    } catch (error) {
+      console.error("Error cancelling scheduled email:", error);
+      apiResponse(res, { error: "Failed to cancel scheduled email" }, 500);
+    }
+  });
 
   // Chat module
   app.get("/api/chat/config", async (req, res) => {

@@ -130,6 +130,40 @@ export interface EmailLog {
   body: string;
   timestamp: string;
   status: string;
+  service?: string;
+}
+
+export interface EmailTemplate {
+  id: number;
+  name: string;
+  userId: number;
+  subject: string;
+  body: string;
+  category: string;
+  isActive: boolean;
+  createdAt: string;
+  lastUpdated: string;
+  description: string | null;
+  variables: string | null;
+}
+
+export interface ScheduledEmail {
+  id: number;
+  userId: number;
+  to: string;
+  from: string;
+  subject: string;
+  body: string;
+  scheduledTime: string;
+  service: string;
+  status: string; // 'pending', 'sent', 'cancelled', 'failed'
+  createdAt: string;
+  sentAt: string | null;
+  templateId: number | null;
+  fromName: string | null;
+  htmlBody: string | null;
+  isRecurring: boolean;
+  recurringRule: string | null; // e.g., 'FREQ=DAILY' or 'FREQ=WEEKLY;BYDAY=MO,WE,FR'
 }
 
 export interface ChatLog {
