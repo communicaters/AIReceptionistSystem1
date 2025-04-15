@@ -325,10 +325,41 @@ export async function sendTestEmail(
     const user = await storage.getUser(userId);
     const username = user?.username || 'User';
     
+    // Get the email address to use based on the selected service
+    let fromEmail = '';
+    let fromName = 'AI Receptionist';
+    
+    // Fetch the correct "from" email based on the service
+    switch (service) {
+      case 'sendgrid':
+        const sendgridConfig = await storage.getSendgridConfigByUserId(userId);
+        fromEmail = sendgridConfig?.fromEmail || '';
+        fromName = sendgridConfig?.fromName || fromName;
+        break;
+      
+      case 'smtp':
+        const smtpConfig = await storage.getSmtpConfigByUserId(userId);
+        fromEmail = smtpConfig?.fromEmail || '';
+        fromName = smtpConfig?.fromName || fromName;
+        break;
+      
+      case 'mailgun':
+        const mailgunConfig = await storage.getMailgunConfigByUserId(userId);
+        fromEmail = mailgunConfig?.fromEmail || '';
+        fromName = mailgunConfig?.fromName || fromName;
+        break;
+    }
+    
+    if (!fromEmail) {
+      console.error(`No from email address found for ${service} service. Cannot send test email.`);
+      return false;
+    }
+    
     // Create test email content
     const testEmailParams: EmailParams = {
       to: testEmailAddress,
-      from: '', // Will be filled in by the specific service
+      from: fromEmail,
+      fromName: fromName,
       subject: 'Test Email from AI Receptionist',
       text: `Hello ${username},\n\nThis is a test email from your AI Receptionist system to verify that the email service is working correctly.\n\nIf you're receiving this, your ${service} email service is properly configured!\n\nBest regards,\nAI Receptionist`,
       html: `
