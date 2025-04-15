@@ -88,6 +88,10 @@ export interface SmtpConfig {
   password: string;
   fromEmail: string;
   isActive: boolean;
+  // IMAP configuration
+  imapHost?: string;
+  imapPort?: number;
+  imapSecure?: boolean;
 }
 
 export interface MailgunConfig {
