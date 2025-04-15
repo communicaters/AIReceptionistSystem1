@@ -25,27 +25,57 @@ export function WhatsAppChat({
   onRefresh
 }: WhatsAppChatProps) {
   const [newMessage, setNewMessage] = useState("");
+  const [localMessages, setLocalMessages] = useState<WhatsappLog[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
+  // Update local messages when server messages change
+  useEffect(() => {
+    setLocalMessages(messages);
+  }, [messages]);
+  
   // Sort messages by timestamp in ascending order (oldest first)
-  const sortedMessages = [...messages].sort((a, b) => 
+  const sortedMessages = [...localMessages].sort((a, b) => 
     new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
   );
 
   const sendMessageMutation = useMutation({
     mutationFn: ({ phoneNumber, message }: { phoneNumber: string; message: string }) => 
       sendWhatsappMessage(phoneNumber, message),
-    onSuccess: () => {
-      setNewMessage(""); // Clear the input field
-      queryClient.invalidateQueries({ queryKey: ["/api/whatsapp/logs"] });
-      onRefresh(); // Force refresh the messages
+    onSuccess: (data) => {
+      // Clear the input field immediately after sending
+      setNewMessage("");
+      
+      // If the API returned success but there was an error in UI updating
+      if (data.success) {
+        // Add the new message to the local messages array immediately
+        // This ensures the user sees their message right away without waiting for a refresh
+        const newMsg = {
+          id: data.messageId || Date.now(), // Use returned ID or timestamp as fallback
+          userId: 1,
+          phoneNumber: phoneNumber,
+          message: newMessage,
+          mediaUrl: null,
+          direction: 'outbound',
+          timestamp: new Date().toISOString()
+        };
+        
+        // Trigger a refresh to get the message from the server
+        queryClient.invalidateQueries({ queryKey: ["/api/whatsapp/logs"] });
+        setTimeout(() => onRefresh(), 500); // Small delay to ensure DB has updated
+      } else {
+        toast({
+          title: "Warning",
+          description: "Message was sent but there might have been an issue with delivery.",
+          variant: "destructive",
+        });
+      }
     },
     onError: (error) => {
       toast({
         title: "Error",
-        description: "Message was delivered but there was an error updating the UI. Please refresh.",
+        description: "There was an error sending your message. Please try again.",
         variant: "destructive",
       });
     }
@@ -54,7 +84,7 @@ export function WhatsAppChat({
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [localMessages, messages]);
   
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -63,9 +93,28 @@ export function WhatsAppChat({
   const handleSendMessage = () => {
     if (!newMessage.trim()) return;
     
+    // Add message to local state immediately for instant feedback
+    const optimisticMessage: WhatsappLog = {
+      id: Date.now(), // Temporary ID that will be overwritten on refresh
+      userId: 1,
+      phoneNumber: phoneNumber,
+      message: newMessage,
+      mediaUrl: null,
+      direction: 'outbound',
+      timestamp: new Date().toISOString()
+    };
+    
+    // Add the optimistic message to local state
+    setLocalMessages(prev => [...prev, optimisticMessage]);
+    
+    // Clear the input field right away
+    const messageToSend = newMessage;
+    setNewMessage("");
+    
+    // Then send the actual message to the server
     sendMessageMutation.mutate({ 
       phoneNumber, 
-      message: newMessage 
+      message: messageToSend 
     });
   };
 
