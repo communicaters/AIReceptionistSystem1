@@ -102,7 +102,7 @@ export async function selectBestTemplate(
       
       // Check recently used intents for this template category
       const relatedIntents = recentIntents.filter(
-        intent => intent.category === template.category
+        intent => intent.intent === template.category || intent.intent.includes(template.name.toLowerCase())
       );
       
       if (relatedIntents.length > 0) {

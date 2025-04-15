@@ -252,10 +252,8 @@ export async function processIncomingEmail(
       // Record intent for meeting scheduling
       await storage.createIntent({
         userId,
-        category: "meeting_scheduling",
         intent: "schedule_meeting",
-        confidence: 0.9,
-        date: new Date()
+        examples: ["schedule a meeting", "book an appointment", "set up a call"]
       });
       
       // TODO: Add calendar integration to schedule the meeting
@@ -276,10 +274,8 @@ export async function processIncomingEmail(
     for (const intent of intents) {
       await storage.createIntent({
         userId,
-        category: "email",
         intent,
-        confidence: 0.8,
-        date: new Date()
+        examples: [`${intent} email`, `email about ${intent}`, `inquiry regarding ${intent}`]
       });
     }
     
