@@ -830,10 +830,12 @@ const EmailManagement = () => {
   const { 
     data: emailLogs, 
     isLoading: isLoadingLogs,
-    error: logsError
+    error: logsError,
+    refetch: refetchEmailLogs
   } = useQuery({
     queryKey: ["/api/email/logs"],
-    queryFn: () => getEmailLogs(10)
+    queryFn: () => getEmailLogs(10),
+    refetchInterval: 10000, // Auto-refresh every 10 seconds
   });
   
   // Query for fetching email templates
