@@ -426,6 +426,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         openPhone: openPhoneConfigResult
       };
       
+      // Debug configuration values
+      console.log("Twilio config:", JSON.stringify(configs.twilio));
+      
       // If service is not explicitly specified, check configs to find an active one
       if (!serviceName) {
         if (configs.openPhone && configs.openPhone.isActive) {
