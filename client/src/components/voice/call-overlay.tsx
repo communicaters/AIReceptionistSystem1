@@ -12,7 +12,7 @@ import {
   Volume,
   X
 } from 'lucide-react';
-import { createCallLog, updateCallLog } from '@/lib/api';
+import { createCallLog, updateCallLog, getCallLogs } from '@/lib/api';
 
 export interface CallOverlayProps {
   isVisible: boolean;

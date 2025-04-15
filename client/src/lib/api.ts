@@ -86,6 +86,8 @@ export interface CallLog {
   sentiment: string | null;
   timestamp: string;
   status: string;
+  callSid?: string;
+  service?: string;
 }
 
 export interface EmailLog {

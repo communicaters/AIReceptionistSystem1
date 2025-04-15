@@ -342,6 +342,8 @@ export const callLogs = pgTable("call_logs", {
   sentiment: text("sentiment"),
   timestamp: timestamp("timestamp").notNull(),
   status: text("status").notNull(),
+  callSid: text("call_sid"),
+  service: text("service"),
 });
 
 export const insertCallLogSchema = createInsertSchema(callLogs).omit({
