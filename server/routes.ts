@@ -8,8 +8,11 @@ import { initOpenAI } from "./lib/openai";
 import { initSendgrid } from "./lib/sendgrid";
 import { initSmtp } from "./lib/smtp";
 import { initMailgun } from "./lib/mailgun";
-import { initEmailServices, sendTestEmail, processIncomingEmail } from "./lib/email-controller";
+import { initEmailServices, sendTestEmail, processIncomingEmail, sendEmail } from "./lib/email-controller";
 import { syncEmails, verifyImapConnection } from "./lib/imap";
+import * as sendgridService from "./lib/sendgrid";
+import * as smtpService from "./lib/smtp";
+import * as mailgunService from "./lib/mailgun";
 import nodemailer from "nodemailer";
 import { initGoogleCalendar, createOAuth2Client, createEvent, getAvailableTimeSlots } from "./lib/google-calendar";
 import { initElevenLabs } from "./lib/elevenlabs";
@@ -1203,18 +1206,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let message = '';
       
       try {
+        // Create email params
+        const emailParams = {
+          to,
+          from: fromEmail,
+          fromName,
+          subject,
+          text: body,
+          html: htmlBody || undefined
+        };
+        
+        // Use the centralized email service
         if (serviceToUse === 'sendgrid') {
-          const result = await sendgridService.sendEmail(fromEmail, to, subject, body, fromName);
-          success = result.success;
-          message = result.message;
+          const result = await sendEmail(emailParams, 'sendgrid', userId);
+          success = result;
+          message = result ? "Email sent successfully" : "Failed to send email via SendGrid";
         } else if (serviceToUse === 'smtp') {
-          const result = await smtpService.sendEmail(fromEmail, to, subject, body);
-          success = result.success;
-          message = result.message;
+          const result = await sendEmail(emailParams, 'smtp', userId);
+          success = result;
+          message = result ? "Email sent successfully" : "Failed to send email via SMTP";
         } else if (serviceToUse === 'mailgun') {
-          const result = await mailgunService.sendEmail(fromEmail, to, subject, body, fromName);
-          success = result.success;
-          message = result.message;
+          const result = await sendEmail(emailParams, 'mailgun', userId);
+          success = result;
+          message = result ? "Email sent successfully" : "Failed to send email via Mailgun";
         }
       } catch (sendError) {
         console.error("Error sending email via service:", sendError);
