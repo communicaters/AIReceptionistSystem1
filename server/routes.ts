@@ -1666,8 +1666,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Zender WhatsApp/SMS Webhook Endpoint
-  app.post("/api/zender/incoming", async (req, res) => {
+  /**
+   * Shared function to handle Zender webhook processing
+   */
+  async function handleZenderWebhook(req: Request, res: Response) {
     try {
       const userId = 1; // For demo, use fixed user ID
       const webhookData = req.body;
@@ -1719,6 +1721,106 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timestamp: new Date(),
         details: { error: (error as Error).message }
       });
+    }
+  }
+
+  // Zender WhatsApp/SMS Webhook Endpoint (original path)
+  app.post("/api/zender/incoming", handleZenderWebhook);
+  
+  // Alternative webhook endpoint at the common path to support both webhook configurations
+  app.post("/api/whatsapp/webhook/zender", handleZenderWebhook);
+  
+  // Unified webhook handler route for all WhatsApp providers
+  app.post("/api/whatsapp/unified-webhook", async (req, res) => {
+    try {
+      const data = req.body;
+      console.log("Received WhatsApp webhook:", JSON.stringify(data, null, 2));
+      
+      // First, check if it's a Facebook/Meta format webhook
+      if (data.object === "whatsapp_business_account") {
+        // Respond immediately as required by Facebook
+        res.status(200).send("EVENT_RECEIVED");
+        
+        // Process it as a Facebook webhook
+        const userId = 1;
+        
+        // Record system activity
+        await storage.createSystemActivity({
+          module: "WhatsApp",
+          event: "Facebook Webhook Received",
+          status: "success",
+          timestamp: new Date(),
+          details: { provider: "facebook" }
+        });
+        
+        // Process the incoming webhook (Facebook format)
+        try {
+          for (const entry of data.entry || []) {
+            for (const change of entry.changes || []) {
+              if (change.field === "messages") {
+                const value = change.value;
+                
+                if (value && value.messages && value.messages.length > 0) {
+                  for (const message of value.messages) {
+                    const phoneNumber = value.contacts[0]?.wa_id || "unknown";
+                    const timestamp = new Date(parseInt(message.timestamp) * 1000);
+                    
+                    let messageText = "";
+                    let mediaUrl = null;
+                    
+                    // Handle different message types
+                    if (message.type === "text" && message.text) {
+                      messageText = message.text.body;
+                    } else if (message.type === "image" && message.image) {
+                      messageText = "📷 Image received";
+                      mediaUrl = message.image.id || message.image.link;
+                    } else if (message.type === "audio" && message.audio) {
+                      messageText = "🎵 Audio received";
+                      mediaUrl = message.audio.id || message.audio.link;
+                    } else if (message.type === "video" && message.video) {
+                      messageText = "🎬 Video received";
+                      mediaUrl = message.video.id || message.video.link;
+                    } else if (message.type === "document" && message.document) {
+                      messageText = `📄 Document received: ${message.document.filename}`;
+                      mediaUrl = message.document.id || message.document.link;
+                    } else {
+                      messageText = `Message of type ${message.type} received`;
+                    }
+                    
+                    // Store the message in our logs
+                    await storage.createWhatsappLog({
+                      userId,
+                      phoneNumber,
+                      message: messageText,
+                      mediaUrl,
+                      direction: "inbound",
+                      timestamp
+                    });
+                  }
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error("Error processing Facebook webhook:", error);
+        }
+        
+        return; // Already sent response
+      }
+      
+      // If not Facebook, check if it's a Zender format webhook
+      if (data.data || data.from || data.message) {
+        // It's likely a Zender webhook, handle it with the Zender handler
+        return handleZenderWebhook(req, res);
+      }
+      
+      // If we get here, we don't recognize the format
+      console.log("Unknown webhook format:", JSON.stringify(data, null, 2));
+      res.status(200).send("OK"); // Always respond with OK to any webhook
+      
+    } catch (error) {
+      console.error("Error in unified webhook handler:", error);
+      res.status(200).send("OK"); // Always respond with success to webhooks
     }
   });
 
