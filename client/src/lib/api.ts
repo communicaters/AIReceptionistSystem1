@@ -384,6 +384,24 @@ export const processIncomingEmail = async (
   return response.json();
 };
 
+// Function to send an email from the composer
+export const sendEmail = async (
+  email: {
+    to: string;
+    subject: string;
+    body: string;
+    templateId?: number;
+    htmlBody?: string;
+  },
+  service?: 'sendgrid' | 'smtp' | 'mailgun'
+): Promise<{ success: boolean; message: string }> => {
+  const response = await apiRequest("POST", "/api/email/send", {
+    ...email,
+    service
+  });
+  return response.json();
+};
+
 // Email Templates API Functions
 export const getEmailTemplates = async (category?: string): Promise<EmailTemplate[]> => {
   const queryParams = category ? `?category=${category}` : "";

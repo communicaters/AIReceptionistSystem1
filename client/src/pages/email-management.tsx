@@ -8,6 +8,7 @@ import {
   saveMailgunConfig,
   verifySmtpConnection,
   sendTestEmail,
+  sendEmail,
   processIncomingEmail,
   getEmailTemplates,
   getEmailTemplate,
@@ -1104,6 +1105,40 @@ const EmailManagement = () => {
       toast({
         title: "Error",
         description: "Failed to cancel scheduled email. Please try again.",
+        variant: "destructive",
+      });
+    }
+  });
+  
+  // Mutation for sending emails from the composer
+  const sendEmailMutation = useMutation({
+    mutationFn: (params: { 
+      email: { 
+        to: string; 
+        subject: string; 
+        body: string; 
+      }; 
+      service?: 'sendgrid' | 'smtp' | 'mailgun' 
+    }) => sendEmail(params.email, params.service),
+    onSuccess: (data) => {
+      if (data.success) {
+        toast({
+          title: "Email Sent",
+          description: "Your email has been sent successfully",
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/email/logs"] });
+      } else {
+        toast({
+          title: "Failed to Send Email",
+          description: data.message,
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: "Failed to Send Email",
+        description: error.message,
         variant: "destructive",
       });
     }
