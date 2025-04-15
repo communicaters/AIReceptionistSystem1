@@ -1502,20 +1502,20 @@ const EmailManagement = () => {
                   <p className="text-sm text-muted-foreground mb-4">
                     Schedule emails to be sent automatically at specific dates and times
                   </p>
-                  <Button onClick={() => setCreateScheduledMode(true)}>
+                  <Button onClick={() => setCreateScheduledEmailMode(true)}>
                     <CalendarClock className="mr-2 h-4 w-4" />
                     Schedule Email
                   </Button>
                 </div>
               )}
             </CardContent>
-            {(createScheduledMode || editScheduledId) && (
+            {(createScheduledEmailMode || editScheduledEmailId) && (
               <CardFooter>
                 <Button 
                   variant="outline" 
                   onClick={() => {
-                    setCreateScheduledMode(false);
-                    setEditScheduledId(undefined);
+                    setCreateScheduledEmailMode(false);
+                    setEditScheduledEmailId(undefined);
                   }}
                 >
                   Cancel
