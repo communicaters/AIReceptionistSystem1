@@ -415,7 +415,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let serviceName = service;
       
       // Get configurations to validate service status
-      const configs = await getVoiceConfigs();
+      const twilioConfigResult = await storage.getTwilioConfig();
+      const sipConfigResult = await storage.getSipConfig();
+      const openPhoneConfigResult = await storage.getOpenPhoneConfig();
+      
+      const configs = {
+        twilio: twilioConfigResult,
+        sip: sipConfigResult,
+        openPhone: openPhoneConfigResult
+      };
       
       // If service is not explicitly specified, check configs to find an active one
       if (!serviceName) {
