@@ -9,6 +9,7 @@ import { initSendgrid } from "./lib/sendgrid";
 import { initSmtp } from "./lib/smtp";
 import { initMailgun } from "./lib/mailgun";
 import { initEmailServices, sendTestEmail, processIncomingEmail } from "./lib/email-controller";
+import { syncEmails, verifyImapConnection } from "./lib/imap";
 import nodemailer from "nodemailer";
 import { initGoogleCalendar, createOAuth2Client, createEvent, getAvailableTimeSlots } from "./lib/google-calendar";
 import { initElevenLabs } from "./lib/elevenlabs";
