@@ -6,7 +6,8 @@ import {
   saveWhatsappConfig, 
   testWhatsappConnection,
   sendWhatsappMessage,
-  WhatsappConfig
+  WhatsappConfig,
+  WhatsappLog
 } from "@/lib/api";
 import { 
   Card, 
@@ -36,11 +37,14 @@ import { useToast } from "@/hooks/use-toast";
 import StatusBadge from "@/components/ui/status-badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { WhatsAppChat } from "@/components/chat/whatsapp-chat";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 const WhatsApp = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [showSendDialog, setShowSendDialog] = useState(false);
+  const [selectedNumber, setSelectedNumber] = useState<string | null>(null);
   const [sendMessageForm, setSendMessageForm] = useState({
     phoneNumber: "",
     message: ""
@@ -300,6 +304,41 @@ const WhatsApp = () => {
     });
   };
 
+  // Helper functions for conversation view
+  const getUniqueConversations = (logs: WhatsappLog[] = []) => {
+    // Group messages by phone number and get the most recent message for each
+    const phoneNumbers: { [key: string]: WhatsappLog } = {};
+    
+    logs.forEach(log => {
+      // If this phone number doesn't exist in our map yet, or if this message is newer
+      if (!phoneNumbers[log.phoneNumber] || 
+          new Date(log.timestamp) > new Date(phoneNumbers[log.phoneNumber].timestamp)) {
+        phoneNumbers[log.phoneNumber] = log;
+      }
+    });
+    
+    // Convert the map to an array of conversations
+    return Object.values(phoneNumbers).map(log => ({
+      phoneNumber: log.phoneNumber,
+      lastMessage: log.message,
+      timestamp: log.timestamp,
+      direction: log.direction
+    }));
+  };
+  
+  const filterMessagesByPhoneNumber = (logs: WhatsappLog[], phoneNumber: string) => {
+    return logs.filter(log => log.phoneNumber === phoneNumber);
+  };
+  
+  const handleViewConversation = (phoneNumber: string) => {
+    setSelectedNumber(phoneNumber);
+    // When viewing a specific conversation, scroll to bottom after render
+    setTimeout(() => {
+      const endElement = document.getElementById('conversation-end');
+      endElement?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  };
+  
   // Determine connection status
   const connectionStatus = () => {
     if (isLoadingConfig) {
