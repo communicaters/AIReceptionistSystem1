@@ -1788,7 +1788,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     }
                     
                     // Store the message in our logs
-                    await storage.createWhatsappLog({
+                    const savedLog = await storage.createWhatsappLog({
                       userId,
                       phoneNumber,
                       message: messageText,
@@ -1796,6 +1796,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       direction: "inbound",
                       timestamp
                     });
+                    
+                    // Broadcast to connected clients via WebSocket
+                    const socketMessage = {
+                      type: "whatsapp_message",
+                      data: {
+                        id: savedLog.id,
+                        phoneNumber,
+                        message: messageText,
+                        mediaUrl,
+                        direction: "inbound",
+                        timestamp: timestamp.toISOString()
+                      }
+                    };
+                    
+                    // Broadcast to all connected WebSocket clients
+                    broadcastMessage(JSON.stringify(socketMessage));
+                    
+                    console.log(`Broadcast Facebook message to WebSocket clients: ${phoneNumber} - ${messageText}`);
                   }
                 }
               }
@@ -1803,24 +1821,174 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         } catch (error) {
           console.error("Error processing Facebook webhook:", error);
+          await storage.createSystemActivity({
+            module: "WhatsApp",
+            event: "Webhook Error",
+            status: "error",
+            timestamp: new Date(),
+            details: { provider: "facebook", error: (error as Error).message }
+          });
         }
         
         return; // Already sent response
       }
       
       // If not Facebook, check if it's a Zender format webhook
-      if (data.data || data.from || data.message) {
-        // It's likely a Zender webhook, handle it with the Zender handler
-        return handleZenderWebhook(req, res);
+      if (data.data || data.from || data.message || data.secret || 
+          data.type === "whatsapp" || 
+          Object.keys(data).some(key => key.startsWith('data['))) {
+          
+        // For Zender webhooks, we need to respond quickly
+        res.status(200).send("OK");
+        
+        const userId = 1;
+        
+        try {
+          console.log("Processing Zender webhook data format");
+          
+          // Prepare variables to store extracted data
+          let sender = '';
+          let message = '';
+          let mediaUrl = null;
+          let timestamp = new Date();
+          
+          // Format 1: Direct data in the object
+          if (data.from || data.phone || data.wid) {
+            sender = data.from || data.phone || data.wid;
+            message = data.message || '';
+            mediaUrl = data.media_url || data.attachment || null;
+            if (data.timestamp) {
+              timestamp = new Date(parseInt(data.timestamp) * 1000);
+            }
+          }
+          // Format 2: Nested in data object
+          else if (data.data && (typeof data.data === 'object')) {
+            sender = data.data.from || data.data.phone || data.data.wid;
+            message = data.data.message || '';
+            mediaUrl = data.data.media_url || data.data.attachment || null;
+            if (data.data.timestamp) {
+              timestamp = new Date(parseInt(data.data.timestamp) * 1000);
+            }
+          }
+          // Format 3: Form-encoded with data[key] format
+          else if (Object.keys(data).some(key => key.startsWith('data['))) {
+            const keys = Object.keys(data);
+            
+            // Find the sender key (could be different names)
+            const fromKey = keys.find(k => k === 'data[from]' || k === 'data[phone]' || k === 'data[wid]');
+            if (fromKey) sender = data[fromKey];
+            
+            // Find the message key
+            const messageKey = keys.find(k => k === 'data[message]');
+            if (messageKey) message = data[messageKey];
+            
+            // Find any media URL
+            const mediaKey = keys.find(k => k === 'data[media_url]' || k === 'data[attachment]');
+            if (mediaKey) mediaUrl = data[mediaKey];
+            
+            // Find timestamp
+            const timestampKey = keys.find(k => k === 'data[timestamp]');
+            if (timestampKey && data[timestampKey]) {
+              timestamp = new Date(parseInt(data[timestampKey]) * 1000);
+            }
+          }
+          
+          // Clean up phone number format (remove + prefix)
+          if (sender) {
+            sender = sender.replace(/^\+/, '');
+          }
+          
+          // If we have the basic required data
+          if (sender && message) {
+            console.log(`Extracted Zender webhook data - From: ${sender}, Message: ${message.substring(0, 50)}...`);
+            
+            // Store the message in the database
+            const savedLog = await storage.createWhatsappLog({
+              userId,
+              phoneNumber: sender,
+              message: message,
+              mediaUrl: mediaUrl,
+              direction: "inbound",
+              timestamp: timestamp
+            });
+            
+            // Broadcast to connected clients
+            const socketMessage = {
+              type: "whatsapp_message",
+              data: {
+                id: savedLog.id,
+                phoneNumber: sender,
+                message: message,
+                mediaUrl: mediaUrl,
+                direction: "inbound",
+                timestamp: timestamp.toISOString()
+              }
+            };
+            
+            // Broadcast to all connected WebSocket clients
+            broadcastMessage(JSON.stringify(socketMessage));
+            
+            console.log(`Broadcast Zender message to WebSocket clients: ${sender} - ${message}`);
+            
+            // Record success
+            await storage.createSystemActivity({
+              module: "WhatsApp",
+              event: "Message Received",
+              status: "success",
+              timestamp: new Date(),
+              details: {
+                provider: "zender",
+                from: sender,
+                messageContent: message.substring(0, 100) + (message.length > 100 ? '...' : '')
+              }
+            });
+          } else {
+            // If we couldn't extract the data, fall back to the handler
+            console.log("Could not extract data directly, using Zender service handler");
+            const zenderService = getZenderService(userId);
+            const success = await zenderService.processWebhook(data);
+            
+            if (!success) {
+              throw new Error("Failed to process webhook with Zender service");
+            }
+          }
+        } catch (error) {
+          console.error("Error processing Zender webhook data:", error);
+          await storage.createSystemActivity({
+            module: "WhatsApp",
+            event: "Webhook Error",
+            status: "error",
+            timestamp: new Date(),
+            details: { provider: "zender", error: (error as Error).message }
+          });
+        }
+        
+        return; // Already sent response
       }
       
       // If we get here, we don't recognize the format
       console.log("Unknown webhook format:", JSON.stringify(data, null, 2));
       res.status(200).send("OK"); // Always respond with OK to any webhook
       
+      await storage.createSystemActivity({
+        module: "WhatsApp",
+        event: "Unknown Webhook Format",
+        status: "warning",
+        timestamp: new Date(),
+        details: { data: JSON.stringify(data).substring(0, 200) }
+      });
+      
     } catch (error) {
       console.error("Error in unified webhook handler:", error);
       res.status(200).send("OK"); // Always respond with success to webhooks
+      
+      await storage.createSystemActivity({
+        module: "WhatsApp",
+        event: "Webhook Handler Error",
+        status: "error",
+        timestamp: new Date(),
+        details: { error: (error as Error).message }
+      });
     }
   });
 
