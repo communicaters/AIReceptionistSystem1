@@ -18,6 +18,7 @@ import { initGoogleCalendar, createOAuth2Client, createEvent, getAvailableTimeSl
 import { initElevenLabs } from "./lib/elevenlabs";
 import { initWhisperAPI } from "./lib/whisper";
 import { createAllSampleMp3s } from "./lib/create-sample-mp3";
+import { getZenderService } from "./lib/zender";
 import { setupWebsocketHandlers } from "./lib/websocket";
 import { aiRouter } from "./routes/ai";
 import { speechRouter } from "./routes/speech";
@@ -1678,7 +1679,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(200).send("OK");
       
       // Get the Zender service
-      const { getZenderService } = require('./lib/zender');
       const zenderService = getZenderService(userId);
       
       // Process the webhook data
