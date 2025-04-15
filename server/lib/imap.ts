@@ -1,5 +1,5 @@
 import IMAP from 'imap';
-import { simpleParser } from 'mailparser';
+import { simpleParser, type ParsedMail } from 'mailparser';
 import { storage } from '../database-storage';
 import { type InsertEmailLog } from '@shared/schema';
 
@@ -127,8 +127,21 @@ export async function fetchEmails(userId: number, folder: string = 'INBOX', limi
                   stream.once('end', () => {
                     // Parse the email content
                     simpleParser(buffer).then((parsed) => {
-                      email.from = parsed.from?.text || '';
-                      email.to = parsed.to?.text || '';
+                      // Handle different address formats
+                      if (parsed.from) {
+                        email.from = typeof parsed.from.text === 'string' 
+                          ? parsed.from.text 
+                          : parsed.from.value?.[0]?.address || '';
+                      }
+                      
+                      if (parsed.to) {
+                        email.to = typeof parsed.to.text === 'string'
+                          ? parsed.to.text
+                          : Array.isArray(parsed.to.value) 
+                            ? parsed.to.value.map(addr => addr.address).join(', ')
+                            : '';
+                      }
+                      
                       email.subject = parsed.subject || '';
                       email.body = parsed.text || '';
                       email.html = parsed.html || undefined;
@@ -160,7 +173,7 @@ export async function fetchEmails(userId: number, folder: string = 'INBOX', limi
         });
       });
       
-      imapClient.once('error', (err) => {
+      imapClient.once('error', (err: Error) => {
         reject(err);
       });
       
