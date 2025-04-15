@@ -147,6 +147,18 @@ export interface EmailTemplate {
   variables: string | null;
 }
 
+export interface EmailLog {
+  id: number;
+  userId: number;
+  from: string;
+  to: string;
+  subject: string;
+  body: string;
+  timestamp: string;
+  status: string;
+  service?: string;
+}
+
 export interface ScheduledEmail {
   id: number;
   userId: number;

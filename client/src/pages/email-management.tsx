@@ -24,7 +24,8 @@ import {
   type SmtpConfig,
   type MailgunConfig,
   type EmailTemplate,
-  type ScheduledEmail
+  type ScheduledEmail,
+  type EmailLog
 } from "@/lib/api";
 import { 
   Card, 
@@ -1109,19 +1110,20 @@ const EmailManagement = () => {
   });
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Email Management</h1>
-          <p className="text-muted-foreground">
-            Manage email services, view email logs, and configure auto-responses
-          </p>
+    <>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Email Management</h1>
+            <p className="text-muted-foreground">
+              Manage email services, view email logs, and configure auto-responses
+            </p>
+          </div>
+          <TestEmailDialog 
+            onSend={(to, service) => testEmailMutation.mutate({ to, service })}
+            isPending={testEmailMutation.isPending}
+          />
         </div>
-        <TestEmailDialog 
-          onSend={(to, service) => testEmailMutation.mutate({ to, service })}
-          isPending={testEmailMutation.isPending}
-        />
-      </div>
 
       <Tabs defaultValue="inbox">
         <TabsList>
@@ -1789,7 +1791,11 @@ const EmailManagement = () => {
                       </TableCell>
                       <TableCell>{formatDistanceToNow(new Date(log.timestamp))} ago</TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="sm">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => setViewEmailLog(log)}
+                        >
                           View
                         </Button>
                       </TableCell>
@@ -2077,6 +2083,69 @@ const EmailManagement = () => {
         </CardContent>
       </Card>
     </div>
+      
+      {/* Email View Dialog */}
+      <Dialog open={!!viewEmailLog} onOpenChange={(open) => !open && setViewEmailLog(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Email Details</DialogTitle>
+            <DialogDescription>
+              View the details of this email
+            </DialogDescription>
+          </DialogHeader>
+          
+          {viewEmailLog && (
+            <div className="space-y-4 mt-2">
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <h3 className="font-medium text-sm text-neutral-500">From</h3>
+                  <p className="mt-1">{viewEmailLog.from}</p>
+                </div>
+                <div>
+                  <h3 className="font-medium text-sm text-neutral-500">To</h3>
+                  <p className="mt-1">{viewEmailLog.to}</p>
+                </div>
+                <div>
+                  <h3 className="font-medium text-sm text-neutral-500">Date</h3>
+                  <p className="mt-1">{new Date(viewEmailLog.timestamp).toLocaleString()}</p>
+                </div>
+              </div>
+              
+              <div>
+                <h3 className="font-medium text-sm text-neutral-500">Subject</h3>
+                <p className="mt-1 font-medium">{viewEmailLog.subject}</p>
+              </div>
+              
+              <div>
+                <h3 className="font-medium text-sm text-neutral-500">Status</h3>
+                <div className="mt-1">
+                  <StatusBadge status={
+                    viewEmailLog.status === 'sent' || viewEmailLog.status === 'delivered' 
+                      ? 'operational' 
+                      : viewEmailLog.status === 'failed' 
+                      ? 'outage' 
+                      : 'degraded'
+                  } />
+                </div>
+              </div>
+              
+              <div>
+                <h3 className="font-medium text-sm text-neutral-500">Message</h3>
+                <div className="mt-2 p-4 border rounded-md whitespace-pre-wrap bg-slate-50">
+                  {viewEmailLog.body}
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewEmailLog(null)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 
