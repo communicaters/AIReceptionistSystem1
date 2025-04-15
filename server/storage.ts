@@ -192,6 +192,8 @@ export class MemStorage implements IStorage {
   private sendgridConfigs: Map<number, SendgridConfig>;
   private mailgunConfigs: Map<number, MailgunConfig>;
   private chatConfigs: Map<number, ChatConfig>;
+  private emailTemplates: Map<number, EmailTemplate>;
+  private scheduledEmails: Map<number, ScheduledEmail>;
   private whatsappConfigs: Map<number, WhatsappConfig>;
   private calendarConfigs: Map<number, CalendarConfig>;
   private products: Map<number, ProductData>;
@@ -242,6 +244,8 @@ export class MemStorage implements IStorage {
     this.sendgridConfigs = new Map();
     this.mailgunConfigs = new Map();
     this.chatConfigs = new Map();
+    this.emailTemplates = new Map();
+    this.scheduledEmails = new Map();
     this.whatsappConfigs = new Map();
     this.calendarConfigs = new Map();
     this.products = new Map();
@@ -267,6 +271,8 @@ export class MemStorage implements IStorage {
       sendgridConfigs: 1,
       mailgunConfigs: 1,
       chatConfigs: 1,
+      emailTemplates: 1,
+      scheduledEmails: 1,
       whatsappConfigs: 1,
       calendarConfigs: 1,
       products: 1,
@@ -1140,6 +1146,93 @@ export class MemStorage implements IStorage {
   async deleteVoiceSettings(id: number): Promise<boolean> {
     this.voiceSettings.delete(id);
     return true;
+  }
+
+  // Email Templates
+  async getEmailTemplate(id: number): Promise<EmailTemplate | undefined> {
+    return this.emailTemplates.get(id);
+  }
+
+  async getEmailTemplatesByUserId(userId: number): Promise<EmailTemplate[]> {
+    return Array.from(this.emailTemplates.values()).filter(
+      (template) => template.userId === userId
+    );
+  }
+
+  async getEmailTemplatesByCategory(userId: number, category: string): Promise<EmailTemplate[]> {
+    return Array.from(this.emailTemplates.values()).filter(
+      (template) => template.userId === userId && template.category === category
+    );
+  }
+
+  async createEmailTemplate(template: InsertEmailTemplate): Promise<EmailTemplate> {
+    const id = this.currentIds.emailTemplates++;
+    const newTemplate: EmailTemplate = { ...template, id };
+    this.emailTemplates.set(id, newTemplate);
+    return newTemplate;
+  }
+
+  async updateEmailTemplate(id: number, template: Partial<InsertEmailTemplate>): Promise<EmailTemplate | undefined> {
+    const existingTemplate = this.emailTemplates.get(id);
+    if (!existingTemplate) return undefined;
+    
+    const updatedTemplate: EmailTemplate = { ...existingTemplate, ...template };
+    this.emailTemplates.set(id, updatedTemplate);
+    return updatedTemplate;
+  }
+
+  async deleteEmailTemplate(id: number): Promise<boolean> {
+    return this.emailTemplates.delete(id);
+  }
+
+  // Scheduled Emails
+  async getScheduledEmail(id: number): Promise<ScheduledEmail | undefined> {
+    return this.scheduledEmails.get(id);
+  }
+
+  async getScheduledEmailsByUserId(userId: number): Promise<ScheduledEmail[]> {
+    return Array.from(this.scheduledEmails.values()).filter(
+      (email) => email.userId === userId
+    );
+  }
+
+  async getPendingScheduledEmails(cutoffTime: Date = new Date()): Promise<ScheduledEmail[]> {
+    return Array.from(this.scheduledEmails.values()).filter(
+      (email) => email.status === 'pending' && new Date(email.scheduledTime) <= cutoffTime
+    );
+  }
+
+  async createScheduledEmail(email: InsertScheduledEmail): Promise<ScheduledEmail> {
+    const id = this.currentIds.scheduledEmails++;
+    const newEmail: ScheduledEmail = { ...email, id };
+    this.scheduledEmails.set(id, newEmail);
+    return newEmail;
+  }
+
+  async updateScheduledEmail(id: number, email: Partial<InsertScheduledEmail>): Promise<ScheduledEmail | undefined> {
+    const existingEmail = this.scheduledEmails.get(id);
+    if (!existingEmail) return undefined;
+    
+    const updatedEmail: ScheduledEmail = { ...existingEmail, ...email };
+    this.scheduledEmails.set(id, updatedEmail);
+    return updatedEmail;
+  }
+
+  async updateScheduledEmailStatus(id: number, status: string, sentAt?: Date): Promise<ScheduledEmail | undefined> {
+    const existingEmail = this.scheduledEmails.get(id);
+    if (!existingEmail) return undefined;
+    
+    const updatedEmail: ScheduledEmail = { 
+      ...existingEmail, 
+      status,
+      sentAt: sentAt || (status === 'sent' ? new Date() : existingEmail.sentAt)
+    };
+    this.scheduledEmails.set(id, updatedEmail);
+    return updatedEmail;
+  }
+
+  async deleteScheduledEmail(id: number): Promise<boolean> {
+    return this.scheduledEmails.delete(id);
   }
 }
 
