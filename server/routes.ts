@@ -1962,7 +1962,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (config.provider === 'zender' && config.apiSecret && config.accountId) {
         try {
           // Use Zender service for sending messages
-          const { getZenderService } = require('./lib/zender');
           const zenderService = getZenderService(userId);
           
           // Initialize the service
@@ -2077,7 +2076,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (config.provider === 'zender' && config.apiSecret && config.accountId) {
         try {
           // Use Zender service to test connection
-          const { getZenderService } = require('./lib/zender');
           const zenderService = getZenderService(userId);
           
           // Initialize and test the connection
