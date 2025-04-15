@@ -6,6 +6,9 @@ import { pool } from "./db"; // Add database pool import for direct queries
 import { setupTwilioWebhooks } from "./lib/twilio";
 import { initOpenAI } from "./lib/openai";
 import { initSendgrid } from "./lib/sendgrid";
+import { initSmtp } from "./lib/smtp";
+import { initMailgun } from "./lib/mailgun";
+import { initEmailServices } from "./lib/email-controller";
 import { initGoogleCalendar, createOAuth2Client, createEvent, getAvailableTimeSlots } from "./lib/google-calendar";
 import { initElevenLabs } from "./lib/elevenlabs";
 import { initWhisperAPI } from "./lib/whisper";
@@ -153,6 +156,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize external services
   initOpenAI();
   initSendgrid();
+  initSmtp();
+  initMailgun();
+  initEmailServices();
   initGoogleCalendar();
   initElevenLabs();
   initWhisperAPI();
@@ -724,6 +730,312 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching email logs:", error);
       apiResponse(res, { error: "Failed to fetch email logs" }, 500);
+    }
+  });
+  
+  // Update a specific email configuration
+  app.post("/api/email/config/sendgrid", async (req, res) => {
+    try {
+      const userId = 1; // For demo, use fixed user ID
+      const { apiKey, fromEmail, fromName, isActive } = req.body;
+      
+      if (!apiKey || !fromEmail || !fromName) {
+        return apiResponse(res, { error: "Required fields missing" }, 400);
+      }
+      
+      // Check if config already exists
+      const existingConfig = await storage.getSendgridConfigByUserId(userId);
+      
+      let config;
+      if (existingConfig) {
+        // Update existing config
+        config = await storage.updateSendgridConfig(existingConfig.id, {
+          apiKey,
+          fromEmail,
+          fromName,
+          isActive: isActive !== undefined ? isActive : true
+        });
+      } else {
+        // Create new config
+        config = await storage.createSendgridConfig({
+          userId,
+          apiKey,
+          fromEmail,
+          fromName,
+          isActive: isActive !== undefined ? isActive : true
+        });
+      }
+      
+      await storage.createSystemActivity({
+        module: "Email",
+        event: "SendGrid Config Updated",
+        status: "Completed",
+        timestamp: new Date(),
+        details: { userId }
+      });
+      
+      // Initialize SendGrid with the new config
+      await initSendgrid();
+      
+      apiResponse(res, config);
+    } catch (error) {
+      console.error("Error updating SendGrid config:", error);
+      apiResponse(res, { error: "Failed to update SendGrid configuration" }, 500);
+    }
+  });
+  
+  app.post("/api/email/config/smtp", async (req, res) => {
+    try {
+      const userId = 1; // For demo, use fixed user ID
+      const { host, port, username, password, fromEmail, isActive } = req.body;
+      
+      if (!host || !port || !username || !password || !fromEmail) {
+        return apiResponse(res, { error: "Required fields missing" }, 400);
+      }
+      
+      // Check if config already exists
+      const existingConfig = await storage.getSmtpConfigByUserId(userId);
+      
+      let config;
+      if (existingConfig) {
+        // Update existing config
+        config = await storage.updateSmtpConfig(existingConfig.id, {
+          host,
+          port: parseInt(port),
+          username,
+          password,
+          fromEmail,
+          isActive: isActive !== undefined ? isActive : true
+        });
+      } else {
+        // Create new config
+        config = await storage.createSmtpConfig({
+          userId,
+          host,
+          port: parseInt(port),
+          username,
+          password,
+          fromEmail,
+          isActive: isActive !== undefined ? isActive : true
+        });
+      }
+      
+      await storage.createSystemActivity({
+        module: "Email",
+        event: "SMTP Config Updated",
+        status: "Completed",
+        timestamp: new Date(),
+        details: { userId, host, port }
+      });
+      
+      // Initialize SMTP with the new config
+      await initSmtp(userId);
+      
+      apiResponse(res, config);
+    } catch (error) {
+      console.error("Error updating SMTP config:", error);
+      apiResponse(res, { error: "Failed to update SMTP configuration" }, 500);
+    }
+  });
+  
+  app.post("/api/email/config/mailgun", async (req, res) => {
+    try {
+      const userId = 1; // For demo, use fixed user ID
+      const { apiKey, domain, fromEmail, isActive } = req.body;
+      
+      if (!apiKey || !domain || !fromEmail) {
+        return apiResponse(res, { error: "Required fields missing" }, 400);
+      }
+      
+      // Check if config already exists
+      const existingConfig = await storage.getMailgunConfigByUserId(userId);
+      
+      let config;
+      if (existingConfig) {
+        // Update existing config
+        config = await storage.updateMailgunConfig(existingConfig.id, {
+          apiKey,
+          domain,
+          fromEmail,
+          isActive: isActive !== undefined ? isActive : true
+        });
+      } else {
+        // Create new config
+        config = await storage.createMailgunConfig({
+          userId,
+          apiKey,
+          domain,
+          fromEmail,
+          isActive: isActive !== undefined ? isActive : true
+        });
+      }
+      
+      await storage.createSystemActivity({
+        module: "Email",
+        event: "Mailgun Config Updated",
+        status: "Completed",
+        timestamp: new Date(),
+        details: { userId, domain }
+      });
+      
+      // Initialize Mailgun with the new config
+      await initMailgun(userId);
+      
+      apiResponse(res, config);
+    } catch (error) {
+      console.error("Error updating Mailgun config:", error);
+      apiResponse(res, { error: "Failed to update Mailgun configuration" }, 500);
+    }
+  });
+  
+  // Verify SMTP connection
+  app.post("/api/email/verify/smtp", async (req, res) => {
+    try {
+      const userId = 1; // For demo, use fixed user ID
+      
+      // We may be verifying a new configuration or an existing one
+      const { host, port, username, password } = req.body;
+      
+      if (host && port && username && password) {
+        // Create a temporary transporter for verification only
+        const nodemailer = require('nodemailer');
+        const transporter = nodemailer.createTransport({
+          host,
+          port: parseInt(port),
+          secure: parseInt(port) === 465,
+          auth: {
+            user: username,
+            pass: password
+          }
+        });
+        
+        const isVerified = await transporter.verify();
+        
+        apiResponse(res, { 
+          success: isVerified, 
+          message: isVerified 
+            ? "SMTP connection successful" 
+            : "Failed to verify SMTP connection" 
+        });
+      } else {
+        // Verify using stored configuration
+        const config = await storage.getSmtpConfigByUserId(userId);
+        
+        if (!config) {
+          return apiResponse(res, { 
+            success: false, 
+            message: "No SMTP configuration found" 
+          }, 404);
+        }
+        
+        // Import and initialize SMTP service
+        const { verifySmtpConnection } = require('./lib/smtp');
+        const isVerified = await verifySmtpConnection(userId);
+        
+        apiResponse(res, { 
+          success: isVerified, 
+          message: isVerified 
+            ? "SMTP connection successful" 
+            : "Failed to verify SMTP connection" 
+        });
+      }
+    } catch (error) {
+      console.error("Error verifying SMTP connection:", error);
+      apiResponse(res, { 
+        success: false, 
+        message: `SMTP verification failed: ${error.message}` 
+      }, 500);
+    }
+  });
+  
+  // Send a test email
+  app.post("/api/email/test", async (req, res) => {
+    try {
+      const userId = 1; // For demo, use fixed user ID
+      const { to, service } = req.body;
+      
+      if (!to) {
+        return apiResponse(res, { 
+          success: false, 
+          message: "Recipient email address is required" 
+        }, 400);
+      }
+      
+      // Import the email controller
+      const { sendTestEmail } = require('./lib/email-controller');
+      
+      // Send test email
+      const success = await sendTestEmail(to, userId, service);
+      
+      if (success) {
+        await storage.createSystemActivity({
+          module: "Email",
+          event: "Test Email Sent",
+          status: "Completed",
+          timestamp: new Date(),
+          details: { to, service }
+        });
+        
+        apiResponse(res, { 
+          success: true, 
+          message: `Test email sent to ${to} using ${service || 'default'} service` 
+        });
+      } else {
+        apiResponse(res, { 
+          success: false, 
+          message: "Failed to send test email. Check service configuration and logs." 
+        }, 500);
+      }
+    } catch (error) {
+      console.error("Error sending test email:", error);
+      apiResponse(res, { 
+        success: false, 
+        message: `Error sending test email: ${error.message}` 
+      }, 500);
+    }
+  });
+  
+  // Process and respond to an incoming email
+  app.post("/api/email/process", async (req, res) => {
+    try {
+      const userId = 1; // For demo, use fixed user ID
+      const { from, to, subject, body, service } = req.body;
+      
+      if (!from || !subject || !body) {
+        return apiResponse(res, { 
+          success: false, 
+          message: "From address, subject, and body are required" 
+        }, 400);
+      }
+      
+      // Import the email controller
+      const { processIncomingEmail } = require('./lib/email-controller');
+      
+      // Process the email
+      const success = await processIncomingEmail({
+        from,
+        to: to || 'receptionist@example.com',
+        subject,
+        body
+      }, userId, service as any);
+      
+      if (success) {
+        apiResponse(res, { 
+          success: true, 
+          message: "Email processed successfully" 
+        });
+      } else {
+        apiResponse(res, { 
+          success: false, 
+          message: "Failed to process email" 
+        }, 500);
+      }
+    } catch (error) {
+      console.error("Error processing email:", error);
+      apiResponse(res, { 
+        success: false, 
+        message: `Error processing email: ${error.message}` 
+      }, 500);
     }
   });
 
