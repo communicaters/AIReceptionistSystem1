@@ -2177,7 +2177,113 @@ export async function registerRoutes(app: Express): Promise<Server> {
         details: { payload: data }
       });
       
-      // Process the incoming webhook
+      // Process Zender webhook if that's the format we're receiving
+      if (data.type === "whatsapp" && (data.secret || data.data || Object.keys(data).some(k => k.startsWith('data[')))) {
+        try {
+          const config = await storage.getWhatsappConfigByUserId(userId);
+          
+          // Validate secret if present
+          if (config && config.webhookSecret && data.secret !== config.webhookSecret) {
+            console.error("Invalid webhook secret received");
+            await storage.createSystemActivity({
+              module: "WhatsApp",
+              event: "Webhook Auth Failed",
+              status: "Error",
+              timestamp: new Date(),
+              details: { error: "Invalid webhook secret" }
+            });
+            return;
+          }
+          
+          // Extract message data based on the format
+          let sender = '';
+          let message = '';
+          let mediaUrl = null;
+          let timestamp = new Date();
+          let messageId = null;
+          
+          // Format 1: Object with data property as an object
+          if (data.data && typeof data.data === 'object') {
+            console.log("Processing webhook format 1 (nested data object)");
+            sender = data.data.phone || data.data.wid || '';
+            message = data.data.message || '';
+            mediaUrl = data.data.attachment || null;
+            messageId = data.data.id?.toString() || null;
+            
+            if (data.data.timestamp) {
+              timestamp = new Date(parseInt(data.data.timestamp) * 1000);
+            }
+          }
+          // Format 2: Object with form-encoded data[property] format
+          else if (Object.keys(data).some(key => key.startsWith('data['))) {
+            console.log("Processing webhook format 2 (form-encoded data)");
+            sender = data['data[phone]'] || data['data[wid]'] || '';
+            message = data['data[message]'] || '';
+            
+            const attachmentValue = data['data[attachment]'];
+            mediaUrl = (attachmentValue && attachmentValue !== '0') ? attachmentValue : null;
+            
+            messageId = data['data[id]']?.toString() || null;
+            
+            if (data['data[timestamp]']) {
+              timestamp = new Date(parseInt(data['data[timestamp]']) * 1000);
+            }
+          }
+          
+          // Clean phone number format
+          if (sender) {
+            sender = sender.replace(/^\+/, '');
+          }
+          
+          // If we successfully extracted the required fields
+          if (sender && message) {
+            console.log(`Extracted webhook data - From: ${sender}, Message: ${message}`);
+            
+            // Create the message log
+            const whatsappLog = await storage.createWhatsappLog({
+              userId,
+              phoneNumber: sender,
+              message,
+              mediaUrl,
+              direction: 'inbound',
+              timestamp,
+              status: 'received',
+              externalId: messageId
+            });
+            
+            console.log(`Created WhatsApp log entry with ID: ${whatsappLog.id}`);
+            
+            // Record successful processing
+            await storage.createSystemActivity({
+              module: 'WhatsApp',
+              event: 'Message Received',
+              status: 'Completed',
+              timestamp: new Date(),
+              details: {
+                from: sender,
+                messageId,
+                logId: whatsappLog.id,
+                message: message.substring(0, 100) + (message.length > 100 ? '...' : '')
+              }
+            });
+            
+            return;
+          }
+        } catch (error) {
+          console.error("Error processing Zender webhook:", error);
+          await storage.createSystemActivity({
+            module: 'WhatsApp',
+            event: 'Webhook Processing Error',
+            status: 'Error',
+            timestamp: new Date(),
+            details: { error: (error as Error).message }
+          });
+          return;
+        }
+      }
+      
+      // If we reach here, it's not a Zender format or we couldn't process it
+      // Fall back to Facebook format processing
       if (data.object === "whatsapp_business_account") {
         // Process each entry
         for (const entry of data.entry) {
