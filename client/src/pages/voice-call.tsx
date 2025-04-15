@@ -46,15 +46,35 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 
 // Interface for service configuration states
 interface ConfigValues {
-  accountSid?: string;
-  authToken?: string;
+  // Common fields
   phoneNumber?: string;
   isActive?: boolean;
+  callbackUrl?: string;
+  
+  // Twilio specific
+  accountSid?: string;
+  authToken?: string;
+  
+  // SIP specific
   username?: string;
   password?: string;
-  serverUrl?: string;
-  extension?: string;
+  serverDomain?: string;
+  outboundProxy?: string;
+  port?: number;
+  transportProtocol?: 'UDP' | 'TCP' | 'TLS';
+  registrationExpiryTime?: number;
+  callerId?: string;
+  stunServer?: string;
+  dtmfMode?: 'RFC2833' | 'SIP INFO' | 'IN-BAND';
+  audioCodecs?: string[];
+  voicemailUri?: string;
+  sipUri?: string;
+  keepAliveInterval?: number;
+  tlsCertPath?: string;
+  
+  // OpenPhone specific
   apiKey?: string;
+  teamId?: string;
 }
 
 interface TestCallState {
@@ -88,8 +108,20 @@ const VoiceCall = () => {
   const [sipConfig, setSipConfig] = useState<ConfigValues>({
     username: "",
     password: "",
-    serverUrl: "",
-    extension: "",
+    serverDomain: "",
+    outboundProxy: "",
+    port: 5060,
+    transportProtocol: "UDP",
+    registrationExpiryTime: 3600,
+    callerId: "",
+    stunServer: "",
+    dtmfMode: "RFC2833",
+    audioCodecs: ["G.711", "G.722", "Opus"],
+    voicemailUri: "",
+    sipUri: "",
+    keepAliveInterval: 30,
+    tlsCertPath: "",
+    callbackUrl: "",
     isActive: true
   });
   
@@ -125,8 +157,20 @@ const VoiceCall = () => {
         setSipConfig({
           username: data.sip.username,
           password: data.sip.password,
-          serverUrl: data.sip.serverUrl,
-          extension: data.sip.extension || "",
+          serverDomain: data.sip.serverDomain,
+          outboundProxy: data.sip.outboundProxy || "",
+          port: data.sip.port || 5060,
+          transportProtocol: data.sip.transportProtocol || "UDP",
+          registrationExpiryTime: data.sip.registrationExpiryTime || 3600,
+          callerId: data.sip.callerId || "",
+          stunServer: data.sip.stunServer || "",
+          dtmfMode: data.sip.dtmfMode || "RFC2833",
+          audioCodecs: data.sip.audioCodecs || ["G.711", "G.722", "Opus"],
+          voicemailUri: data.sip.voicemailUri || "",
+          sipUri: data.sip.sipUri || "",
+          keepAliveInterval: data.sip.keepAliveInterval || 30,
+          tlsCertPath: data.sip.tlsCertPath || "",
+          callbackUrl: data.sip.callbackUrl || "",
           isActive: data.sip.isActive
         });
       }
@@ -256,10 +300,10 @@ const VoiceCall = () => {
   };
   
   const saveSipSettings = () => {
-    if (!sipConfig.username || !sipConfig.password || !sipConfig.serverUrl) {
+    if (!sipConfig.username || !sipConfig.password || !sipConfig.serverDomain) {
       toast({
         title: "Missing required fields",
-        description: "Username, Password, and Server URL are required.",
+        description: "Username, Password, and Server Domain are required.",
         variant: "destructive",
       });
       return;
@@ -539,21 +583,21 @@ const VoiceCall = () => {
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="serverUrl">Server URL</Label>
+                      <Label htmlFor="serverDomain">Server Domain</Label>
                       <Input 
-                        id="serverUrl" 
-                        value={sipConfig.serverUrl} 
-                        onChange={(e) => setSipConfig({...sipConfig, serverUrl: e.target.value})} 
+                        id="serverDomain" 
+                        value={sipConfig.serverDomain} 
+                        onChange={(e) => setSipConfig({...sipConfig, serverDomain: e.target.value})} 
                         placeholder="sip.example.com" 
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="extension">Extension (Optional)</Label>
+                      <Label htmlFor="callerId">Caller ID (Optional)</Label>
                       <Input 
-                        id="extension" 
-                        value={sipConfig.extension} 
-                        onChange={(e) => setSipConfig({...sipConfig, extension: e.target.value})} 
-                        placeholder="1234" 
+                        id="callerId" 
+                        value={sipConfig.callerId} 
+                        onChange={(e) => setSipConfig({...sipConfig, callerId: e.target.value})} 
+                        placeholder="+12345678900" 
                       />
                     </div>
                     <div className="space-y-2 flex items-end">
@@ -575,12 +619,12 @@ const VoiceCall = () => {
                     <p className="mt-1">{voiceConfigs.sip.username}</p>
                   </div>
                   <div>
-                    <h3 className="font-medium text-sm text-neutral-500">Server URL</h3>
-                    <p className="mt-1">{voiceConfigs.sip.serverUrl}</p>
+                    <h3 className="font-medium text-sm text-neutral-500">Server Domain</h3>
+                    <p className="mt-1">{voiceConfigs.sip.serverDomain}</p>
                   </div>
                   <div>
-                    <h3 className="font-medium text-sm text-neutral-500">Extension</h3>
-                    <p className="mt-1">{voiceConfigs.sip.extension || "N/A"}</p>
+                    <h3 className="font-medium text-sm text-neutral-500">Caller ID</h3>
+                    <p className="mt-1">{voiceConfigs.sip.callerId || "N/A"}</p>
                   </div>
                   <div>
                     <h3 className="font-medium text-sm text-neutral-500">Status</h3>
