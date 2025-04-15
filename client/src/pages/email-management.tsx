@@ -252,8 +252,13 @@ const MailgunConfigForm = ({
   const [apiKey, setApiKey] = useState(currentConfig?.apiKey || '');
   const [domain, setDomain] = useState(currentConfig?.domain || '');
   const [fromEmail, setFromEmail] = useState(currentConfig?.fromEmail || '');
+  const [fromName, setFromName] = useState(currentConfig?.fromName || '');
+  const [authorizedRecipients, setAuthorizedRecipients] = useState(currentConfig?.authorizedRecipients || '');
   const [isActive, setIsActive] = useState(currentConfig?.isActive ?? true);
-
+  
+  // Check if domain is a sandbox domain
+  const isSandboxDomain = domain.includes('sandbox');
+  
   return (
     <div className="space-y-4">
       <div className="grid w-full items-center gap-1.5">
@@ -276,6 +281,11 @@ const MailgunConfigForm = ({
           value={domain}
           onChange={e => setDomain(e.target.value)}
         />
+        {isSandboxDomain && (
+          <p className="text-amber-500 text-sm mt-1">
+            Sandbox domain detected. You'll need to add authorized recipients below.
+          </p>
+        )}
       </div>
       
       <div className="grid w-full items-center gap-1.5">
@@ -289,6 +299,35 @@ const MailgunConfigForm = ({
         />
       </div>
       
+      <div className="grid w-full items-center gap-1.5">
+        <Label htmlFor="fromName">From Name (Optional)</Label>
+        <Input 
+          type="text" 
+          id="fromName" 
+          placeholder="AI Receptionist" 
+          value={fromName}
+          onChange={e => setFromName(e.target.value)}
+        />
+      </div>
+      
+      <div className="grid w-full items-center gap-1.5">
+        <Label htmlFor="authorizedRecipients">
+          Authorized Recipients {isSandboxDomain && <span className="text-red-500">*</span>}
+        </Label>
+        <Input 
+          type="text" 
+          id="authorizedRecipients" 
+          placeholder="email1@example.com, email2@example.com" 
+          value={authorizedRecipients}
+          onChange={e => setAuthorizedRecipients(e.target.value)}
+        />
+        <p className="text-sm text-muted-foreground">
+          {isSandboxDomain 
+            ? "For sandbox domains, list all email addresses that can receive emails (comma-separated)." 
+            : "Comma-separated list of email addresses for testing purposes (optional for custom domains)."}
+        </p>
+      </div>
+      
       <div className="flex items-center space-x-2">
         <Switch 
           id="isActive" 
@@ -299,8 +338,15 @@ const MailgunConfigForm = ({
       </div>
       
       <Button 
-        onClick={() => onSave({ apiKey, domain, fromEmail, isActive })}
-        disabled={isPending || !apiKey || !domain || !fromEmail}
+        onClick={() => onSave({ 
+          apiKey, 
+          domain, 
+          fromEmail, 
+          fromName,
+          authorizedRecipients,
+          isActive 
+        })}
+        disabled={isPending || !apiKey || !domain || !fromEmail || (isSandboxDomain && !authorizedRecipients)}
       >
         {isPending ? (
           <>
@@ -731,11 +777,28 @@ const EmailManagement = () => {
                   <div>
                     <h3 className="font-medium text-sm text-neutral-500">Domain</h3>
                     <p className="mt-1">{emailConfigs.mailgun.domain}</p>
+                    {emailConfigs.mailgun.domain.includes('sandbox') && !emailConfigs.mailgun.authorizedRecipients && (
+                      <p className="text-amber-500 text-xs mt-1">
+                        Warning: Sandbox domain without authorized recipients
+                      </p>
+                    )}
                   </div>
                   <div>
                     <h3 className="font-medium text-sm text-neutral-500">From Email</h3>
                     <p className="mt-1">{emailConfigs.mailgun.fromEmail}</p>
                   </div>
+                  <div>
+                    <h3 className="font-medium text-sm text-neutral-500">From Name</h3>
+                    <p className="mt-1">{emailConfigs.mailgun.fromName || "Not set"}</p>
+                  </div>
+                  {emailConfigs.mailgun.authorizedRecipients && (
+                    <div className="col-span-2">
+                      <h3 className="font-medium text-sm text-neutral-500">Authorized Recipients</h3>
+                      <p className="mt-1 text-sm break-words">
+                        {emailConfigs.mailgun.authorizedRecipients}
+                      </p>
+                    </div>
+                  )}
                   <div>
                     <h3 className="font-medium text-sm text-neutral-500">Status</h3>
                     <p className="mt-1">

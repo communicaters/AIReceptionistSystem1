@@ -96,6 +96,8 @@ export interface MailgunConfig {
   apiKey: string;
   domain: string;
   fromEmail: string;
+  fromName?: string;
+  authorizedRecipients?: string;
   isActive: boolean;
 }
 
