@@ -488,6 +488,8 @@ export const whatsappLogs = pgTable("whatsapp_logs", {
   mediaUrl: text("media_url"),
   direction: text("direction").notNull(), // 'inbound' or 'outbound'
   timestamp: timestamp("timestamp").notNull(),
+  status: text("status").default('sent'), // 'sent', 'delivered', 'read', 'failed'
+  externalId: text("external_id"), // ID from external service like Zender or Facebook
 });
 
 export const insertWhatsappLogSchema = createInsertSchema(whatsappLogs).omit({

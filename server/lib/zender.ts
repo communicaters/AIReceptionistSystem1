@@ -3,6 +3,12 @@ import FormData from 'form-data';
 import { storage } from '../storage';
 import { WhatsappConfig, InsertWhatsappLog } from '@shared/schema';
 
+// Extended interface that includes the new fields
+interface ExtendedWhatsappLog extends InsertWhatsappLog {
+  status?: string;
+  externalId?: string;
+}
+
 /**
  * Interface for Zender message send parameters
  */
@@ -69,8 +75,10 @@ export class ZenderService {
     try {
       // Make sure we have initialized config
       if (!this.config) {
+        console.log('Config not initialized, attempting to initialize Zender service');
         const initialized = await this.initialize();
         if (!initialized) {
+          console.error('Failed to initialize Zender service for sending message');
           return {
             success: false,
             error: 'Zender service not initialized'
@@ -78,13 +86,23 @@ export class ZenderService {
         }
       }
       
+      // Check for required config
+      if (!this.config || !this.config.apiSecret || !this.config.accountId) {
+        console.error('Missing required Zender configuration for sending message');
+        return {
+          success: false,
+          error: 'Missing Zender configuration (API secret or account ID)'
+        };
+      }
+      
       // Sanitize phone number (remove + and spaces)
       const sanitizedRecipient = params.recipient.replace(/[\s+]/g, '');
+      console.log(`Preparing to send WhatsApp message to ${sanitizedRecipient} via Zender`);
       
       // Create form data for the request
       const form = new FormData();
-      form.append('secret', this.config!.apiSecret);
-      form.append('account', this.config!.accountId);
+      form.append('secret', this.config.apiSecret);
+      form.append('account', this.config.accountId);
       form.append('recipient', sanitizedRecipient);
       form.append('type', params.type || 'text');
       form.append('message', params.message);
@@ -92,6 +110,7 @@ export class ZenderService {
       // Add optional parameters if provided
       if (params.media) {
         form.append('media', params.media);
+        console.log(`Message includes media URL: ${params.media.substring(0, 30)}...`);
       }
       
       if (params.caption) {
@@ -105,6 +124,7 @@ export class ZenderService {
       // For template messages
       if (params.type === 'template' && params.templateName) {
         form.append('template', params.templateName);
+        console.log(`Using template message: ${params.templateName}`);
         
         if (params.templateLanguage) {
           form.append('language', params.templateLanguage);
@@ -118,58 +138,91 @@ export class ZenderService {
       // For button messages
       if (params.type === 'button' && params.buttons) {
         form.append('buttons', JSON.stringify(params.buttons));
+        console.log(`Message includes ${params.buttons.length} buttons`);
       }
       
       // For list messages
       if (params.type === 'list' && params.sections) {
         form.append('sections', JSON.stringify(params.sections));
+        console.log(`Message includes list with ${params.sections.length} sections`);
       }
       
       // Set the API endpoint for sending messages
       const sendUrl = `${this.baseUrl}/send/whatsapp`;
+      console.log(`Sending message to Zender API: ${sendUrl}`);
       
-      // Make the POST request to Zender API
-      const response = await axios.post(sendUrl, form, { 
-        headers: form.getHeaders() 
-      });
-      
-      // Check for success
-      if (response.data && response.data.status === 'success') {
-        // Log the successful message
-        await this.logMessage({
-          userId: this.userId,
-          phoneNumber: sanitizedRecipient,
-          message: params.message,
-          mediaUrl: params.media,
-          direction: 'outbound',
-          timestamp: new Date()
+      try {
+        // Make the POST request to Zender API with timeout
+        const response = await axios.post(sendUrl, form, { 
+          headers: form.getHeaders(),
+          timeout: 15000 // 15 second timeout
         });
         
-        return {
-          success: true,
-          messageId: response.data.data?.id || response.data.data?.message_id
-        };
-      } else {
-        return {
-          success: false,
-          error: response.data?.message || 'Unknown error from Zender API'
-        };
+        console.log('Zender API response:', response.data);
+        
+        // Check for success
+        if (response.data && response.data.status === 'success') {
+          // Get message ID from response
+          const messageId = response.data.data?.id || response.data.data?.message_id;
+          console.log(`Message sent successfully, ID: ${messageId}`);
+          
+          // Log the successful message
+          await this.logMessage({
+            userId: this.userId,
+            phoneNumber: sanitizedRecipient,
+            message: params.message,
+            mediaUrl: params.media,
+            direction: 'outbound',
+            timestamp: new Date(),
+            status: 'sent',
+            externalId: messageId
+          });
+          
+          return {
+            success: true,
+            messageId: messageId
+          };
+        } else {
+          // The API returned a response but it wasn't successful
+          const errorMsg = response.data?.message || 'Unknown error from Zender API';
+          console.error(`Zender API returned error: ${errorMsg}`);
+          
+          return {
+            success: false,
+            error: errorMsg
+          };
+        }
+      } catch (apiError: any) {
+        // More detailed logging for API errors
+        if (apiError.response) {
+          // The request was made and the server responded with a status code outside of 2xx
+          console.error(`Zender API error ${apiError.response.status}:`, apiError.response.data);
+          return {
+            success: false,
+            error: `API error ${apiError.response.status}: ${JSON.stringify(apiError.response.data)}`
+          };
+        } else if (apiError.request) {
+          // The request was made but no response was received
+          console.error('No response received from Zender API (timeout)');
+          return {
+            success: false,
+            error: 'No response from WhatsApp service (timeout)'
+          };
+        } else {
+          // Something happened in setting up the request
+          console.error('Error setting up Zender request:', apiError.message);
+          return {
+            success: false,
+            error: `Request setup error: ${apiError.message}`
+          };
+        }
       }
     } catch (error: any) {
-      console.error('Error sending WhatsApp message via Zender:', error);
-      
-      let errorMessage = 'Unknown error';
-      if (error.response) {
-        errorMessage = `API Error: ${error.response.status} - ${JSON.stringify(error.response.data)}`;
-      } else if (error.request) {
-        errorMessage = 'No response received from Zender API';
-      } else {
-        errorMessage = error.message;
-      }
+      console.error('Unexpected error sending WhatsApp message via Zender:', error);
       
       return {
         success: false,
-        error: errorMessage
+        error: error.message || 'Unknown error occurred'
       };
     }
   }
@@ -183,26 +236,55 @@ export class ZenderService {
       if (!this.config) {
         const initialized = await this.initialize();
         if (!initialized) {
+          console.error('Failed to initialize Zender config for test connection');
           return false;
         }
       }
       
+      if (!this.config || !this.config.apiSecret || !this.config.accountId) {
+        console.error('Zender config missing required credentials for test');
+        return false;
+      }
+      
       // We'll use a simpler endpoint to check connection status
       const statusUrl = `${this.baseUrl}/status`;
+      console.log(`Testing Zender connection with URL: ${statusUrl}`);
       
       // Create form data for the request
       const form = new FormData();
-      form.append('secret', this.config!.apiSecret);
-      form.append('account', this.config!.accountId);
+      form.append('secret', this.config.apiSecret);
+      form.append('account', this.config.accountId);
       
-      const response = await axios.post(statusUrl, form, { 
-        headers: form.getHeaders() 
-      });
-      
-      // Check for success response
-      return response.data && response.data.status === 'success';
+      try {
+        const response = await axios.post(statusUrl, form, { 
+          headers: form.getHeaders(),
+          timeout: 10000 // 10 second timeout
+        });
+        
+        console.log('Zender test connection response:', response.data);
+        
+        // Check for success response
+        const isSuccess = response.data && response.data.status === 'success';
+        console.log(`Zender connection test ${isSuccess ? 'successful' : 'failed'}`);
+        
+        return isSuccess;
+      } catch (apiError: any) {
+        // More detailed error logging for API errors
+        if (apiError.response) {
+          // The request was made and the server responded with a status code outside of 2xx
+          console.error(`Zender API error: ${apiError.response.status}`, apiError.response.data);
+        } else if (apiError.request) {
+          // The request was made but no response was received
+          console.error('Zender API timeout or no response received');
+        } else {
+          // Something happened in setting up the request
+          console.error('Zender API request error:', apiError.message);
+        }
+        
+        return false;
+      }
     } catch (error) {
-      console.error('Error testing Zender connection:', error);
+      console.error('Unexpected error testing Zender connection:', error);
       return false;
     }
   }

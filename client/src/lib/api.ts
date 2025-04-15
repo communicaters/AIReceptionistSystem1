@@ -567,13 +567,31 @@ export const sendWhatsappMessage = async (
   phoneNumber: string, 
   message: string, 
   mediaUrl?: string
-): Promise<{success: boolean, messageId: number, message: string}> => {
-  const response = await apiRequest("POST", "/api/whatsapp/send", {
-    phoneNumber,
-    message,
-    mediaUrl
-  });
-  return response.json();
+): Promise<{success: boolean, messageId?: string, error?: string, logId?: number}> => {
+  try {
+    const response = await apiRequest("POST", "/api/whatsapp/send", {
+      phoneNumber,
+      message,
+      mediaUrl
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error("WhatsApp send error:", errorData);
+      return {
+        success: false,
+        error: errorData.error || `Error sending message: ${response.status} ${response.statusText}`
+      };
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error("WhatsApp API exception:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error sending WhatsApp message"
+    };
+  }
 };
 
 export const getMeetingLogs = async (limit?: number): Promise<MeetingLog[]> => {

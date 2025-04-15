@@ -5,7 +5,7 @@ import { Send, RefreshCw, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { WhatsappLog, sendWhatsappMessage } from "@/lib/api";
-import { Spinner } from "@/components/ui/spinner";
+import Spinner from "@/components/ui/spinner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -47,37 +47,69 @@ export function WhatsAppChat({
       // Clear the input field immediately after sending
       setNewMessage("");
       
-      // If the API returned success but there was an error in UI updating
+      // If the API returned success
       if (data.success) {
-        // Add the new message to the local messages array immediately
-        // This ensures the user sees their message right away without waiting for a refresh
-        const newMsg = {
-          id: data.messageId || Date.now(), // Use returned ID or timestamp as fallback
-          userId: 1,
-          phoneNumber: phoneNumber,
-          message: newMessage,
-          mediaUrl: null,
-          direction: 'outbound',
-          timestamp: new Date().toISOString()
-        };
+        // Update the status of our optimistic message
+        setLocalMessages(prev => 
+          prev.map(msg => 
+            // Find our optimistic message by checking if it's the latest outbound message
+            (msg.direction === 'outbound' && msg.message === newMessage) 
+              ? {
+                  ...msg,
+                  id: data.logId || msg.id, // Update with real logId if available
+                  status: 'sent'
+                }
+              : msg
+          )
+        );
+        
+        console.log("Message sent successfully:", data);
         
         // Trigger a refresh to get the message from the server
         queryClient.invalidateQueries({ queryKey: ["/api/whatsapp/logs"] });
         setTimeout(() => onRefresh(), 500); // Small delay to ensure DB has updated
       } else {
+        // Show error toast if there was an issue
         toast({
-          title: "Warning",
-          description: "Message was sent but there might have been an issue with delivery.",
+          title: "Message Send Failed",
+          description: data.error || "There was an issue delivering your message.",
           variant: "destructive",
         });
+        
+        // Update the optimistic message to show it failed
+        setLocalMessages(prev => 
+          prev.map(msg => 
+            (msg.direction === 'outbound' && msg.message === newMessage) 
+              ? {
+                  ...msg,
+                  status: 'failed'
+                }
+              : msg
+          )
+        );
       }
     },
     onError: (error) => {
+      console.error("Send message mutation error:", error);
+      
+      // Show error toast
       toast({
         title: "Error",
-        description: "There was an error sending your message. Please try again.",
+        description: error instanceof Error ? error.message : "There was an error sending your message. Please try again.",
         variant: "destructive",
       });
+      
+      // Update the optimistic message to show it failed
+      setLocalMessages(prev => 
+        prev.map(msg => 
+          (msg.direction === 'outbound' && msg.message === newMessage) 
+            ? {
+                ...msg,
+                status: 'failed'
+              }
+            : msg
+        )
+      );
     }
   });
 

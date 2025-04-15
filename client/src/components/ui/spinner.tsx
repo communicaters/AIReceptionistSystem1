@@ -1,26 +1,34 @@
-import { cn } from "@/lib/utils";
+import React from 'react';
 
-interface SpinnerProps {
-  size?: "sm" | "md" | "lg";
+export interface SpinnerProps {
+  size?: 'sm' | 'small' | 'medium' | 'large' | 'lg';
+  color?: 'primary' | 'white';
   className?: string;
 }
 
-export function Spinner({ size = "md", className }: SpinnerProps) {
-  const sizeClass = {
-    sm: "h-4 w-4 border-2",
-    md: "h-6 w-6 border-2",
-    lg: "h-8 w-8 border-3",
+const Spinner = ({ size = 'medium', color = 'primary', className = '' }: SpinnerProps) => {
+  // Normalize size values
+  const normalizedSize = size === 'sm' ? 'small' : size === 'lg' ? 'large' : size;
+  
+  const sizeMap = {
+    small: 'h-4 w-4 border-2',
+    medium: 'h-8 w-8 border-4',
+    large: 'h-12 w-12 border-4'
   };
-
+  
+  const colorMap = {
+    primary: 'border-primary border-t-transparent',
+    white: 'border-white border-t-transparent'
+  };
+  
   return (
-    <div
-      className={cn(
-        "animate-spin rounded-full border-solid border-primary border-t-transparent",
-        sizeClass[size],
-        className
-      )}
-      role="status"
+    <div 
+      className={`animate-spin rounded-full ${sizeMap[normalizedSize]} ${colorMap[color]} ${className}`} 
+      role="status" 
       aria-label="Loading"
     />
   );
-}
+};
+
+export { Spinner };
+export default Spinner;
