@@ -465,7 +465,7 @@ const EmailTemplateForm = ({
           onChange={e => setBody(e.target.value)}
         />
         <p className="text-sm text-muted-foreground">
-          Use variables like {{name}}, {{company}}, etc. which will be replaced with actual data when the email is sent.
+          Use variables like {'{{name}}'}, {'{{company}}'}, etc. which will be replaced with actual data when the email is sent.
         </p>
       </div>
       
