@@ -70,10 +70,39 @@ export interface VoiceConfig {
   openPhone: OpenPhoneConfig | null;
 }
 
+export interface SendgridConfig {
+  id: number;
+  userId: number;
+  apiKey: string;
+  fromEmail: string;
+  fromName: string;
+  isActive: boolean;
+}
+
+export interface SmtpConfig {
+  id: number;
+  userId: number;
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+  fromEmail: string;
+  isActive: boolean;
+}
+
+export interface MailgunConfig {
+  id: number;
+  userId: number;
+  apiKey: string;
+  domain: string;
+  fromEmail: string;
+  isActive: boolean;
+}
+
 export interface EmailConfig {
-  sendgrid: any;
-  smtp: any;
-  mailgun: any;
+  sendgrid: SendgridConfig | null;
+  smtp: SmtpConfig | null;
+  mailgun: MailgunConfig | null;
 }
 
 export interface CallLog {
@@ -247,6 +276,63 @@ export const getEmailConfigs = async (): Promise<EmailConfig> => {
 export const getEmailLogs = async (limit?: number): Promise<EmailLog[]> => {
   const queryParams = limit ? `?limit=${limit}` : "";
   const response = await apiRequest("GET", `/api/email/logs${queryParams}`);
+  return response.json();
+};
+
+export const saveSendgridConfig = async (
+  config: Partial<SendgridConfig>
+): Promise<SendgridConfig> => {
+  const response = await apiRequest("POST", "/api/email/config/sendgrid", config);
+  return response.json();
+};
+
+export const saveSmtpConfig = async (
+  config: Partial<SmtpConfig>
+): Promise<SmtpConfig> => {
+  const response = await apiRequest("POST", "/api/email/config/smtp", config);
+  return response.json();
+};
+
+export const saveMailgunConfig = async (
+  config: Partial<MailgunConfig>
+): Promise<MailgunConfig> => {
+  const response = await apiRequest("POST", "/api/email/config/mailgun", config);
+  return response.json();
+};
+
+export const verifySmtpConnection = async (
+  config?: {
+    host: string;
+    port: number | string;
+    username: string;
+    password: string;
+  }
+): Promise<{ success: boolean; message: string }> => {
+  const response = await apiRequest("POST", "/api/email/verify/smtp", config || {});
+  return response.json();
+};
+
+export const sendTestEmail = async (
+  to: string,
+  service?: 'sendgrid' | 'smtp' | 'mailgun'
+): Promise<{ success: boolean; message: string }> => {
+  const response = await apiRequest("POST", "/api/email/test", { to, service });
+  return response.json();
+};
+
+export const processIncomingEmail = async (
+  email: {
+    from: string;
+    to?: string;
+    subject: string;
+    body: string;
+  },
+  service?: 'sendgrid' | 'smtp' | 'mailgun'
+): Promise<{ success: boolean; message: string }> => {
+  const response = await apiRequest("POST", "/api/email/process", {
+    ...email,
+    service
+  });
   return response.json();
 };
 

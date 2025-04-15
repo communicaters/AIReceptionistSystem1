@@ -733,6 +733,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  app.get("/api/email/configs", async (req, res) => {
+    try {
+      const userId = 1; // For demo, use fixed user ID
+      
+      const sendgrid = await storage.getSendgridConfigByUserId(userId);
+      const smtp = await storage.getSmtpConfigByUserId(userId);
+      const mailgun = await storage.getMailgunConfigByUserId(userId);
+      
+      apiResponse(res, {
+        sendgrid: sendgrid || null,
+        smtp: smtp || null,
+        mailgun: mailgun || null
+      });
+    } catch (error) {
+      console.error("Error fetching email configurations:", error);
+      apiResponse(res, { error: "Failed to fetch email configurations" }, 500);
+    }
+  });
+  
   // Update a specific email configuration
   app.post("/api/email/config/sendgrid", async (req, res) => {
     try {
