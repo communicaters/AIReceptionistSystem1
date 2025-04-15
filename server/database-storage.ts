@@ -560,4 +560,107 @@ export class DatabaseStorage implements IStorage {
     await db.delete(voiceSettings).where(eq(voiceSettings.id, id));
     return true;
   }
+
+  // Email Templates
+  async getEmailTemplate(id: number): Promise<EmailTemplate | undefined> {
+    const result = await db.select().from(emailTemplates).where(eq(emailTemplates.id, id));
+    return result[0];
+  }
+
+  async getEmailTemplatesByUserId(userId: number): Promise<EmailTemplate[]> {
+    return await db.select().from(emailTemplates)
+      .where(eq(emailTemplates.userId, userId))
+      .orderBy(desc(emailTemplates.updatedAt));
+  }
+
+  async getEmailTemplatesByCategory(userId: number, category: string): Promise<EmailTemplate[]> {
+    return await db.select().from(emailTemplates)
+      .where(and(
+        eq(emailTemplates.userId, userId),
+        eq(emailTemplates.category, category)
+      ))
+      .orderBy(desc(emailTemplates.updatedAt));
+  }
+
+  async createEmailTemplate(template: InsertEmailTemplate): Promise<EmailTemplate> {
+    const now = new Date();
+    const result = await db.insert(emailTemplates).values({
+      ...template,
+      createdAt: now,
+      updatedAt: now,
+      lastUsed: null
+    }).returning();
+    return result[0];
+  }
+
+  async updateEmailTemplate(id: number, template: Partial<InsertEmailTemplate>): Promise<EmailTemplate | undefined> {
+    const result = await db.update(emailTemplates)
+      .set({
+        ...template,
+        updatedAt: new Date()
+      })
+      .where(eq(emailTemplates.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteEmailTemplate(id: number): Promise<boolean> {
+    await db.delete(emailTemplates).where(eq(emailTemplates.id, id));
+    return true;
+  }
+
+  // Scheduled Emails
+  async getScheduledEmail(id: number): Promise<ScheduledEmail | undefined> {
+    const result = await db.select().from(scheduledEmails).where(eq(scheduledEmails.id, id));
+    return result[0];
+  }
+
+  async getScheduledEmailsByUserId(userId: number): Promise<ScheduledEmail[]> {
+    return await db.select().from(scheduledEmails)
+      .where(eq(scheduledEmails.userId, userId))
+      .orderBy(desc(scheduledEmails.createdAt));
+  }
+
+  async getPendingScheduledEmails(cutoffTime: Date = new Date()): Promise<ScheduledEmail[]> {
+    return await db.select().from(scheduledEmails)
+      .where(and(
+        eq(scheduledEmails.status, 'pending'),
+        eq(scheduledEmails.scheduledTime <= cutoffTime, true)
+      ));
+  }
+
+  async createScheduledEmail(email: InsertScheduledEmail): Promise<ScheduledEmail> {
+    const now = new Date();
+    const result = await db.insert(scheduledEmails).values({
+      ...email,
+      createdAt: now,
+      status: 'pending',
+      sentAt: null
+    }).returning();
+    return result[0];
+  }
+
+  async updateScheduledEmail(id: number, email: Partial<InsertScheduledEmail>): Promise<ScheduledEmail | undefined> {
+    const result = await db.update(scheduledEmails)
+      .set(email)
+      .where(eq(scheduledEmails.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async updateScheduledEmailStatus(id: number, status: string, sentAt?: Date): Promise<ScheduledEmail | undefined> {
+    const updateData: any = { status };
+    if (sentAt) updateData.sentAt = sentAt;
+    
+    const result = await db.update(scheduledEmails)
+      .set(updateData)
+      .where(eq(scheduledEmails.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteScheduledEmail(id: number): Promise<boolean> {
+    await db.delete(scheduledEmails).where(eq(scheduledEmails.id, id));
+    return true;
+  }
 }
