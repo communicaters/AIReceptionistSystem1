@@ -436,6 +436,7 @@ export const emailLogs = pgTable("email_logs", {
   timestamp: timestamp("timestamp").notNull(),
   status: text("status").notNull(),
   service: text("service"), // Added to track which email service was used (smtp, mailgun, sendgrid)
+  messageId: text("message_id"), // Added to uniquely identify emails for IMAP synchronization
 });
 
 export const insertEmailLogSchema = createInsertSchema(emailLogs).omit({
