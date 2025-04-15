@@ -102,7 +102,7 @@ export const openPhoneConfig = pgTable("openphone_config", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   apiKey: text("api_key").notNull(),
-  teamId: text("team_id").notNull(),
+  teamId: text("team_id"), // Made optional to fix existing NULL values
   phoneNumber: text("phone_number").notNull(),
   callbackUrl: text("callback_url"),
   isActive: boolean("is_active").notNull().default(true),
@@ -367,6 +367,7 @@ export const emailLogs = pgTable("email_logs", {
   body: text("body").notNull(),
   timestamp: timestamp("timestamp").notNull(),
   status: text("status").notNull(),
+  service: text("service"), // Added to track which email service was used (smtp, mailgun, sendgrid)
 });
 
 export const insertEmailLogSchema = createInsertSchema(emailLogs).omit({

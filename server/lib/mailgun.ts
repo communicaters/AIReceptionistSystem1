@@ -32,7 +32,8 @@ export async function initMailgun(userId: number = 1) {
     mailgunInstances.set(userId, {
       client: mg,
       domain: mailgunConfig.domain,
-      fromEmail: mailgunConfig.fromEmail
+      fromEmail: mailgunConfig.fromEmail,
+      authorizedRecipients: mailgunConfig.authorizedRecipients
     });
     
     console.log(`Mailgun client initialized for user ${userId}`);
@@ -70,22 +71,21 @@ export interface EmailParams {
 // Function to send email using Mailgun
 export async function sendEmail(params: EmailParams, userId: number = 1): Promise<boolean> {
   try {
-    const { client, domain, fromEmail } = await getMailgunClient(userId);
+    const { client, domain, fromEmail, authorizedRecipients } = await getMailgunClient(userId);
     
     // Check if using sandbox domain for Mailgun
     const isSandboxDomain = domain.includes('sandbox');
     if (isSandboxDomain) {
       // For sandbox domains, check if the recipient is authorized
-      const mailgunConfig = await storage.getMailgunConfigByUserId(userId);
-      const authorizedRecipients = mailgunConfig?.authorizedRecipients?.split(',').map(email => email.trim()) || [];
+      const authorizedList = authorizedRecipients?.split(',').map(email => email.trim()) || [];
       
       // If recipient is not in authorized list, provide a better error message
-      if (!authorizedRecipients.includes(params.to)) {
+      if (authorizedList.length === 0 || !authorizedList.includes(params.to)) {
         console.warn(`Mailgun sandbox domain cannot send to unauthorized recipient: ${params.to}`);
-        console.warn(`For sandbox domains, you must add recipients in Mailgun dashboard: https://app.mailgun.com/app/account/authorized`);
+        console.warn(`For sandbox domains, you must add recipients in the authorized list`);
         
         throw new Error(
-          `Mailgun sandbox domains can only send to authorized recipients. Please add ${params.to} to your authorized recipients list in the Mailgun dashboard.`
+          `Mailgun sandbox domains can only send to authorized recipients. Please add ${params.to} to your authorized recipients list in the configuration.`
         );
       }
     }
