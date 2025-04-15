@@ -770,6 +770,7 @@ const EmailManagement = () => {
   const [createTemplateMode, setCreateTemplateMode] = useState(false);
   const [editTemplateId, setEditTemplateId] = useState<number | null>(null);
   const [createScheduledEmailMode, setCreateScheduledEmailMode] = useState(false);
+  const [editScheduledEmailId, setEditScheduledEmailId] = useState<number | null>(null);
   
   // Query for fetching email configurations
   const { 
@@ -789,6 +790,48 @@ const EmailManagement = () => {
   } = useQuery({
     queryKey: ["/api/email/logs"],
     queryFn: () => getEmailLogs(10)
+  });
+  
+  // Query for fetching email templates
+  const {
+    data: emailTemplates,
+    isLoading: isLoadingTemplates,
+    error: templatesError
+  } = useQuery({
+    queryKey: ["/api/email/templates"],
+    queryFn: getEmailTemplates
+  });
+  
+  // Query for fetching scheduled emails
+  const {
+    data: scheduledEmails,
+    isLoading: isLoadingScheduled,
+    error: scheduledError
+  } = useQuery({
+    queryKey: ["/api/email/scheduled"],
+    queryFn: getScheduledEmails
+  });
+  
+  // Query for fetching a single template when editing
+  const {
+    data: editingTemplate,
+    isLoading: isLoadingTemplate,
+    error: templateError
+  } = useQuery({
+    queryKey: ["/api/email/templates", editTemplateId],
+    queryFn: () => editTemplateId ? getEmailTemplate(editTemplateId) : null,
+    enabled: !!editTemplateId
+  });
+  
+  // Query for fetching a single scheduled email when editing
+  const {
+    data: editingScheduledEmail,
+    isLoading: isLoadingScheduledEmail,
+    error: scheduledEmailError
+  } = useQuery({
+    queryKey: ["/api/email/scheduled", editScheduledEmailId],
+    queryFn: () => editScheduledEmailId ? getScheduledEmail(editScheduledEmailId) : null,
+    enabled: !!editScheduledEmailId
   });
   
   // Mutation for saving SendGrid config
@@ -899,6 +942,143 @@ const EmailManagement = () => {
       toast({
         title: "Error",
         description: "Failed to send test email. Please try again.",
+        variant: "destructive",
+      });
+    }
+  });
+  
+  // Mutation for creating a new email template
+  const createTemplateMutation = useMutation({
+    mutationFn: createEmailTemplate,
+    onSuccess: () => {
+      toast({
+        title: "Template Created",
+        description: "Your email template has been created successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/email/templates"] });
+      setCreateTemplateMode(false);
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "Failed to create email template. Please try again.",
+        variant: "destructive",
+      });
+    }
+  });
+  
+  // Mutation for updating an email template
+  const updateTemplateMutation = useMutation({
+    mutationFn: updateEmailTemplate,
+    onSuccess: () => {
+      toast({
+        title: "Template Updated",
+        description: "Your email template has been updated successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/email/templates"] });
+      setEditTemplateId(null);
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "Failed to update email template. Please try again.",
+        variant: "destructive",
+      });
+    }
+  });
+  
+  // Mutation for deleting an email template
+  const deleteTemplateMutation = useMutation({
+    mutationFn: deleteEmailTemplate,
+    onSuccess: () => {
+      toast({
+        title: "Template Deleted",
+        description: "Your email template has been deleted successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/email/templates"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "Failed to delete email template. Please try again.",
+        variant: "destructive",
+      });
+    }
+  });
+  
+  // Mutation for creating a scheduled email
+  const createScheduledEmailMutation = useMutation({
+    mutationFn: createScheduledEmail,
+    onSuccess: () => {
+      toast({
+        title: "Email Scheduled",
+        description: "Your email has been scheduled successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/email/scheduled"] });
+      setCreateScheduledEmailMode(false);
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "Failed to schedule email. Please try again.",
+        variant: "destructive",
+      });
+    }
+  });
+  
+  // Mutation for updating a scheduled email
+  const updateScheduledEmailMutation = useMutation({
+    mutationFn: updateScheduledEmail,
+    onSuccess: () => {
+      toast({
+        title: "Scheduled Email Updated",
+        description: "Your scheduled email has been updated successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/email/scheduled"] });
+      setEditScheduledEmailId(null);
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "Failed to update scheduled email. Please try again.",
+        variant: "destructive",
+      });
+    }
+  });
+  
+  // Mutation for deleting a scheduled email
+  const deleteScheduledEmailMutation = useMutation({
+    mutationFn: deleteScheduledEmail,
+    onSuccess: () => {
+      toast({
+        title: "Scheduled Email Deleted",
+        description: "Your scheduled email has been deleted successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/email/scheduled"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "Failed to delete scheduled email. Please try again.",
+        variant: "destructive",
+      });
+    }
+  });
+  
+  // Mutation for canceling a scheduled email
+  const cancelScheduledEmailMutation = useMutation({
+    mutationFn: cancelScheduledEmail,
+    onSuccess: () => {
+      toast({
+        title: "Scheduled Email Canceled",
+        description: "Your scheduled email has been canceled successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/email/scheduled"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "Failed to cancel scheduled email. Please try again.",
         variant: "destructive",
       });
     }
@@ -1206,6 +1386,240 @@ const EmailManagement = () => {
         <CardFooter>
           <Button variant="outline">View All Logs</Button>
         </CardFooter>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Email Templates</CardTitle>
+            <CardDescription>
+              Create and manage reusable email templates
+            </CardDescription>
+          </div>
+          {!createTemplateMode && !editTemplateId && (
+            <Button size="sm" onClick={() => setCreateTemplateMode(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              New Template
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent>
+          {isLoadingTemplates ? (
+            <Skeleton className="h-64 w-full" />
+          ) : templatesError ? (
+            <div className="text-red-500">Failed to load email templates</div>
+          ) : createTemplateMode ? (
+            <EmailTemplateForm 
+              onSave={createTemplateMutation.mutate}
+              isPending={createTemplateMutation.isPending}
+            />
+          ) : editTemplateId ? (
+            isLoadingTemplate ? (
+              <Skeleton className="h-64 w-full" />
+            ) : templateError ? (
+              <div className="text-red-500">Failed to load template details</div>
+            ) : (
+              <EmailTemplateForm 
+                template={editingTemplate}
+                onSave={updateTemplateMutation.mutate}
+                isPending={updateTemplateMutation.isPending}
+              />
+            )
+          ) : emailTemplates?.length ? (
+            <div className="space-y-3">
+              {emailTemplates.map((template) => (
+                <div key={template.id} className="p-3 border rounded-md">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h4 className="font-medium">{template.name}</h4>
+                      <p className="text-sm text-muted-foreground">
+                        {template.category} • {template.subject}
+                      </p>
+                    </div>
+                    <div className="flex space-x-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => setEditTemplateId(template.id)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => {
+                          if (confirm('Are you sure you want to delete this template?')) {
+                            deleteTemplateMutation.mutate(template.id);
+                          }
+                        }}
+                      >
+                        <Trash className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <div className="flex justify-center mb-4">
+                <Mail className="h-12 w-12 text-neutral-300" />
+              </div>
+              <h3 className="text-lg font-medium mb-2">No templates yet</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Create email templates to streamline your communication
+              </p>
+              <Button onClick={() => setCreateTemplateMode(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Create Template
+              </Button>
+            </div>
+          )}
+        </CardContent>
+        {(createTemplateMode || editTemplateId) && (
+          <CardFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setCreateTemplateMode(false);
+                setEditTemplateId(null);
+              }}
+            >
+              Cancel
+            </Button>
+          </CardFooter>
+        )}
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Scheduled Emails</CardTitle>
+            <CardDescription>
+              Schedule emails to be sent automatically at specific times
+            </CardDescription>
+          </div>
+          {!createScheduledEmailMode && !editScheduledEmailId && (
+            <Button size="sm" onClick={() => setCreateScheduledEmailMode(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Schedule Email
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent>
+          {isLoadingScheduled ? (
+            <Skeleton className="h-64 w-full" />
+          ) : scheduledError ? (
+            <div className="text-red-500">Failed to load scheduled emails</div>
+          ) : createScheduledEmailMode ? (
+            <ScheduledEmailForm 
+              templates={emailTemplates || []}
+              onSave={createScheduledEmailMutation.mutate}
+              isPending={createScheduledEmailMutation.isPending}
+            />
+          ) : editScheduledEmailId ? (
+            isLoadingScheduledEmail ? (
+              <Skeleton className="h-64 w-full" />
+            ) : scheduledEmailError ? (
+              <div className="text-red-500">Failed to load scheduled email details</div>
+            ) : (
+              <ScheduledEmailForm 
+                scheduledEmail={editingScheduledEmail}
+                templates={emailTemplates || []}
+                onSave={updateScheduledEmailMutation.mutate}
+                isPending={updateScheduledEmailMutation.isPending}
+              />
+            )
+          ) : scheduledEmails?.length ? (
+            <div className="space-y-3">
+              {scheduledEmails.map((email) => (
+                <div key={email.id} className="p-3 border rounded-md">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h4 className="font-medium">{email.subject}</h4>
+                      <p className="text-sm text-muted-foreground">
+                        To: {email.to} • {new Date(email.scheduledTime).toLocaleString()}
+                        {email.isRecurring && " • Recurring"}
+                      </p>
+                    </div>
+                    <div className="flex space-x-2">
+                      <StatusBadge 
+                        status={email.status === 'scheduled' 
+                          ? 'operational' 
+                          : email.status === 'pending' 
+                          ? 'maintenance' 
+                          : email.status === 'sent'
+                          ? 'info'
+                          : 'error'} 
+                        text={email.status.charAt(0).toUpperCase() + email.status.slice(1)}
+                      />
+                      {email.status === 'scheduled' && (
+                        <>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => setEditScheduledEmailId(email.id)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => {
+                              if (confirm('Are you sure you want to cancel this scheduled email?')) {
+                                cancelScheduledEmailMutation.mutate(email.id);
+                              }
+                            }}
+                          >
+                            <XCircle className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => {
+                              if (confirm('Are you sure you want to delete this scheduled email?')) {
+                                deleteScheduledEmailMutation.mutate(email.id);
+                              }
+                            }}
+                          >
+                            <Trash className="h-4 w-4" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <div className="flex justify-center mb-4">
+                <CalendarClock className="h-12 w-12 text-neutral-300" />
+              </div>
+              <h3 className="text-lg font-medium mb-2">No scheduled emails</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Schedule emails to be sent automatically at your preferred time
+              </p>
+              <Button onClick={() => setCreateScheduledEmailMode(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Schedule Email
+              </Button>
+            </div>
+          )}
+        </CardContent>
+        {(createScheduledEmailMode || editScheduledEmailId) && (
+          <CardFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setCreateScheduledEmailMode(false);
+                setEditScheduledEmailId(null);
+              }}
+            >
+              Cancel
+            </Button>
+          </CardFooter>
+        )}
       </Card>
 
       <Card>
