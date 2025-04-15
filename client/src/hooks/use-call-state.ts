@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { makeTestCall } from '@/lib/api';
+import { useState, useRef, useEffect } from 'react';
+import { makeTestCall, getCallLogs, updateCallLog } from '@/lib/api';
 
 export type CallStatus = 'idle' | 'dialing' | 'connecting' | 'connected' | 'ended' | 'failed';
 
@@ -32,10 +32,36 @@ export function useCallState(): UseCallStateReturn {
   });
   
   const [showCallUI, setShowCallUI] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
   
   const isCallActive = callState.status === 'dialing' || 
                        callState.status === 'connecting' || 
                        callState.status === 'connected';
+                       
+  // Update timer when call is connected
+  useEffect(() => {
+    if (callState.status === 'connected') {
+      // Start duration timer
+      timerRef.current = setInterval(() => {
+        setDuration(prev => prev + 1);
+      }, 1000);
+    } else if (callState.status === 'ended' || callState.status === 'failed') {
+      // Stop timer when call ends
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    }
+    
+    // Cleanup timer on component unmount
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [callState.status]);
 
   // Function to initiate a call
   const initiateCall = async (
@@ -93,11 +119,25 @@ export function useCallState(): UseCallStateReturn {
 
   // Function to hang up a call
   const hangupCall = () => {
-    // In a real implementation, would call an API to terminate the call
+    // Update call state
     setCallState(prev => ({
       ...prev,
       status: 'ended'
     }));
+    
+    // Update call log in the database
+    if (callState.phoneNumber && callState.callSid) {
+      // Find the call log entry and update its status
+      getCallLogs(5).then(logs => {
+        const ourCall = logs.find(log => log.callSid === callState.callSid);
+        if (ourCall) {
+          updateCallLog(ourCall.id, {
+            status: 'ended',
+            duration: duration
+          }).catch(error => console.error('Failed to update call log:', error));
+        }
+      }).catch(error => console.error('Failed to fetch call logs:', error));
+    }
     
     // Simulate a delay before closing the UI
     setTimeout(() => {

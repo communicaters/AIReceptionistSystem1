@@ -222,6 +222,13 @@ export const getCallLogs = async (limit?: number): Promise<CallLog[]> => {
   return response.json();
 };
 
+export const createCallLog = async (
+  callLog: Partial<CallLog>
+): Promise<CallLog> => {
+  const response = await apiRequest("POST", "/api/voice/logs", callLog);
+  return response.json();
+};
+
 export const updateCallLog = async (
   id: number, 
   updates: Partial<CallLog>

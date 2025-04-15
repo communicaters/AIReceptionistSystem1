@@ -114,17 +114,55 @@ const CallOverlay: React.FC<CallOverlayProps> = ({
     }
   };
 
-  // Effect to simulate call connection
+  // Effect to handle call connection and db logging
   useEffect(() => {
     if (isVisible && callState === 'dialing') {
-      // Simulate connecting after 1.5 seconds
+      // Store the initial call log in the database
+      if (phoneNumber && callSid) {
+        // Create a call log entry when the call starts
+        createCallLog({
+          phoneNumber,
+          status: 'initiating',
+          timestamp: new Date().toISOString(),
+          callSid: callSid,
+          service: service || 'unknown'
+        }).catch(err => console.error('Failed to create call log:', err));
+      }
+      
+      // Real connection - we transition from dialing to connecting
       const connectingTimeout = setTimeout(() => {
         setCallState('connecting');
+        
+        // Update call log to 'connecting' status
+        if (phoneNumber && callSid) {
+          // Use the latest known callLogs to find our call
+          getCallLogs(5).then(logs => {
+            const ourCall = logs.find(log => log.callSid === callSid);
+            if (ourCall) {
+              updateCallLog(ourCall.id, {
+                status: 'connecting'
+              }).catch(err => console.error('Failed to update call log:', err));
+            }
+          }).catch(err => console.error('Failed to fetch call logs:', err));
+        }
       }, 1500);
       
-      // Simulate connected after 3 seconds
+      // Then to connected status
       const connectedTimeout = setTimeout(() => {
         setCallState('connected');
+        
+        // Update call log to 'connected' status
+        if (phoneNumber && callSid) {
+          getCallLogs(5).then(logs => {
+            const ourCall = logs.find(log => log.callSid === callSid);
+            if (ourCall) {
+              updateCallLog(ourCall.id, {
+                status: 'connected',
+                transcript: 'Call in progress...'
+              }).catch(err => console.error('Failed to update call log:', err));
+            }
+          }).catch(err => console.error('Failed to fetch call logs:', err));
+        }
       }, 3000);
       
       return () => {
@@ -132,7 +170,7 @@ const CallOverlay: React.FC<CallOverlayProps> = ({
         clearTimeout(connectedTimeout);
       };
     }
-  }, [isVisible, callState]);
+  }, [isVisible, callState, phoneNumber, callSid, service]);
 
   // Effect to manage call duration timer
   useEffect(() => {
