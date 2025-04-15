@@ -403,16 +403,18 @@ const MailgunConfigForm = ({
 const EmailTemplateForm = ({
   template,
   onSave,
-  isPending
+  isPending,
+  defaultCategory
 }: {
   template?: Partial<EmailTemplate>;
   onSave: (template: Partial<EmailTemplate>) => void;
   isPending: boolean;
+  defaultCategory?: string;
 }) => {
   const [name, setName] = useState(template?.name || '');
   const [subject, setSubject] = useState(template?.subject || '');
   const [body, setBody] = useState(template?.body || '');
-  const [category, setCategory] = useState(template?.category || 'general');
+  const [category, setCategory] = useState(template?.category || defaultCategory || 'general');
   const [description, setDescription] = useState(template?.description || '');
   const [variables, setVariables] = useState(template?.variables || '');
   const [isActive, setIsActive] = useState(template?.isActive ?? true);
@@ -443,6 +445,7 @@ const EmailTemplateForm = ({
           <option value="sales">Sales</option>
           <option value="marketing">Marketing</option>
           <option value="notification">Notification</option>
+          <option value="auto-response">Auto-Response</option>
         </select>
       </div>
       
@@ -1923,11 +1926,22 @@ const EmailManagement = () => {
       </Tabs>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Email Logs</CardTitle>
-          <CardDescription>
-            View and manage recent emails processed by the system
-          </CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <div>
+            <CardTitle>Email Logs</CardTitle>
+            <CardDescription>
+              View and manage recent emails processed by the system
+            </CardDescription>
+          </div>
+          <Button 
+            variant="outline" 
+            size="icon" 
+            onClick={() => refetchEmailLogs()}
+            disabled={isLoadingLogs}
+          >
+            <RefreshCw className={`h-4 w-4 ${isLoadingLogs ? 'animate-spin' : ''}`} />
+            <span className="sr-only">Refresh</span>
+          </Button>
         </CardHeader>
         <CardContent>
           {isLoadingLogs ? (
@@ -1984,8 +1998,18 @@ const EmailManagement = () => {
             </Table>
           )}
         </CardContent>
-        <CardFooter>
-          <Button variant="outline">View All Logs</Button>
+        <CardFooter className="flex justify-between">
+          <Button 
+            variant="outline" 
+            onClick={() => refetchEmailLogs()}
+            disabled={isLoadingLogs}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoadingLogs ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          <div className="text-sm text-muted-foreground">
+            Auto-refreshing every 10 seconds
+          </div>
         </CardFooter>
       </Card>
 
@@ -2013,6 +2037,7 @@ const EmailManagement = () => {
             <EmailTemplateForm 
               onSave={createTemplateMutation.mutate}
               isPending={createTemplateMutation.isPending}
+              defaultCategory="auto-response"
             />
           ) : editTemplateId ? (
             isLoadingTemplate ? (
@@ -2224,35 +2249,87 @@ const EmailManagement = () => {
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Email Auto-Response Settings</CardTitle>
-          <CardDescription>
-            Configure how the AI automatically responds to incoming emails
-          </CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Email Auto-Response Settings</CardTitle>
+            <CardDescription>
+              Configure how the AI automatically responds to incoming emails
+            </CardDescription>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => setCreateTemplateMode(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Template
+          </Button>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             <div>
               <h3 className="font-medium mb-2">Auto-Response Templates</h3>
               <div className="grid grid-cols-1 gap-2">
-                <div className="p-3 border rounded-md">
-                  <div className="flex justify-between items-center">
-                    <h4 className="font-medium">General Inquiry Response</h4>
-                    <Button variant="outline" size="sm">Edit</Button>
+                {emailTemplates?.filter(t => t.category === 'auto-response').length ? (
+                  emailTemplates.filter(t => t.category === 'auto-response').map(template => (
+                    <div key={template.id} className="p-3 border rounded-md">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <h4 className="font-medium">{template.name}</h4>
+                          <p className="text-sm text-muted-foreground line-clamp-1">
+                            {template.subject}
+                          </p>
+                        </div>
+                        <div className="flex space-x-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => setEditTemplateId(template.id)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => {
+                              if (confirm('Are you sure you want to delete this template?')) {
+                                deleteTemplateMutation.mutate(template.id);
+                              }
+                            }}
+                          >
+                            <Trash className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-3 border rounded-md border-dashed text-center">
+                    <p className="text-sm text-muted-foreground">No auto-response templates yet</p>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="mt-2" 
+                      onClick={() => {
+                        setCreateTemplateMode(true);
+                      }}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Template
+                    </Button>
                   </div>
-                </div>
-                <div className="p-3 border rounded-md">
-                  <div className="flex justify-between items-center">
-                    <h4 className="font-medium">Support Request Response</h4>
-                    <Button variant="outline" size="sm">Edit</Button>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
-            <Button className="mr-2">
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Test Auto-Response
-            </Button>
+            <div className="flex space-x-2">
+              <Button className="mr-2">
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Test Auto-Response
+              </Button>
+              <Button variant="outline" onClick={() => {
+                // Set createTemplateMode to true and will use defaultCategory in the form
+                setCreateTemplateMode(true);
+              }}>
+                <Plus className="h-4 w-4 mr-2" />
+                New Auto-Response Template
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
