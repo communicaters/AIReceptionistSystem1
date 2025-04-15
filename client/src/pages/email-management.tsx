@@ -1000,6 +1000,46 @@ const EmailManagement = () => {
     }
   });
   
+  // Query for checking IMAP connection status
+  const { 
+    data: imapStatus, 
+    isLoading: isCheckingImapStatus,
+    refetch: checkImapConnection
+  } = useQuery({
+    queryKey: ["/api/email/imap-status"],
+    queryFn: checkImapStatus,
+    refetchOnWindowFocus: false,
+    refetchInterval: false, // Don't auto-refresh
+  });
+  
+  // Mutation for syncing emails from IMAP server
+  const syncEmailsMutation = useMutation({
+    mutationFn: syncEmails,
+    onSuccess: (data) => {
+      if (data.success) {
+        toast({
+          title: "Emails Synchronized",
+          description: `Successfully synced ${data.count || 0} new emails.`,
+        });
+        // Refresh email logs after syncing
+        refetchEmailLogs();
+      } else {
+        toast({
+          title: "Sync Failed",
+          description: data.message || "Failed to sync emails from the server.",
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: "Sync Error",
+        description: "An error occurred while syncing emails. Please check your IMAP settings.",
+        variant: "destructive",
+      });
+    }
+  });
+  
   // Mutation for creating a new email template
   const createTemplateMutation = useMutation({
     mutationFn: createEmailTemplate,
@@ -1199,11 +1239,54 @@ const EmailManagement = () => {
         </TabsList>
         <TabsContent value="inbox" className="space-y-4">
           <Card>
-            <CardHeader>
-              <CardTitle>Email Inbox</CardTitle>
-              <CardDescription>
-                View and manage incoming emails
-              </CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Email Inbox</CardTitle>
+                <CardDescription>
+                  View and manage incoming emails
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                {imapStatus && (
+                  <div className="flex items-center mr-2">
+                    <div className={`h-2 w-2 rounded-full mr-2 ${imapStatus.connected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                    <span className="text-sm text-muted-foreground">
+                      {imapStatus.connected ? 'IMAP Connected' : 'IMAP Disconnected'}
+                    </span>
+                  </div>
+                )}
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => checkImapConnection()}
+                  disabled={isCheckingImapStatus}
+                >
+                  {isCheckingImapStatus ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-1" />
+                  )}
+                  Check IMAP
+                </Button>
+                <Button 
+                  variant="default" 
+                  size="sm"
+                  onClick={() => syncEmailsMutation.mutate()}
+                  disabled={syncEmailsMutation.isPending || !imapStatus?.connected}
+                >
+                  {syncEmailsMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                      Syncing...
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="h-4 w-4 mr-1" />
+                      Sync Emails
+                    </>
+                  )}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {isLoadingLogs ? (
@@ -1214,7 +1297,7 @@ const EmailManagement = () => {
                 </div>
               ) : logsError ? (
                 <div className="text-red-500">Failed to load email logs</div>
-              ) : emailLogs?.length ? (
+              ) : emailLogs?.filter(log => log.status === 'received').length ? (
                 <div className="space-y-4">
                   {emailLogs.filter(log => log.status === 'received').map((email) => (
                     <div key={email.id} className="border rounded-md p-4 hover:bg-slate-50 cursor-pointer transition-colors">
@@ -1249,6 +1332,27 @@ const EmailManagement = () => {
                   <Mail className="h-12 w-12 text-muted-foreground/50 mb-4" />
                   <h3 className="text-lg font-medium">Your inbox is empty</h3>
                   <p className="text-sm text-muted-foreground mt-1">No incoming emails found</p>
+                  {emailConfigs?.smtp?.isActive && (
+                    <div className="mt-4">
+                      <Button 
+                        variant="outline"
+                        onClick={() => syncEmailsMutation.mutate()}
+                        disabled={syncEmailsMutation.isPending || !imapStatus?.connected}
+                      >
+                        {syncEmailsMutation.isPending ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Syncing Emails...
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                            Sync Emails from Server
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
