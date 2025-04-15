@@ -14,6 +14,7 @@ import {
   updateEmailTemplate,
   deleteEmailTemplate,
   getScheduledEmails,
+  getScheduledEmail,
   createScheduledEmail,
   updateScheduledEmail,
   deleteScheduledEmail,
@@ -37,7 +38,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDistanceToNow } from "date-fns";
-import { Mail, Send, RefreshCw, Check, Loader2 } from "lucide-react";
+import { Eye, Mail, Send, Pencil, Plus, RefreshCw, Trash, XCircle, CalendarClock, Check, Loader2 } from "lucide-react";
 import StatusBadge from "@/components/ui/status-badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -45,6 +46,26 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useState } from "react";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { 
+  Form, 
+  FormControl, 
+  FormDescription, 
+  FormField, 
+  FormItem, 
+  FormLabel, 
+  FormMessage 
+} from "@/components/ui/form";
+import { Textarea } from "@/components/ui/textarea";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
 
 // SendGrid Config Form
 const SendGridConfigForm = ({ 
