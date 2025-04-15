@@ -7,7 +7,7 @@ interface CallState {
   status: CallStatus;
   phoneNumber: string;
   callSid?: string;
-  service?: string;
+  service?: 'twilio' | 'sip' | 'openphone' | null;
   message?: string;
   error?: string;
 }
@@ -16,7 +16,7 @@ interface UseCallStateReturn {
   callState: CallState;
   isCallActive: boolean;
   showCallUI: boolean;
-  initiateCall: (phoneNumber: string, message?: string, service?: 'twilio' | 'sip' | 'openphone') => Promise<void>;
+  initiateCall: (phoneNumber: string, message?: string, service?: 'twilio' | 'sip' | 'openphone' | null) => Promise<void>;
   hangupCall: () => void;
   toggleMute: (muted: boolean) => void;
   toggleHold: (held: boolean) => void;
@@ -41,7 +41,7 @@ export function useCallState(): UseCallStateReturn {
   const initiateCall = async (
     phoneNumber: string,
     message?: string,
-    service?: 'twilio' | 'sip' | 'openphone'
+    service?: 'twilio' | 'sip' | 'openphone' | null
   ) => {
     try {
       setCallState({
@@ -123,7 +123,7 @@ export function useCallState(): UseCallStateReturn {
     // Reuse the previous call settings
     if (callState.phoneNumber) {
       await initiateCall(callState.phoneNumber, callState.message, 
-        callState.service as 'twilio' | 'sip' | 'openphone' | undefined);
+        callState.service as 'twilio' | 'sip' | 'openphone' | null | undefined);
     }
   };
 

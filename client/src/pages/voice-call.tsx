@@ -8,6 +8,7 @@ import {
   saveOpenPhoneConfig, 
   makeTestCall 
 } from "@/lib/api";
+import { useCall } from "@/components/providers/call-provider";
 import { 
   Card, 
   CardContent, 
@@ -260,9 +261,18 @@ const VoiceCall = () => {
     }
   });
   
+  // Access the global call state using useCall hook
+  const { initiateCall } = useCall();
+  
   // Mutation for making test calls
   const testCallMutation = useMutation({
-    mutationFn: (data: TestCallState) => makeTestCall(data.phoneNumber, data.message, selectedService || undefined),
+    mutationFn: async (data: TestCallState) => {
+      // Use the CallProvider to handle the call UI and state
+      await initiateCall(data.phoneNumber, data.message, selectedService || undefined);
+      
+      // For backward compatibility, also make the API call
+      return makeTestCall(data.phoneNumber, data.message, selectedService || undefined);
+    },
     onSuccess: (data) => {
       if (data.success) {
         toast({
