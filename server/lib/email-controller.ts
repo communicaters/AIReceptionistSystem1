@@ -4,6 +4,7 @@ import * as smtpService from './smtp';
 import * as mailgunService from './mailgun';
 import { createChatCompletion } from './openai';
 import { EmailParams } from './sendgrid';
+import { generateEmailResponse, selectBestTemplate, processTemplate } from './template-processor';
 
 // Email Service Type
 export type EmailService = 'sendgrid' | 'smtp' | 'mailgun';
@@ -208,9 +209,16 @@ export async function processIncomingEmail(
       service
     });
     
-    // Parse email and generate response
-    const { response, intents, shouldScheduleMeeting, meetingDetails } = 
+    // Step 1: Use AI to analyze the email and get intents and meeting details
+    const { intents, shouldScheduleMeeting, meetingDetails } = 
       await parseEmailAndGenerateResponse(emailContent, userId);
+    
+    // Log detected intents
+    console.log("Detected intents:", intents);
+
+    // Step 2: Generate a template-based response using our enhanced template processor
+    // This will find the best matching template and fill in variables
+    const aiGeneratedResponse = await generateEmailResponse(emailContent, intents, userId);
     
     // Create email response
     const responseSubject = emailContent.subject.startsWith("Re:") 
@@ -260,7 +268,8 @@ export async function processIncomingEmail(
       from: fromEmail,
       fromName: fromName,
       subject: responseSubject,
-      text: response,
+      text: aiGeneratedResponse,
+      html: aiGeneratedResponse.replace(/\n/g, '<br>') // Simple HTML conversion
     }, service, userId);
     
     // Record the intents
@@ -284,7 +293,8 @@ export async function processIncomingEmail(
         from: emailContent.from, 
         subject: emailContent.subject, 
         intents,
-        meetingRequested: shouldScheduleMeeting
+        meetingRequested: shouldScheduleMeeting,
+        usedTemplate: true
       }
     });
     
