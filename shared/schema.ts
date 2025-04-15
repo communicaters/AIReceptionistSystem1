@@ -129,6 +129,10 @@ export const smtpConfig = pgTable("smtp_email_config", {
   password: text("password").notNull(),
   fromEmail: text("from_email").notNull(),
   isActive: boolean("is_active").notNull().default(true),
+  // IMAP configuration fields
+  imapHost: text("imap_host"),
+  imapPort: integer("imap_port"),
+  imapSecure: boolean("imap_secure").default(true),
 });
 
 export const insertSmtpConfigSchema = createInsertSchema(smtpConfig).omit({

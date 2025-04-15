@@ -26,18 +26,18 @@ export async function initImapClient(userId: number): Promise<IMAP | null> {
       return null;
     }
     
-    // Determine IMAP settings from SMTP settings
-    // Most email providers use the same host with different ports
-    // Common IMAP ports: 993 (SSL/TLS), 143 (STARTTLS)
-    const host = smtpConfig.host.replace('smtp.', 'imap.'); // Common convention
+    // Use IMAP-specific settings if provided, otherwise determine from SMTP settings
+    const host = smtpConfig.imapHost || smtpConfig.host.replace('smtp.', 'imap.');
+    const port = smtpConfig.imapPort || 993; // Default to 993 if not specified
+    const tls = smtpConfig.imapSecure ?? true; // Default to true if not specified
     
     // Create IMAP client
     const imapClient = new IMAP({
       user: smtpConfig.username,
       password: smtpConfig.password,
       host: host,
-      port: 993, // Default IMAP SSL port
-      tls: true,
+      port: port,
+      tls: tls,
       tlsOptions: { rejectUnauthorized: false } // For development only
     });
     

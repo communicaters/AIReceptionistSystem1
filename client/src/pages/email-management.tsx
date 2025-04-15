@@ -170,63 +170,126 @@ const SmtpConfigForm = ({
   const [password, setPassword] = useState(currentConfig?.password || '');
   const [fromEmail, setFromEmail] = useState(currentConfig?.fromEmail || '');
   const [isActive, setIsActive] = useState(currentConfig?.isActive ?? true);
+  
+  // IMAP configuration
+  const [imapHost, setImapHost] = useState(currentConfig?.imapHost || '');
+  const [imapPort, setImapPort] = useState(currentConfig?.imapPort?.toString() || '993');
+  const [imapSecure, setImapSecure] = useState(currentConfig?.imapSecure ?? true);
+
+  // Auto-generate IMAP host from SMTP host
+  useEffect(() => {
+    if (host && !imapHost) {
+      // Common naming convention: replace smtp. with imap.
+      const suggestedImapHost = host.replace('smtp.', 'imap.');
+      setImapHost(suggestedImapHost);
+    }
+  }, [host, imapHost]);
 
   return (
-    <div className="space-y-4">
-      <div className="grid w-full items-center gap-1.5">
-        <Label htmlFor="host">SMTP Host</Label>
-        <Input 
-          type="text" 
-          id="host" 
-          placeholder="smtp.yourdomain.com" 
-          value={host}
-          onChange={e => setHost(e.target.value)}
-        />
+    <div className="space-y-6">
+      {/* SMTP Configuration Section */}
+      <div>
+        <h3 className="text-lg font-medium mb-4">SMTP Configuration</h3>
+        <div className="space-y-4">
+          <div className="grid w-full items-center gap-1.5">
+            <Label htmlFor="host">SMTP Host</Label>
+            <Input 
+              type="text" 
+              id="host" 
+              placeholder="smtp.yourdomain.com" 
+              value={host}
+              onChange={e => setHost(e.target.value)}
+            />
+          </div>
+          
+          <div className="grid w-full items-center gap-1.5">
+            <Label htmlFor="port">SMTP Port</Label>
+            <Input 
+              type="number" 
+              id="port" 
+              placeholder="587" 
+              value={port}
+              onChange={e => setPort(e.target.value)}
+            />
+          </div>
+          
+          <div className="grid w-full items-center gap-1.5">
+            <Label htmlFor="username">Username</Label>
+            <Input 
+              type="text" 
+              id="username" 
+              placeholder="SMTP username or email" 
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+            />
+          </div>
+          
+          <div className="grid w-full items-center gap-1.5">
+            <Label htmlFor="password">Password</Label>
+            <Input 
+              type="password" 
+              id="password" 
+              placeholder="SMTP password" 
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+            />
+          </div>
+          
+          <div className="grid w-full items-center gap-1.5">
+            <Label htmlFor="fromEmail">From Email</Label>
+            <Input 
+              type="email" 
+              id="fromEmail" 
+              placeholder="noreply@yourdomain.com" 
+              value={fromEmail}
+              onChange={e => setFromEmail(e.target.value)}
+            />
+          </div>
+        </div>
       </div>
-      
-      <div className="grid w-full items-center gap-1.5">
-        <Label htmlFor="port">SMTP Port</Label>
-        <Input 
-          type="number" 
-          id="port" 
-          placeholder="587" 
-          value={port}
-          onChange={e => setPort(e.target.value)}
-        />
+
+      {/* IMAP Configuration Section */}
+      <Separator />
+      <div>
+        <h3 className="text-lg font-medium mb-4">IMAP Configuration</h3>
+        <p className="text-sm text-muted-foreground mb-4">
+          Configure IMAP settings to enable inbox synchronization. This allows the system to fetch and display emails sent to your account.
+        </p>
+        <div className="space-y-4">
+          <div className="grid w-full items-center gap-1.5">
+            <Label htmlFor="imapHost">IMAP Host</Label>
+            <Input 
+              type="text" 
+              id="imapHost" 
+              placeholder="imap.yourdomain.com" 
+              value={imapHost}
+              onChange={e => setImapHost(e.target.value)}
+            />
+          </div>
+          
+          <div className="grid w-full items-center gap-1.5">
+            <Label htmlFor="imapPort">IMAP Port</Label>
+            <Input 
+              type="number" 
+              id="imapPort" 
+              placeholder="993" 
+              value={imapPort}
+              onChange={e => setImapPort(e.target.value)}
+            />
+          </div>
+          
+          <div className="flex items-center space-x-2">
+            <Switch 
+              id="imapSecure" 
+              checked={imapSecure} 
+              onCheckedChange={setImapSecure} 
+            />
+            <Label htmlFor="imapSecure">Use SSL/TLS (recommended)</Label>
+          </div>
+        </div>
       </div>
-      
-      <div className="grid w-full items-center gap-1.5">
-        <Label htmlFor="username">Username</Label>
-        <Input 
-          type="text" 
-          id="username" 
-          placeholder="SMTP username or email" 
-          value={username}
-          onChange={e => setUsername(e.target.value)}
-        />
-      </div>
-      
-      <div className="grid w-full items-center gap-1.5">
-        <Label htmlFor="password">Password</Label>
-        <Input 
-          type="password" 
-          id="password" 
-          placeholder="SMTP password" 
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-        />
-      </div>
-      
-      <div className="grid w-full items-center gap-1.5">
-        <Label htmlFor="fromEmail">From Email</Label>
-        <Input 
-          type="email" 
-          id="fromEmail" 
-          placeholder="noreply@yourdomain.com" 
-          value={fromEmail}
-          onChange={e => setFromEmail(e.target.value)}
-        />
-      </div>
+
+      <Separator />
       
       <div className="flex items-center space-x-2">
         <Switch 
@@ -256,7 +319,17 @@ const SmtpConfigForm = ({
         </Button>
         
         <Button 
-          onClick={() => onSave({ host, port: parseInt(port), username, password, fromEmail, isActive })}
+          onClick={() => onSave({ 
+            host, 
+            port: parseInt(port), 
+            username, 
+            password, 
+            fromEmail, 
+            isActive,
+            imapHost,
+            imapPort: parseInt(imapPort),
+            imapSecure
+          })}
           disabled={isPending || !host || !port || !username || !password || !fromEmail}
         >
           {isPending ? (
