@@ -21,6 +21,8 @@ import {
   updateScheduledEmail,
   deleteScheduledEmail,
   cancelScheduledEmail,
+  syncEmails,
+  checkImapStatus,
   type SendgridConfig,
   type SmtpConfig,
   type MailgunConfig,
