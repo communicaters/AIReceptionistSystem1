@@ -1406,8 +1406,8 @@ const EmailManagement = () => {
                   Manage upcoming scheduled emails
                 </CardDescription>
               </div>
-              {!createScheduledMode && !editScheduledId && (
-                <Button size="sm" onClick={() => setCreateScheduledMode(true)}>
+              {!createScheduledEmailMode && !editScheduledEmailId && (
+                <Button size="sm" onClick={() => setCreateScheduledEmailMode(true)}>
                   <CalendarClock className="mr-2 h-4 w-4" />
                   Schedule New Email
                 </Button>
@@ -1418,13 +1418,13 @@ const EmailManagement = () => {
                 <Skeleton className="h-64 w-full" />
               ) : scheduledError ? (
                 <div className="text-red-500">Failed to load scheduled emails</div>
-              ) : createScheduledMode ? (
+              ) : createScheduledEmailMode ? (
                 <ScheduledEmailForm 
                   templates={emailTemplates || []}
-                  onSave={createScheduledMutation.mutate}
-                  isPending={createScheduledMutation.isPending}
+                  onSave={createScheduledEmailMutation.mutate}
+                  isPending={createScheduledEmailMutation.isPending}
                 />
-              ) : editScheduledId ? (
+              ) : editScheduledEmailId ? (
                 isLoadingScheduledEmail ? (
                   <Skeleton className="h-64 w-full" />
                 ) : scheduledEmailError ? (
@@ -1433,8 +1433,8 @@ const EmailManagement = () => {
                   <ScheduledEmailForm 
                     scheduledEmail={editingScheduledEmail}
                     templates={emailTemplates || []}
-                    onSave={updateScheduledMutation.mutate}
-                    isPending={updateScheduledMutation.isPending}
+                    onSave={updateScheduledEmailMutation.mutate}
+                    isPending={updateScheduledEmailMutation.isPending}
                   />
                 )
               ) : scheduledEmails?.length ? (
@@ -1462,7 +1462,7 @@ const EmailManagement = () => {
                               <Button 
                                 variant="outline" 
                                 size="sm" 
-                                onClick={() => setEditScheduledId(email.id)}
+                                onClick={() => setEditScheduledEmailId(email.id)}
                               >
                                 <Pencil className="h-4 w-4" />
                               </Button>
@@ -1471,7 +1471,7 @@ const EmailManagement = () => {
                                 size="sm" 
                                 onClick={() => {
                                   if (confirm('Are you sure you want to cancel this scheduled email?')) {
-                                    cancelScheduledMutation.mutate(email.id);
+                                    cancelScheduledEmailMutation.mutate(email.id);
                                   }
                                 }}
                               >
