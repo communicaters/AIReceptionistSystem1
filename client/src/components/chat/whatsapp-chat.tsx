@@ -5,7 +5,7 @@ import { Send, RefreshCw, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { WhatsappLog, sendWhatsappMessage } from "@/lib/api";
-import Spinner from "@/components/ui/spinner";
+import { Spinner } from "@/components/ui/spinner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -207,9 +207,19 @@ export function WhatsAppChat({
               }`}
             >
               <p className="text-sm break-words">{msg.message}</p>
-              <p className="text-[10px] mt-1 text-muted-foreground text-right">
-                {format(new Date(msg.timestamp), 'h:mm a')}
-              </p>
+              <div className="flex justify-end items-center mt-1">
+                {msg.direction === 'outbound' && (
+                  <span className="mr-1 text-[10px]">
+                    {msg.status === 'sent' && <span className="text-green-500">✓</span>}
+                    {msg.status === 'delivered' && <span className="text-green-500">✓✓</span>}
+                    {msg.status === 'read' && <span className="text-blue-500">✓✓</span>}
+                    {msg.status === 'failed' && <span className="text-red-500">⚠️</span>}
+                  </span>
+                )}
+                <p className="text-[10px] text-muted-foreground">
+                  {format(new Date(msg.timestamp), 'h:mm a')}
+                </p>
+              </div>
             </div>
           ))
         )}

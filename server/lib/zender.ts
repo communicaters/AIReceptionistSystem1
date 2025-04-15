@@ -397,7 +397,7 @@ export class ZenderService {
   /**
    * Helper method to log messages to the database
    */
-  private async logMessage(logData: InsertWhatsappLog): Promise<void> {
+  private async logMessage(logData: ExtendedWhatsappLog): Promise<void> {
     try {
       await storage.createWhatsappLog(logData);
     } catch (error) {
