@@ -462,6 +462,14 @@ export class DatabaseStorage implements IStorage {
       .limit(1);
     return result[0];
   }
+  
+  async updateWhatsappLog(id: number, updates: Partial<InsertWhatsappLog>): Promise<WhatsappLog | undefined> {
+    const result = await db.update(whatsappLogs)
+      .set(updates)
+      .where(eq(whatsappLogs.id, id))
+      .returning();
+    return result[0];
+  }
 
   // Meeting Logs
   async getMeetingLog(id: number): Promise<MeetingLog | undefined> {

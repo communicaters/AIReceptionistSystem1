@@ -404,6 +404,93 @@ export class ZenderService {
       console.error('Error logging WhatsApp message:', error);
     }
   }
+
+  /**
+   * Process a status update webhook from Zender
+   */
+  private async processStatusUpdate(data: any): Promise<boolean> {
+    try {
+      console.log('Processing Zender status update webhook:', JSON.stringify(data, null, 2));
+      
+      // Extract the message ID and status from the webhook data
+      let messageId = '';
+      let status = '';
+      
+      // Handle different webhook formats
+      if (data.id && data.status) {
+        // Format 1: Direct properties
+        messageId = data.id;
+        status = data.status.toLowerCase();
+      } else if (data.data && data.data.id && data.data.status) {
+        // Format 2: Nested data object
+        messageId = data.data.id;
+        status = data.data.status.toLowerCase();
+      } else {
+        // Format 3: Form-like data
+        const keys = Object.keys(data);
+        const idKey = keys.find(k => k === 'data[id]' || k === 'data[message_id]');
+        const statusKey = keys.find(k => k === 'data[status]');
+        
+        if (idKey && statusKey) {
+          messageId = data[idKey];
+          status = data[statusKey].toLowerCase();
+        } else {
+          console.error('Could not extract message ID or status from webhook data');
+          return false;
+        }
+      }
+      
+      if (!messageId) {
+        console.error('No message ID found in status update webhook');
+        return false;
+      }
+      
+      // Map Zender status to our status values
+      let mappedStatus = 'sent';
+      if (status.includes('deliver')) {
+        mappedStatus = 'delivered';
+      } else if (status.includes('read')) {
+        mappedStatus = 'read';
+      } else if (status.includes('fail') || status.includes('error')) {
+        mappedStatus = 'failed';
+      }
+      
+      console.log(`Processing status update for message ${messageId}: ${status} -> ${mappedStatus}`);
+      
+      // Try to find the message in our database by externalId
+      const message = await storage.getMostRecentWhatsappLogByExternalId(messageId);
+      
+      if (message) {
+        // Update the message status
+        await storage.updateWhatsappLog(message.id, {
+          status: mappedStatus
+        });
+        
+        console.log(`Updated message ${message.id} with status: ${mappedStatus}`);
+        
+        // Record system activity
+        await storage.createSystemActivity({
+          module: 'WhatsApp',
+          event: 'Message Status Updated',
+          status: 'Completed',
+          timestamp: new Date(),
+          details: {
+            messageId: message.id,
+            externalId: messageId,
+            newStatus: mappedStatus
+          }
+        });
+        
+        return true;
+      } else {
+        console.warn(`Could not find message with external ID: ${messageId}`);
+        return false;
+      }
+    } catch (error) {
+      console.error('Error processing status update webhook:', error);
+      return false;
+    }
+  }
 }
 
 // Singleton instance for the application to use
