@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDistanceToNow } from "date-fns";
 import { 
+  AlertTriangle,
   Check, 
   ChevronDown, 
   Copy, 
@@ -94,6 +95,7 @@ const VoiceCall = () => {
     phoneNumber: "",
     message: "This is a test call from the AI receptionist system. The system is working properly."
   });
+  const [selectedService, setSelectedService] = useState<'twilio' | 'sip' | 'openphone' | null>(null);
   
   // Configuration edit states
   const [editingTwilio, setEditingTwilio] = useState(false);
@@ -260,12 +262,12 @@ const VoiceCall = () => {
   
   // Mutation for making test calls
   const testCallMutation = useMutation({
-    mutationFn: (data: TestCallState) => makeTestCall(data.phoneNumber, data.message),
+    mutationFn: (data: TestCallState) => makeTestCall(data.phoneNumber, data.message, selectedService || undefined),
     onSuccess: (data) => {
       if (data.success) {
         toast({
           title: "Test call initiated",
-          description: `Call to ${testCall.phoneNumber} has been initiated successfully.`,
+          description: `Call to ${testCall.phoneNumber} has been initiated successfully.${data.service ? ` using ${data.service}` : ''}`,
         });
         setTestCallOpen(false);
         
@@ -341,8 +343,23 @@ const VoiceCall = () => {
       return;
     }
     
+    if (!selectedService) {
+      toast({
+        title: "No phone service selected",
+        description: "Please select a phone service to use for the test call.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     testCallMutation.mutate(testCall);
   };
+  
+  // Check which services are active
+  const hasActiveTwilio = voiceConfigs?.twilio?.isActive || false;
+  const hasActiveSip = voiceConfigs?.sip?.isActive || false;
+  const hasActiveOpenPhone = voiceConfigs?.openPhone?.isActive || false;
+  const hasAnyActiveService = hasActiveTwilio || hasActiveSip || hasActiveOpenPhone;
   
   return (
     <div className="space-y-6">
@@ -367,32 +384,101 @@ const VoiceCall = () => {
                 Enter a phone number to make a test call. The system will call the number and play a test message.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone Number</Label>
-                <Input 
-                  id="phone" 
-                  placeholder="+12025551234" 
-                  value={testCall.phoneNumber} 
-                  onChange={(e) => setTestCall({...testCall, phoneNumber: e.target.value})} 
-                />
-                <p className="text-sm text-muted-foreground">Enter in E.164 format (e.g., +12025551234)</p>
+            {!hasAnyActiveService ? (
+              <div className="py-6">
+                <div className="rounded-lg bg-amber-50 border border-amber-200 p-4">
+                  <div className="flex items-start">
+                    <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5" />
+                    <div className="ml-3">
+                      <h3 className="text-sm font-medium text-amber-800">No Active Phone Service</h3>
+                      <div className="mt-2 text-sm text-amber-700">
+                        <p>You need to configure and activate at least one phone service before making test calls.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="message">Test Message</Label>
-                <Input 
-                  id="message" 
-                  placeholder="Test message" 
-                  value={testCall.message} 
-                  onChange={(e) => setTestCall({...testCall, message: e.target.value})} 
-                />
+            ) : (
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="serviceSelect">Select Phone Service</Label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {hasActiveTwilio && (
+                      <Button 
+                        type="button"
+                        variant={selectedService === 'twilio' ? 'default' : 'outline'}
+                        className={`flex flex-col items-center justify-center h-20 ${selectedService === 'twilio' ? 'border-primary' : ''}`}
+                        onClick={() => setSelectedService('twilio')}
+                      >
+                        <div className="flex items-center mb-1">
+                          <span className="h-2 w-2 rounded-full bg-green-500 mr-2"></span>
+                          <span>Active</span>
+                        </div>
+                        <span className="font-semibold">Twilio</span>
+                      </Button>
+                    )}
+                    
+                    {hasActiveSip && (
+                      <Button 
+                        type="button"
+                        variant={selectedService === 'sip' ? 'default' : 'outline'}
+                        className={`flex flex-col items-center justify-center h-20 ${selectedService === 'sip' ? 'border-primary' : ''}`}
+                        onClick={() => setSelectedService('sip')}
+                      >
+                        <div className="flex items-center mb-1">
+                          <span className="h-2 w-2 rounded-full bg-green-500 mr-2"></span>
+                          <span>Active</span>
+                        </div>
+                        <span className="font-semibold">SIP</span>
+                      </Button>
+                    )}
+                    
+                    {hasActiveOpenPhone && (
+                      <Button 
+                        type="button"
+                        variant={selectedService === 'openphone' ? 'default' : 'outline'}
+                        className={`flex flex-col items-center justify-center h-20 ${selectedService === 'openphone' ? 'border-primary' : ''}`}
+                        onClick={() => setSelectedService('openphone')}
+                      >
+                        <div className="flex items-center mb-1">
+                          <span className="h-2 w-2 rounded-full bg-green-500 mr-2"></span>
+                          <span>Active</span>
+                        </div>
+                        <span className="font-semibold">OpenPhone</span>
+                      </Button>
+                    )}
+                  </div>
+                  {!selectedService && (
+                    <p className="text-sm text-amber-500 mt-2">Please select a phone service to use</p>
+                  )}
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone Number</Label>
+                  <Input 
+                    id="phone" 
+                    placeholder="+12025551234" 
+                    value={testCall.phoneNumber} 
+                    onChange={(e) => setTestCall({...testCall, phoneNumber: e.target.value})} 
+                  />
+                  <p className="text-sm text-muted-foreground">Enter in E.164 format (e.g., +12025551234)</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="message">Test Message</Label>
+                  <Input 
+                    id="message" 
+                    placeholder="Test message" 
+                    value={testCall.message} 
+                    onChange={(e) => setTestCall({...testCall, message: e.target.value})} 
+                  />
+                </div>
               </div>
-            </div>
+            )}
             <DialogFooter>
               <Button variant="outline" onClick={() => setTestCallOpen(false)}>Cancel</Button>
               <Button 
                 onClick={initiateTestCall}
-                disabled={testCallMutation.isPending}
+                disabled={testCallMutation.isPending || !hasAnyActiveService || !selectedService}
               >
                 {testCallMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Make Call
