@@ -820,7 +820,18 @@ const EmailManagement = () => {
     error: templatesError
   } = useQuery({
     queryKey: ["/api/email/templates"],
-    queryFn: getEmailTemplates
+    queryFn: () => getEmailTemplates()
+  });
+  
+  // Query for fetching a specific template when editing
+  const {
+    data: editingTemplate,
+    isLoading: isLoadingTemplate,
+    error: templateError
+  } = useQuery({
+    queryKey: ["/api/email/templates", editTemplateId],
+    queryFn: () => editTemplateId ? getEmailTemplate(editTemplateId) : null,
+    enabled: !!editTemplateId
   });
   
   // Query for fetching scheduled emails
@@ -833,18 +844,7 @@ const EmailManagement = () => {
     queryFn: getScheduledEmails
   });
   
-  // Query for fetching a single template when editing
-  const {
-    data: editingTemplate,
-    isLoading: isLoadingTemplate,
-    error: templateError
-  } = useQuery({
-    queryKey: ["/api/email/templates", editTemplateId],
-    queryFn: () => editTemplateId ? getEmailTemplate(editTemplateId) : null,
-    enabled: !!editTemplateId
-  });
-  
-  // Query for fetching a single scheduled email when editing
+  // Query for fetching a specific scheduled email when editing
   const {
     data: editingScheduledEmail,
     isLoading: isLoadingScheduledEmail,
@@ -854,6 +854,8 @@ const EmailManagement = () => {
     queryFn: () => editScheduledEmailId ? getScheduledEmail(editScheduledEmailId) : null,
     enabled: !!editScheduledEmailId
   });
+  
+
   
   // Mutation for saving SendGrid config
   const sendgridMutation = useMutation({
