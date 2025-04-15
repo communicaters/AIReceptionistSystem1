@@ -54,8 +54,15 @@ const WhatsApp = () => {
     accessToken: "",
     businessAccountId: "",
     webhookVerifyToken: "",
+    apiSecret: "",
+    accountId: "",
+    zenderUrl: "https://pakgame.store/WA/Install/api",
+    provider: "facebook",  // Default to facebook, can be 'facebook' or 'zender'
     isActive: false
   });
+  
+  // Active configuration provider
+  const [activeProvider, setActiveProvider] = useState<"facebook" | "zender">("facebook");
 
   // Query for WhatsApp configuration
   const { 
@@ -156,8 +163,15 @@ const WhatsApp = () => {
         accessToken: whatsappConfig.accessToken,
         businessAccountId: whatsappConfig.businessAccountId,
         webhookVerifyToken: whatsappConfig.webhookVerifyToken,
+        apiSecret: whatsappConfig.apiSecret || "",
+        accountId: whatsappConfig.accountId || "",
+        zenderUrl: whatsappConfig.zenderUrl || "https://pakgame.store/WA/Install/api",
+        provider: whatsappConfig.provider || "facebook",
         isActive: whatsappConfig.isActive
       });
+      
+      // Set the active provider based on config
+      setActiveProvider((whatsappConfig.provider as "facebook" | "zender") || "facebook");
     }
   }, [whatsappConfig]);
 
@@ -174,10 +188,16 @@ const WhatsApp = () => {
     
     // Map form field IDs to config property names
     const fieldMap: Record<string, keyof WhatsappConfig> = {
+      // Facebook/Meta WhatsApp fields
       'phone-number-id': 'phoneNumberId',
       'business-account-id': 'businessAccountId',
       'access-token': 'accessToken',
       'webhook-token': 'webhookVerifyToken',
+      // Zender specific fields
+      'api-secret': 'apiSecret',
+      'account-id': 'accountId',
+      'zender-url': 'zenderUrl',
+      // Common fields
       'active-status': 'isActive'
     };
     
@@ -189,20 +209,56 @@ const WhatsApp = () => {
       [configKey]: type === 'checkbox' ? checked : value
     }));
   };
+  
+  // Handle provider change
+  const handleProviderChange = (provider: "facebook" | "zender") => {
+    setActiveProvider(provider);
+    setConfigForm(prev => ({
+      ...prev,
+      provider: provider
+    }));
+  };
 
   // Handle saving configuration
   const handleSaveConfig = () => {
-    if (!configForm.phoneNumberId || !configForm.accessToken || 
-        !configForm.businessAccountId || !configForm.webhookVerifyToken) {
-      toast({
-        title: "Validation error",
-        description: "Please fill in all required fields",
-        variant: "destructive",
-      });
-      return;
+    // Different validation based on provider
+    if (activeProvider === "facebook") {
+      if (!configForm.phoneNumberId || !configForm.accessToken || 
+          !configForm.businessAccountId || !configForm.webhookVerifyToken) {
+        toast({
+          title: "Validation error",
+          description: "Please fill in all required Facebook/Meta API fields",
+          variant: "destructive",
+        });
+        return;
+      }
+    } else if (activeProvider === "zender") {
+      if (!configForm.accountId || !configForm.apiSecret || 
+          !configForm.zenderUrl || !configForm.webhookVerifyToken) {
+        toast({
+          title: "Validation error",
+          description: "Please fill in all required Zender API fields",
+          variant: "destructive",
+        });
+        return;
+      }
     }
     
-    saveConfigMutation.mutate(configForm);
+    // Set empty strings for unused provider fields to avoid validation issues
+    const updatedConfig = { ...configForm };
+    
+    if (activeProvider === "facebook") {
+      // These fields are not used with Facebook/Meta provider
+      updatedConfig.apiSecret = "";
+      updatedConfig.accountId = "";
+    } else if (activeProvider === "zender") {
+      // These fields are not used with Zender provider
+      updatedConfig.phoneNumberId = "placeholder";
+      updatedConfig.accessToken = "placeholder";
+      updatedConfig.businessAccountId = "placeholder";
+    }
+    
+    saveConfigMutation.mutate(updatedConfig);
   };
 
   // Handle testing connection
@@ -263,20 +319,22 @@ const WhatsApp = () => {
     if (!whatsappConfig) {
       return {
         status: "not-configured",
-        message: "WhatsApp Business API is not configured yet."
+        message: "WhatsApp messaging service is not configured yet."
       };
     }
     
     if (!whatsappConfig.isActive) {
       return {
         status: "inactive",
-        message: "WhatsApp Business API connection is currently inactive."
+        message: `WhatsApp ${whatsappConfig.provider === "zender" ? "Zender" : "Facebook/Meta"} connection is currently inactive.`
       };
     }
     
+    const provider = whatsappConfig.provider === "zender" ? "Zender" : "Facebook/Meta";
+    
     return {
       status: "connected",
-      message: "WhatsApp Business API is connected and active."
+      message: `WhatsApp ${provider} service is connected and active.`
     };
   };
 
@@ -322,9 +380,9 @@ const WhatsApp = () => {
             <div className="flex items-start space-x-4">
               <AlertCircle className="h-6 w-6 text-amber-500 mt-0.5" />
               <div>
-                <h3 className="font-semibold text-amber-800">WhatsApp Business Integration Inactive</h3>
+                <h3 className="font-semibold text-amber-800">WhatsApp Integration Inactive</h3>
                 <p className="text-amber-700 mt-1">
-                  Your WhatsApp Business API connection is configured but currently inactive. Enable it in the configuration tab.
+                  {status.message} Enable it in the configuration tab.
                 </p>
               </div>
             </div>
@@ -338,9 +396,9 @@ const WhatsApp = () => {
             <div className="flex items-start space-x-4">
               <AlertCircle className="h-6 w-6 text-red-500 mt-0.5" />
               <div>
-                <h3 className="font-semibold text-red-800">WhatsApp Business API Not Configured</h3>
+                <h3 className="font-semibold text-red-800">WhatsApp Not Configured</h3>
                 <p className="text-red-600 mt-1">
-                  Your WhatsApp Business API is not configured yet. Complete the configuration in the settings tab below.
+                  {status.message} Complete the configuration in the settings tab below.
                 </p>
               </div>
             </div>
@@ -354,9 +412,9 @@ const WhatsApp = () => {
             <div className="flex items-start space-x-4">
               <Check className="h-6 w-6 text-green-500 mt-0.5" />
               <div>
-                <h3 className="font-semibold text-green-800">WhatsApp Business API Connected</h3>
+                <h3 className="font-semibold text-green-800">WhatsApp Connected</h3>
                 <p className="text-green-700 mt-1">
-                  Your WhatsApp Business API is connected and active. You can send and receive messages.
+                  {status.message} You can send and receive messages.
                 </p>
               </div>
             </div>
@@ -373,9 +431,9 @@ const WhatsApp = () => {
         <TabsContent value="configuration" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>WhatsApp Business API Configuration</CardTitle>
+              <CardTitle>WhatsApp Configuration</CardTitle>
               <CardDescription>
-                Configure your WhatsApp Business account settings
+                Configure your WhatsApp messaging service provider
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -387,49 +445,127 @@ const WhatsApp = () => {
                   <Skeleton className="h-10 w-full" />
                 </div>
               ) : (
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="phone-number-id">Phone Number ID</Label>
-                    <Input 
-                      id="phone-number-id" 
-                      placeholder="Enter your WhatsApp phone number ID" 
-                      value={configForm.phoneNumberId || ""}
-                      onChange={handleConfigChange}
-                    />
+                <div className="space-y-6">
+                  {/* Provider Selection */}
+                  <div className="space-y-3">
+                    <Label>WhatsApp Service Provider</Label>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div 
+                        className={`border rounded-md p-4 cursor-pointer transition-colors hover:bg-slate-50 ${activeProvider === "facebook" ? "border-primary bg-primary/5" : ""}`}
+                        onClick={() => handleProviderChange("facebook")}
+                      >
+                        <h3 className="font-medium">Facebook/Meta API</h3>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Standard WhatsApp Business API with Meta developer account
+                        </p>
+                      </div>
+                      <div 
+                        className={`border rounded-md p-4 cursor-pointer transition-colors hover:bg-slate-50 ${activeProvider === "zender" ? "border-primary bg-primary/5" : ""}`}
+                        onClick={() => handleProviderChange("zender")}
+                      >
+                        <h3 className="font-medium">Zender Service</h3>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Alternative WhatsApp gateway with simpler API
+                        </p>
+                      </div>
+                    </div>
                   </div>
+                  
+                  {/* Conditional Fields Based on Provider */}
+                  {activeProvider === "facebook" ? (
+                    <div className="space-y-4">
+                      <h3 className="text-sm font-medium text-muted-foreground">Facebook/Meta API Configuration</h3>
+                      <div className="space-y-2">
+                        <Label htmlFor="phone-number-id">Phone Number ID</Label>
+                        <Input 
+                          id="phone-number-id" 
+                          placeholder="Enter your WhatsApp phone number ID" 
+                          value={configForm.phoneNumberId || ""}
+                          onChange={handleConfigChange}
+                        />
+                      </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="business-account-id">Business Account ID</Label>
-                    <Input 
-                      id="business-account-id" 
-                      placeholder="Enter your business account ID" 
-                      value={configForm.businessAccountId || ""}
-                      onChange={handleConfigChange}
-                    />
-                  </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="business-account-id">Business Account ID</Label>
+                        <Input 
+                          id="business-account-id" 
+                          placeholder="Enter your business account ID" 
+                          value={configForm.businessAccountId || ""}
+                          onChange={handleConfigChange}
+                        />
+                      </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="access-token">Access Token</Label>
-                    <Input 
-                      id="access-token" 
-                      type="password" 
-                      placeholder="Enter your access token" 
-                      value={configForm.accessToken || ""}
-                      onChange={handleConfigChange}
-                    />
-                  </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="access-token">Access Token</Label>
+                        <Input 
+                          id="access-token" 
+                          type="password" 
+                          placeholder="Enter your access token" 
+                          value={configForm.accessToken || ""}
+                          onChange={handleConfigChange}
+                        />
+                      </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="webhook-token">Webhook Verification Token</Label>
-                    <Input 
-                      id="webhook-token" 
-                      placeholder="Enter a verification token for webhooks" 
-                      value={configForm.webhookVerifyToken || ""}
-                      onChange={handleConfigChange}
-                    />
-                  </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="webhook-token">Webhook Verification Token</Label>
+                        <Input 
+                          id="webhook-token" 
+                          placeholder="Enter a verification token for webhooks" 
+                          value={configForm.webhookVerifyToken || ""}
+                          onChange={handleConfigChange}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <h3 className="text-sm font-medium text-muted-foreground">Zender API Configuration</h3>
+                      <div className="space-y-2">
+                        <Label htmlFor="account-id">Account ID</Label>
+                        <Input 
+                          id="account-id" 
+                          placeholder="Enter your Zender account ID" 
+                          value={configForm.accountId || ""}
+                          onChange={handleConfigChange}
+                        />
+                      </div>
 
-                  <div className="flex items-center space-x-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="api-secret">API Secret</Label>
+                        <Input 
+                          id="api-secret" 
+                          type="password"
+                          placeholder="Enter your Zender API secret" 
+                          value={configForm.apiSecret || ""}
+                          onChange={handleConfigChange}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="zender-url">Zender API URL</Label>
+                        <Input 
+                          id="zender-url" 
+                          placeholder="Enter the Zender API URL" 
+                          value={configForm.zenderUrl || "https://pakgame.store/WA/Install/api"}
+                          onChange={handleConfigChange}
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Default: https://pakgame.store/WA/Install/api
+                        </p>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="webhook-token">Webhook Verification Token</Label>
+                        <Input 
+                          id="webhook-token" 
+                          placeholder="Enter a verification token for webhooks" 
+                          value={configForm.webhookVerifyToken || ""}
+                          onChange={handleConfigChange}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div className="flex items-center space-x-2 pt-2">
                     <Switch 
                       id="active-status" 
                       checked={configForm.isActive || false}
@@ -437,7 +573,7 @@ const WhatsApp = () => {
                         setConfigForm(prev => ({ ...prev, isActive: checked }))
                       }
                     />
-                    <Label htmlFor="active-status">Enable WhatsApp Business Integration</Label>
+                    <Label htmlFor="active-status">Enable WhatsApp Integration</Label>
                   </div>
                 </div>
               )}
@@ -499,13 +635,23 @@ const WhatsApp = () => {
                 </div>
                 <div className="rounded-md bg-neutral-50 p-3 text-sm">
                   <p className="font-medium mb-2">Webhook Setup Instructions:</p>
-                  <ol className="list-decimal pl-5 space-y-1">
-                    <li>Go to the Meta for Developers Dashboard</li>
-                    <li>Navigate to your WhatsApp Business app</li>
-                    <li>In the WhatsApp API settings, find Webhooks</li>
-                    <li>Add the webhook URL above for the <span className="font-mono text-xs">messages</span> field</li>
-                    <li>Use the Webhook Verification Token from your configuration</li>
-                  </ol>
+                  {activeProvider === "facebook" ? (
+                    <ol className="list-decimal pl-5 space-y-1">
+                      <li>Go to the Meta for Developers Dashboard</li>
+                      <li>Navigate to your WhatsApp Business app</li>
+                      <li>In the WhatsApp API settings, find Webhooks</li>
+                      <li>Add the webhook URL above for the <span className="font-mono text-xs">messages</span> field</li>
+                      <li>Use the Webhook Verification Token from your configuration</li>
+                    </ol>
+                  ) : (
+                    <ol className="list-decimal pl-5 space-y-1">
+                      <li>Log in to your Zender account dashboard</li>
+                      <li>Go to Settings {'->'} Webhooks</li>
+                      <li>Add the webhook URL above to receive incoming messages</li>
+                      <li>Set the verification token to match your configuration</li>
+                      <li>Make sure to enable webhooks for your desired events</li>
+                    </ol>
+                  )}
                 </div>
               </div>
             </CardContent>

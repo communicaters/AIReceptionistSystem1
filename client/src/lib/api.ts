@@ -534,10 +534,10 @@ export interface WhatsappConfig {
   id: number;
   userId: number;
   // Meta/Facebook API fields
-  phoneNumberId: string | null;
-  accessToken: string | null;
-  businessAccountId: string | null;
-  webhookVerifyToken: string | null;
+  phoneNumberId: string;
+  accessToken: string;
+  businessAccountId: string;
+  webhookVerifyToken: string;
   // Zender specific fields
   apiSecret: string | null;
   accountId: string | null;
