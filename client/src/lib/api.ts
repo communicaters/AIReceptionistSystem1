@@ -402,6 +402,26 @@ export const sendEmail = async (
   return response.json();
 };
 
+// IMAP Sync Emails - Fetches emails from the configured IMAP server
+export const syncEmails = async (): Promise<{ 
+  success: boolean; 
+  message: string; 
+  count?: number 
+}> => {
+  const response = await apiRequest("POST", "/api/email/sync");
+  return response.json();
+};
+
+// Check IMAP connection status
+export const checkImapStatus = async (): Promise<{ 
+  success: boolean; 
+  connected: boolean;
+  message: string 
+}> => {
+  const response = await apiRequest("GET", "/api/email/imap-status");
+  return response.json();
+};
+
 // Email Templates API Functions
 export const getEmailTemplates = async (category?: string): Promise<EmailTemplate[]> => {
   const queryParams = category ? `?category=${category}` : "";
