@@ -792,6 +792,7 @@ const EmailManagement = () => {
   const [editTemplateId, setEditTemplateId] = useState<number | null>(null);
   const [createScheduledEmailMode, setCreateScheduledEmailMode] = useState(false);
   const [editScheduledEmailId, setEditScheduledEmailId] = useState<number | null>(null);
+  const [viewEmailLog, setViewEmailLog] = useState<EmailLog | null>(null);
   
   // Query for fetching email configurations
   const { 
