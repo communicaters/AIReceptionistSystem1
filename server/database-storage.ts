@@ -10,6 +10,8 @@ import {
   sendgridConfig, SendgridConfig, InsertSendgridConfig,
   mailgunConfig, MailgunConfig, InsertMailgunConfig,
   chatConfig, ChatConfig, InsertChatConfig,
+  emailTemplates, EmailTemplate, InsertEmailTemplate,
+  scheduledEmails, ScheduledEmail, InsertScheduledEmail,
   whatsappConfig, WhatsappConfig, InsertWhatsappConfig,
   calendarConfig, CalendarConfig, InsertCalendarConfig,
   productData, ProductData, InsertProductData,
