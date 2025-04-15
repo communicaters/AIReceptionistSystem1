@@ -1122,12 +1122,409 @@ const EmailManagement = () => {
         />
       </div>
 
-      <Tabs defaultValue="sendgrid">
+      <Tabs defaultValue="inbox">
         <TabsList>
+          <TabsTrigger value="inbox">Inbox</TabsTrigger>
+          <TabsTrigger value="compose">Compose</TabsTrigger>
+          <TabsTrigger value="templates">Templates</TabsTrigger>
+          <TabsTrigger value="scheduled">Scheduled</TabsTrigger>
           <TabsTrigger value="sendgrid">SendGrid</TabsTrigger>
           <TabsTrigger value="smtp">SMTP</TabsTrigger>
           <TabsTrigger value="mailgun">Mailgun</TabsTrigger>
         </TabsList>
+        <TabsContent value="inbox" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Email Inbox</CardTitle>
+              <CardDescription>
+                View and manage incoming emails
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoadingLogs ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-4 w-1/2" />
+                </div>
+              ) : logsError ? (
+                <div className="text-red-500">Failed to load email logs</div>
+              ) : emailLogs?.length ? (
+                <div className="space-y-4">
+                  {emailLogs.filter(log => log.status === 'received').map((email) => (
+                    <div key={email.id} className="border rounded-md p-4 hover:bg-slate-50 cursor-pointer transition-colors">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <h3 className="text-sm font-medium">{email.from}</h3>
+                          <p className="text-base font-semibold">{email.subject}</p>
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {formatDistanceToNow(new Date(email.timestamp))} ago
+                        </div>
+                      </div>
+                      <p className="text-sm text-muted-foreground line-clamp-2">{email.body}</p>
+                      <div className="flex justify-end mt-2 space-x-2">
+                        <Button variant="outline" size="sm">
+                          <Mail className="h-4 w-4 mr-1" />
+                          Reply
+                        </Button>
+                        <Button variant="ghost" size="sm">
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-8">
+                  <Mail className="h-12 w-12 text-muted-foreground/50 mb-4" />
+                  <h3 className="text-lg font-medium">Your inbox is empty</h3>
+                  <p className="text-sm text-muted-foreground mt-1">No incoming emails found</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        <TabsContent value="compose" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Compose Email</CardTitle>
+              <CardDescription>
+                Create and send a new email
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="emailService">Email Service</Label>
+                  <Select defaultValue={emailConfigs?.sendgrid?.isActive ? "sendgrid" : emailConfigs?.smtp?.isActive ? "smtp" : emailConfigs?.mailgun?.isActive ? "mailgun" : "sendgrid"}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select email service" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {emailConfigs?.sendgrid?.isActive && (
+                        <SelectItem value="sendgrid">SendGrid</SelectItem>
+                      )}
+                      {emailConfigs?.smtp?.isActive && (
+                        <SelectItem value="smtp">SMTP</SelectItem>
+                      )}
+                      {emailConfigs?.mailgun?.isActive && (
+                        <SelectItem value="mailgun">Mailgun</SelectItem>
+                      )}
+                      {!(emailConfigs?.sendgrid?.isActive || emailConfigs?.smtp?.isActive || emailConfigs?.mailgun?.isActive) && (
+                        <SelectItem value="none">No active service</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="from">From</Label>
+                  <Input 
+                    type="text" 
+                    id="from" 
+                    readOnly 
+                    value={emailConfigs?.sendgrid?.fromEmail || emailConfigs?.smtp?.fromEmail || emailConfigs?.mailgun?.fromEmail || "noreply@example.com"}
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="to">To</Label>
+                  <Input 
+                    type="email" 
+                    id="to" 
+                    placeholder="recipient@example.com" 
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="subject">Subject</Label>
+                  <Input 
+                    type="text" 
+                    id="subject" 
+                    placeholder="Email subject" 
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="template">Use Template (Optional)</Label>
+                  <Select>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a template" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No template</SelectItem>
+                      {emailTemplates?.map((template) => (
+                        <SelectItem key={template.id} value={template.id.toString()}>
+                          {template.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="body">Email Body</Label>
+                  <Textarea 
+                    id="body" 
+                    placeholder="Type your message here..." 
+                    className="min-h-[200px]"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <Switch id="schedule" />
+                    <Label htmlFor="schedule">Schedule for later</Label>
+                  </div>
+                </div>
+                
+                <div className="flex justify-end space-x-2">
+                  <Button variant="outline">Save as Draft</Button>
+                  <Button>
+                    <Send className="h-4 w-4 mr-2" />
+                    Send Email
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        <TabsContent value="templates" className="space-y-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Email Templates</CardTitle>
+                <CardDescription>
+                  Create and manage reusable email templates
+                </CardDescription>
+              </div>
+              {!createTemplateMode && !editTemplateId && (
+                <Button size="sm" onClick={() => setCreateTemplateMode(true)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  New Template
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent>
+              {isLoadingTemplates ? (
+                <Skeleton className="h-64 w-full" />
+              ) : templatesError ? (
+                <div className="text-red-500">Failed to load email templates</div>
+              ) : createTemplateMode ? (
+                <EmailTemplateForm 
+                  onSave={createTemplateMutation.mutate}
+                  isPending={createTemplateMutation.isPending}
+                />
+              ) : editTemplateId ? (
+                isLoadingTemplate ? (
+                  <Skeleton className="h-64 w-full" />
+                ) : templateError ? (
+                  <div className="text-red-500">Failed to load template details</div>
+                ) : (
+                  <EmailTemplateForm 
+                    template={editingTemplate}
+                    onSave={updateTemplateMutation.mutate}
+                    isPending={updateTemplateMutation.isPending}
+                  />
+                )
+              ) : emailTemplates?.length ? (
+                <div className="space-y-3">
+                  {emailTemplates.map((template) => (
+                    <div key={template.id} className="p-3 border rounded-md">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <h4 className="font-medium">{template.name}</h4>
+                          <p className="text-sm text-muted-foreground">
+                            {template.category} • {template.subject}
+                          </p>
+                        </div>
+                        <div className="flex space-x-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => setEditTemplateId(template.id)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => {
+                              if (confirm('Are you sure you want to delete this template?')) {
+                                deleteTemplateMutation.mutate(template.id);
+                              }
+                            }}
+                          >
+                            <Trash className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <div className="flex justify-center mb-4">
+                    <Mail className="h-12 w-12 text-neutral-300" />
+                  </div>
+                  <h3 className="text-lg font-medium mb-2">No templates yet</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Create your first email template to start automating your communication
+                  </p>
+                  <Button onClick={() => setCreateTemplateMode(true)}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Create Template
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+            {(createTemplateMode || editTemplateId) && (
+              <CardFooter>
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setCreateTemplateMode(false);
+                    setEditTemplateId(undefined);
+                  }}
+                >
+                  Cancel
+                </Button>
+              </CardFooter>
+            )}
+          </Card>
+        </TabsContent>
+        
+        <TabsContent value="scheduled" className="space-y-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Scheduled Emails</CardTitle>
+                <CardDescription>
+                  Manage upcoming scheduled emails
+                </CardDescription>
+              </div>
+              {!createScheduledMode && !editScheduledId && (
+                <Button size="sm" onClick={() => setCreateScheduledMode(true)}>
+                  <CalendarClock className="mr-2 h-4 w-4" />
+                  Schedule New Email
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent>
+              {isLoadingScheduled ? (
+                <Skeleton className="h-64 w-full" />
+              ) : scheduledError ? (
+                <div className="text-red-500">Failed to load scheduled emails</div>
+              ) : createScheduledMode ? (
+                <ScheduledEmailForm 
+                  templates={emailTemplates || []}
+                  onSave={createScheduledMutation.mutate}
+                  isPending={createScheduledMutation.isPending}
+                />
+              ) : editScheduledId ? (
+                isLoadingScheduledEmail ? (
+                  <Skeleton className="h-64 w-full" />
+                ) : scheduledEmailError ? (
+                  <div className="text-red-500">Failed to load scheduled email details</div>
+                ) : (
+                  <ScheduledEmailForm 
+                    scheduledEmail={editingScheduledEmail}
+                    templates={emailTemplates || []}
+                    onSave={updateScheduledMutation.mutate}
+                    isPending={updateScheduledMutation.isPending}
+                  />
+                )
+              ) : scheduledEmails?.length ? (
+                <div className="space-y-3">
+                  {scheduledEmails.map((email) => (
+                    <div key={email.id} className="p-3 border rounded-md">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <div className="flex items-center">
+                            <h4 className="font-medium">{email.subject}</h4>
+                            <StatusBadge 
+                              status={email.status === 'pending' ? 'info' : 
+                                     email.status === 'sent' ? 'operational' : 
+                                     email.status === 'failed' ? 'outage' : 
+                                     email.status === 'cancelled' ? 'inactive' : 'info'} 
+                            />
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            To: {email.to} • {new Date(email.scheduledTime).toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="flex space-x-2">
+                          {email.status === 'pending' && (
+                            <>
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                onClick={() => setEditScheduledId(email.id)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                onClick={() => {
+                                  if (confirm('Are you sure you want to cancel this scheduled email?')) {
+                                    cancelScheduledMutation.mutate(email.id);
+                                  }
+                                }}
+                              >
+                                <XCircle className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => {
+                              // View email details
+                            }}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <div className="flex justify-center mb-4">
+                    <CalendarClock className="h-12 w-12 text-neutral-300" />
+                  </div>
+                  <h3 className="text-lg font-medium mb-2">No scheduled emails</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Schedule emails to be sent automatically at specific dates and times
+                  </p>
+                  <Button onClick={() => setCreateScheduledMode(true)}>
+                    <CalendarClock className="mr-2 h-4 w-4" />
+                    Schedule Email
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+            {(createScheduledMode || editScheduledId) && (
+              <CardFooter>
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setCreateScheduledMode(false);
+                    setEditScheduledId(undefined);
+                  }}
+                >
+                  Cancel
+                </Button>
+              </CardFooter>
+            )}
+          </Card>
+        </TabsContent>
+        
         <TabsContent value="sendgrid" className="space-y-4">
           <Card>
             <CardHeader>
