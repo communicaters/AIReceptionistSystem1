@@ -205,6 +205,74 @@ export const chatConfigRelations = relations(chatConfig, ({ one }) => ({
   }),
 }));
 
+// Email templates
+export const emailTemplates = pgTable("email_templates", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text("name").notNull(),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  description: text("description"),
+  category: text("category").notNull(), // general, support, sales, etc.
+  isActive: boolean("is_active").notNull().default(true),
+  variables: text("variables"), // JSON string of variables used in the template
+  lastUsed: timestamp("last_used"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertEmailTemplateSchema = createInsertSchema(emailTemplates).omit({
+  id: true,
+  lastUsed: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const emailTemplatesRelations = relations(emailTemplates, ({ one }) => ({
+  user: one(users, {
+    fields: [emailTemplates.userId],
+    references: [users.id],
+  }),
+}));
+
+// Scheduled emails
+export const scheduledEmails = pgTable("scheduled_emails", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  to: text("to_email").notNull(),
+  from: text("from_email").notNull(),
+  fromName: text("from_name"),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  htmlBody: text("html_body"),
+  scheduledTime: timestamp("scheduled_time").notNull(),
+  status: text("status").notNull().default("pending"), // pending, sent, failed
+  templateId: integer("template_id").references(() => emailTemplates.id, { onDelete: 'set null' }),
+  service: text("service"), // sendgrid, smtp, mailgun
+  sentAt: timestamp("sent_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  isRecurring: boolean("is_recurring").default(false),
+  recurringRule: text("recurring_rule"), // iCal RRule format for recurring emails
+});
+
+export const insertScheduledEmailSchema = createInsertSchema(scheduledEmails).omit({
+  id: true,
+  status: true,
+  sentAt: true,
+  createdAt: true,
+});
+
+export const scheduledEmailsRelations = relations(scheduledEmails, ({ one }) => ({
+  user: one(users, {
+    fields: [scheduledEmails.userId],
+    references: [users.id],
+  }),
+  template: one(emailTemplates, {
+    fields: [scheduledEmails.templateId],
+    references: [emailTemplates.id],
+  }),
+}));
+
 export const whatsappConfig = pgTable("whatsapp_config", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -525,6 +593,12 @@ export type InsertMailgunConfig = z.infer<typeof insertMailgunConfigSchema>;
 
 export type ChatConfig = typeof chatConfig.$inferSelect;
 export type InsertChatConfig = z.infer<typeof insertChatConfigSchema>;
+
+export type EmailTemplate = typeof emailTemplates.$inferSelect;
+export type InsertEmailTemplate = z.infer<typeof insertEmailTemplateSchema>;
+
+export type ScheduledEmail = typeof scheduledEmails.$inferSelect;
+export type InsertScheduledEmail = z.infer<typeof insertScheduledEmailSchema>;
 
 export type WhatsappConfig = typeof whatsappConfig.$inferSelect;
 export type InsertWhatsappConfig = z.infer<typeof insertWhatsappConfigSchema>;

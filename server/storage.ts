@@ -7,6 +7,8 @@ import {
   sendgridConfig, SendgridConfig, InsertSendgridConfig,
   mailgunConfig, MailgunConfig, InsertMailgunConfig,
   chatConfig, ChatConfig, InsertChatConfig,
+  emailTemplates, EmailTemplate, InsertEmailTemplate,
+  scheduledEmails, ScheduledEmail, InsertScheduledEmail,
   whatsappConfig, WhatsappConfig, InsertWhatsappConfig,
   calendarConfig, CalendarConfig, InsertCalendarConfig,
   productData, ProductData, InsertProductData,
@@ -71,6 +73,23 @@ export interface IStorage {
   getChatConfigByUserId(userId: number): Promise<ChatConfig | undefined>;
   createChatConfig(config: InsertChatConfig): Promise<ChatConfig>;
   updateChatConfig(id: number, config: Partial<InsertChatConfig>): Promise<ChatConfig | undefined>;
+  
+  // Email Templates
+  getEmailTemplate(id: number): Promise<EmailTemplate | undefined>;
+  getEmailTemplatesByUserId(userId: number): Promise<EmailTemplate[]>;
+  getEmailTemplatesByCategory(userId: number, category: string): Promise<EmailTemplate[]>;
+  createEmailTemplate(template: InsertEmailTemplate): Promise<EmailTemplate>;
+  updateEmailTemplate(id: number, template: Partial<InsertEmailTemplate>): Promise<EmailTemplate | undefined>;
+  deleteEmailTemplate(id: number): Promise<boolean>;
+  
+  // Scheduled Emails
+  getScheduledEmail(id: number): Promise<ScheduledEmail | undefined>;
+  getScheduledEmailsByUserId(userId: number): Promise<ScheduledEmail[]>;
+  getPendingScheduledEmails(cutoffTime?: Date): Promise<ScheduledEmail[]>;
+  createScheduledEmail(email: InsertScheduledEmail): Promise<ScheduledEmail>;
+  updateScheduledEmail(id: number, email: Partial<InsertScheduledEmail>): Promise<ScheduledEmail | undefined>;
+  updateScheduledEmailStatus(id: number, status: string, sentAt?: Date): Promise<ScheduledEmail | undefined>;
+  deleteScheduledEmail(id: number): Promise<boolean>;
 
   // WhatsApp Config
   getWhatsappConfig(id: number): Promise<WhatsappConfig | undefined>;
