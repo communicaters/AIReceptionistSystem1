@@ -1206,7 +1206,11 @@ const EmailManagement = () => {
                           <Mail className="h-4 w-4 mr-1" />
                           Reply
                         </Button>
-                        <Button variant="ghost" size="sm">
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => setViewEmailLog(email)}
+                        >
                           <Eye className="h-4 w-4" />
                         </Button>
                       </div>
@@ -1234,97 +1238,210 @@ const EmailManagement = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="emailService">Email Service</Label>
-                  <Select defaultValue={emailConfigs?.sendgrid?.isActive ? "sendgrid" : emailConfigs?.smtp?.isActive ? "smtp" : emailConfigs?.mailgun?.isActive ? "mailgun" : "sendgrid"}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select email service" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {emailConfigs?.sendgrid?.isActive && (
-                        <SelectItem value="sendgrid">SendGrid</SelectItem>
-                      )}
-                      {emailConfigs?.smtp?.isActive && (
-                        <SelectItem value="smtp">SMTP</SelectItem>
-                      )}
-                      {emailConfigs?.mailgun?.isActive && (
-                        <SelectItem value="mailgun">Mailgun</SelectItem>
-                      )}
-                      {!(emailConfigs?.sendgrid?.isActive || emailConfigs?.smtp?.isActive || emailConfigs?.mailgun?.isActive) && (
-                        <SelectItem value="none">No active service</SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="from">From</Label>
-                  <Input 
-                    type="text" 
-                    id="from" 
-                    readOnly 
-                    value={emailConfigs?.sendgrid?.fromEmail || emailConfigs?.smtp?.fromEmail || emailConfigs?.mailgun?.fromEmail || "noreply@example.com"}
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="to">To</Label>
-                  <Input 
-                    type="email" 
-                    id="to" 
-                    placeholder="recipient@example.com" 
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="subject">Subject</Label>
-                  <Input 
-                    type="text" 
-                    id="subject" 
-                    placeholder="Email subject" 
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="template">Use Template (Optional)</Label>
-                  <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a template" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No template</SelectItem>
-                      {emailTemplates?.map((template) => (
-                        <SelectItem key={template.id} value={template.id.toString()}>
-                          {template.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="body">Email Body</Label>
-                  <Textarea 
-                    id="body" 
-                    placeholder="Type your message here..." 
-                    className="min-h-[200px]"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <div className="flex items-center space-x-2">
-                    <Switch id="schedule" />
-                    <Label htmlFor="schedule">Schedule for later</Label>
-                  </div>
-                </div>
-                
-                <div className="flex justify-end space-x-2">
-                  <Button variant="outline">Save as Draft</Button>
-                  <Button>
-                    <Send className="h-4 w-4 mr-2" />
-                    Send Email
-                  </Button>
-                </div>
+                {/* State for compose form */}
+                {(() => {
+                  const [emailService, setEmailService] = useState<'sendgrid' | 'smtp' | 'mailgun' | 'none'>(
+                    emailConfigs?.sendgrid?.isActive ? "sendgrid" : 
+                    emailConfigs?.smtp?.isActive ? "smtp" : 
+                    emailConfigs?.mailgun?.isActive ? "mailgun" : "none"
+                  );
+                  const [to, setTo] = useState('');
+                  const [subject, setSubject] = useState('');
+                  const [body, setBody] = useState('');
+                  const [scheduleForLater, setScheduleForLater] = useState(false);
+                  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+                  
+                  // Get the 'from' email address based on the selected email service
+                  const fromEmail = 
+                    emailService === 'sendgrid' ? emailConfigs?.sendgrid?.fromEmail :
+                    emailService === 'smtp' ? emailConfigs?.smtp?.fromEmail :
+                    emailService === 'mailgun' ? emailConfigs?.mailgun?.fromEmail :
+                    "Not configured";
+                  
+                  // Apply selected template
+                  const handleTemplateSelect = (templateId: string) => {
+                    if (templateId === "none") {
+                      setSelectedTemplateId(null);
+                      return;
+                    }
+                    
+                    setSelectedTemplateId(templateId);
+                    const template = emailTemplates?.find(t => t.id.toString() === templateId);
+                    if (template) {
+                      setSubject(template.subject || '');
+                      setBody(template.body || '');
+                    }
+                  };
+                  
+                  // Form validation
+                  const isFormValid = () => {
+                    return (
+                      to.trim() !== '' && 
+                      subject.trim() !== '' && 
+                      body.trim() !== '' && 
+                      emailService !== 'none'
+                    );
+                  };
+                  
+                  // Handle email sending
+                  const handleSendEmail = () => {
+                    if (!isFormValid()) return;
+                    
+                    if (scheduleForLater) {
+                      // If scheduling for later, switch to the scheduled tab
+                      setCreateScheduledEmailMode(true);
+                      // We'll need to set the initial values for the scheduled email form
+                      return;
+                    }
+                    
+                    // Send email immediately
+                    sendEmailMutation.mutate({
+                      email: {
+                        to,
+                        subject,
+                        body
+                      },
+                      service: emailService === 'none' ? undefined : emailService
+                    });
+                    
+                    // Clear form on successful send
+                    if (!sendEmailMutation.isPending && !sendEmailMutation.isError) {
+                      setTo('');
+                      setSubject('');
+                      setBody('');
+                      setSelectedTemplateId(null);
+                    }
+                  };
+                  
+                  return (
+                    <>
+                      <div className="space-y-2">
+                        <Label htmlFor="emailService">Email Service</Label>
+                        <Select 
+                          value={emailService} 
+                          onValueChange={(value: string) => setEmailService(value as any)}
+                        >
+                          <SelectTrigger id="emailService">
+                            <SelectValue placeholder="Select email service" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {emailConfigs?.sendgrid?.isActive && (
+                              <SelectItem value="sendgrid">SendGrid</SelectItem>
+                            )}
+                            {emailConfigs?.smtp?.isActive && (
+                              <SelectItem value="smtp">SMTP</SelectItem>
+                            )}
+                            {emailConfigs?.mailgun?.isActive && (
+                              <SelectItem value="mailgun">Mailgun</SelectItem>
+                            )}
+                            {!(emailConfigs?.sendgrid?.isActive || emailConfigs?.smtp?.isActive || emailConfigs?.mailgun?.isActive) && (
+                              <SelectItem value="none">No active service</SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                        {emailService === 'none' && (
+                          <p className="text-red-500 text-sm">
+                            Please configure at least one email service before sending emails.
+                          </p>
+                        )}
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="from">From</Label>
+                        <Input 
+                          type="text" 
+                          id="from" 
+                          readOnly 
+                          value={fromEmail || "Not configured"}
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="to">To</Label>
+                        <Input 
+                          type="email" 
+                          id="to" 
+                          placeholder="recipient@example.com" 
+                          value={to}
+                          onChange={(e) => setTo(e.target.value)}
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="subject">Subject</Label>
+                        <Input 
+                          type="text" 
+                          id="subject" 
+                          placeholder="Email subject" 
+                          value={subject}
+                          onChange={(e) => setSubject(e.target.value)}
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="template">Use Template (Optional)</Label>
+                        <Select 
+                          value={selectedTemplateId || "none"} 
+                          onValueChange={handleTemplateSelect}
+                        >
+                          <SelectTrigger id="template">
+                            <SelectValue placeholder="Select a template" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">No template</SelectItem>
+                            {emailTemplates?.map((template) => (
+                              <SelectItem key={template.id} value={template.id.toString()}>
+                                {template.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="body">Email Body</Label>
+                        <Textarea 
+                          id="body" 
+                          placeholder="Type your message here..." 
+                          className="min-h-[200px]"
+                          value={body}
+                          onChange={(e) => setBody(e.target.value)}
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <div className="flex items-center space-x-2">
+                          <Switch 
+                            id="schedule" 
+                            checked={scheduleForLater}
+                            onCheckedChange={setScheduleForLater}
+                          />
+                          <Label htmlFor="schedule">Schedule for later</Label>
+                        </div>
+                      </div>
+                      
+                      <div className="flex justify-end space-x-2">
+                        <Button variant="outline">Save as Draft</Button>
+                        <Button 
+                          onClick={handleSendEmail}
+                          disabled={!isFormValid() || sendEmailMutation.isPending}
+                        >
+                          {sendEmailMutation.isPending ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Sending...
+                            </>
+                          ) : (
+                            <>
+                              <Send className="h-4 w-4 mr-2" />
+                              Send Email
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             </CardContent>
           </Card>
