@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   getVoiceConfigs, 
   getCallLogs, 
@@ -40,6 +40,8 @@ import StatusBadge from "@/components/ui/status-badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -141,49 +143,52 @@ const VoiceCall = () => {
     error: configError
   } = useQuery({
     queryKey: ["/api/voice/configs"],
-    queryFn: getVoiceConfigs,
-    onSuccess: (data) => {
-      // Initialize form states with current values
-      if (data.twilio) {
-        setTwilioConfig({
-          accountSid: data.twilio.accountSid,
-          authToken: data.twilio.authToken,
-          phoneNumber: data.twilio.phoneNumber,
-          isActive: data.twilio.isActive
-        });
-      }
-      
-      if (data.sip) {
-        setSipConfig({
-          username: data.sip.username,
-          password: data.sip.password,
-          serverDomain: data.sip.serverDomain,
-          outboundProxy: data.sip.outboundProxy || "",
-          port: data.sip.port || 5060,
-          transportProtocol: data.sip.transportProtocol || "UDP",
-          registrationExpiryTime: data.sip.registrationExpiryTime || 3600,
-          callerId: data.sip.callerId || "",
-          stunServer: data.sip.stunServer || "",
-          dtmfMode: data.sip.dtmfMode || "RFC2833",
-          audioCodecs: data.sip.audioCodecs || ["G.711", "G.722", "Opus"],
-          voicemailUri: data.sip.voicemailUri || "",
-          sipUri: data.sip.sipUri || "",
-          keepAliveInterval: data.sip.keepAliveInterval || 30,
-          tlsCertPath: data.sip.tlsCertPath || "",
-          callbackUrl: data.sip.callbackUrl || "",
-          isActive: data.sip.isActive
-        });
-      }
-      
-      if (data.openPhone) {
-        setOpenPhoneConfig({
-          phoneNumber: data.openPhone.phoneNumber,
-          apiKey: data.openPhone.apiKey,
-          isActive: data.openPhone.isActive
-        });
-      }
-    }
+    queryFn: getVoiceConfigs
   });
+  
+  // Initialize form states with current values when data is loaded
+  useEffect(() => {
+    if (!voiceConfigs) return;
+    
+    if (voiceConfigs.twilio) {
+      setTwilioConfig({
+        accountSid: voiceConfigs.twilio.accountSid,
+        authToken: voiceConfigs.twilio.authToken,
+        phoneNumber: voiceConfigs.twilio.phoneNumber,
+        isActive: voiceConfigs.twilio.isActive
+      });
+    }
+    
+    if (voiceConfigs.sip) {
+      setSipConfig({
+        username: voiceConfigs.sip.username,
+        password: voiceConfigs.sip.password,
+        serverDomain: voiceConfigs.sip.serverDomain,
+        outboundProxy: voiceConfigs.sip.outboundProxy || "",
+        port: voiceConfigs.sip.port || 5060,
+        transportProtocol: voiceConfigs.sip.transportProtocol || "UDP",
+        registrationExpiryTime: voiceConfigs.sip.registrationExpiryTime || 3600,
+        callerId: voiceConfigs.sip.callerId || "",
+        stunServer: voiceConfigs.sip.stunServer || "",
+        dtmfMode: voiceConfigs.sip.dtmfMode || "RFC2833",
+        audioCodecs: voiceConfigs.sip.audioCodecs || ["G.711", "G.722", "Opus"],
+        voicemailUri: voiceConfigs.sip.voicemailUri || "",
+        sipUri: voiceConfigs.sip.sipUri || "",
+        keepAliveInterval: voiceConfigs.sip.keepAliveInterval || 30,
+        tlsCertPath: voiceConfigs.sip.tlsCertPath || "",
+        callbackUrl: voiceConfigs.sip.callbackUrl || "",
+        isActive: voiceConfigs.sip.isActive
+      });
+    }
+    
+    if (voiceConfigs.openPhone) {
+      setOpenPhoneConfig({
+        phoneNumber: voiceConfigs.openPhone.phoneNumber,
+        apiKey: voiceConfigs.openPhone.apiKey,
+        isActive: voiceConfigs.openPhone.isActive
+      });
+    }
+  }, [voiceConfigs]);
 
   // Fetch call logs
   const { 
@@ -550,66 +555,181 @@ const VoiceCall = () => {
               ) : configError ? (
                 <div className="text-red-500">Failed to load SIP configuration</div>
               ) : editingSip ? (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="username">Username</Label>
-                      <Input 
-                        id="username" 
-                        value={sipConfig.username} 
-                        onChange={(e) => setSipConfig({...sipConfig, username: e.target.value})} 
-                        placeholder="Enter SIP username" 
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="password">Password</Label>
-                      <div className="flex">
+                <div className="space-y-6">
+                  {/* Basic Connection Settings */}
+                  <div>
+                    <h3 className="text-lg font-medium">Basic Connection Settings</h3>
+                    <div className="grid grid-cols-1 gap-4 mt-2 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="username">Username</Label>
                         <Input 
-                          id="password" 
-                          value={sipConfig.password} 
-                          onChange={(e) => setSipConfig({...sipConfig, password: e.target.value})} 
-                          placeholder="Enter SIP password" 
-                          type={showPasswords ? "text" : "password"} 
-                          className="flex-1 rounded-r-none"
+                          id="username" 
+                          value={sipConfig.username} 
+                          onChange={(e) => setSipConfig({...sipConfig, username: e.target.value})} 
+                          placeholder="Enter SIP username" 
                         />
-                        <Button 
-                          variant="outline" 
-                          size="icon"
-                          className="rounded-l-none"
-                          onClick={() => setShowPasswords(!showPasswords)}
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="password">Password</Label>
+                        <div className="flex">
+                          <Input 
+                            id="password" 
+                            value={sipConfig.password} 
+                            onChange={(e) => setSipConfig({...sipConfig, password: e.target.value})} 
+                            placeholder="Enter SIP password" 
+                            type={showPasswords ? "text" : "password"} 
+                            className="flex-1 rounded-r-none"
+                          />
+                          <Button 
+                            variant="outline" 
+                            size="icon"
+                            className="rounded-l-none"
+                            onClick={() => setShowPasswords(!showPasswords)}
+                          >
+                            {showPasswords ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="serverDomain">Server Domain</Label>
+                        <Input 
+                          id="serverDomain" 
+                          value={sipConfig.serverDomain} 
+                          onChange={(e) => setSipConfig({...sipConfig, serverDomain: e.target.value})} 
+                          placeholder="sip.example.com" 
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="port">Port</Label>
+                        <Input 
+                          id="port" 
+                          type="number"
+                          value={sipConfig.port} 
+                          onChange={(e) => setSipConfig({...sipConfig, port: parseInt(e.target.value) || 5060})} 
+                          placeholder="5060" 
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="callerId">Caller ID</Label>
+                        <Input 
+                          id="callerId" 
+                          value={sipConfig.callerId} 
+                          onChange={(e) => setSipConfig({...sipConfig, callerId: e.target.value})} 
+                          placeholder="+12345678900" 
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="transportProtocol">Transport Protocol</Label>
+                        <Select 
+                          value={sipConfig.transportProtocol} 
+                          onValueChange={(value) => setSipConfig({
+                            ...sipConfig, 
+                            transportProtocol: value as 'UDP' | 'TCP' | 'TLS'
+                          })}
                         >
-                          {showPasswords ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select protocol" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="UDP">UDP</SelectItem>
+                            <SelectItem value="TCP">TCP</SelectItem>
+                            <SelectItem value="TLS">TLS</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Advanced Settings */}
+                  <div>
+                    <Collapsible>
+                      <CollapsibleTrigger asChild>
+                        <Button variant="ghost" className="flex items-center justify-between w-full p-0">
+                          <h3 className="text-lg font-medium">Advanced Settings</h3>
+                          <ChevronDown className="h-4 w-4" />
                         </Button>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="serverDomain">Server Domain</Label>
-                      <Input 
-                        id="serverDomain" 
-                        value={sipConfig.serverDomain} 
-                        onChange={(e) => setSipConfig({...sipConfig, serverDomain: e.target.value})} 
-                        placeholder="sip.example.com" 
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="callerId">Caller ID (Optional)</Label>
-                      <Input 
-                        id="callerId" 
-                        value={sipConfig.callerId} 
-                        onChange={(e) => setSipConfig({...sipConfig, callerId: e.target.value})} 
-                        placeholder="+12345678900" 
-                      />
-                    </div>
-                    <div className="space-y-2 flex items-end">
-                      <div className="flex items-center space-x-2">
-                        <Switch 
-                          id="sipIsActive" 
-                          checked={sipConfig.isActive} 
-                          onCheckedChange={(checked) => setSipConfig({...sipConfig, isActive: checked})} 
-                        />
-                        <Label htmlFor="sipIsActive">Active</Label>
-                      </div>
-                    </div>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="mt-2">
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label htmlFor="outboundProxy">Outbound Proxy</Label>
+                            <Input 
+                              id="outboundProxy" 
+                              value={sipConfig.outboundProxy} 
+                              onChange={(e) => setSipConfig({...sipConfig, outboundProxy: e.target.value})} 
+                              placeholder="proxy.example.com" 
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="registrationExpiryTime">Registration Expiry (seconds)</Label>
+                            <Input 
+                              id="registrationExpiryTime" 
+                              type="number"
+                              value={sipConfig.registrationExpiryTime} 
+                              onChange={(e) => setSipConfig({...sipConfig, registrationExpiryTime: parseInt(e.target.value) || 3600})} 
+                              placeholder="3600" 
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="stunServer">STUN Server</Label>
+                            <Input 
+                              id="stunServer" 
+                              value={sipConfig.stunServer} 
+                              onChange={(e) => setSipConfig({...sipConfig, stunServer: e.target.value})} 
+                              placeholder="stun.example.com" 
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="dtmfMode">DTMF Mode</Label>
+                            <Select 
+                              value={sipConfig.dtmfMode} 
+                              onValueChange={(value) => setSipConfig({
+                                ...sipConfig, 
+                                dtmfMode: value as 'RFC2833' | 'SIP INFO' | 'IN-BAND'
+                              })}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select DTMF mode" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="RFC2833">RFC2833</SelectItem>
+                                <SelectItem value="SIP INFO">SIP INFO</SelectItem>
+                                <SelectItem value="IN-BAND">IN-BAND</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="keepAliveInterval">Keep-Alive Interval (seconds)</Label>
+                            <Input 
+                              id="keepAliveInterval" 
+                              type="number"
+                              value={sipConfig.keepAliveInterval} 
+                              onChange={(e) => setSipConfig({...sipConfig, keepAliveInterval: parseInt(e.target.value) || 30})} 
+                              placeholder="30" 
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="callbackUrl">Callback URL (Optional)</Label>
+                            <Input 
+                              id="callbackUrl" 
+                              value={sipConfig.callbackUrl} 
+                              onChange={(e) => setSipConfig({...sipConfig, callbackUrl: e.target.value})} 
+                              placeholder="https://example.com/callback" 
+                            />
+                          </div>
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  </div>
+                  
+                  {/* Status */}
+                  <div className="flex items-center space-x-2">
+                    <Switch 
+                      id="sipIsActive" 
+                      checked={sipConfig.isActive} 
+                      onCheckedChange={(checked) => setSipConfig({...sipConfig, isActive: checked})} 
+                    />
+                    <Label htmlFor="sipIsActive">Active</Label>
                   </div>
                 </div>
               ) : voiceConfigs?.sip ? (
