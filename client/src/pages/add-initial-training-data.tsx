@@ -5,6 +5,7 @@ import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import DashboardLayout from "@/components/layout/dashboard-layout";
 import { createTrainingData, createIntent } from "@/lib/api";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Progress } from "@/components/ui/progress";
 
 // Sample training data examples for different categories
@@ -128,6 +129,7 @@ const intentExamples = [
 
 const AddInitialTrainingDataPage = () => {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [completed, setCompleted] = useState(false);
@@ -181,6 +183,10 @@ const AddInitialTrainingDataPage = () => {
         setProgress(Math.round(((startIdx + i + 1) / totalItems) * 100));
       }
 
+      // Invalidate queries to refresh the data
+      queryClient.invalidateQueries({ queryKey: ['/api/training/data'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/training/intents'] });
+      
       setCompleted(true);
       toast({
         title: "Training data added successfully",
