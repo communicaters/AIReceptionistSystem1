@@ -377,12 +377,34 @@ export class ZenderService {
       let timestamp = new Date();
       let messageId = null;
       
+      // Enhanced logging for all webhook data structures
+      console.log('DEBUG: Full webhook data:', JSON.stringify(data, null, 2));
+      console.log('DEBUG: Data type:', typeof data);
+      console.log('DEBUG: Top-level keys:', Object.keys(data));
+      
       // Check for the new format from the example where type="whatsapp" and data is an array/object
       if (data.type === 'whatsapp') {
-        console.log('Processing webhook in Zender whatsapp format');
+        console.log('Processing webhook in Zender whatsapp format (type=whatsapp)');
         
         // Handle both array format and object format
-        const webhookData = typeof data.data === 'object' ? data.data : null;
+        let webhookData;
+        
+        if (typeof data.data === 'object') {
+          webhookData = data.data;
+          console.log('DEBUG: data.data is an object:', webhookData);
+        } else if (typeof data.data === 'string') {
+          try {
+            // Try to parse it if it's a JSON string
+            webhookData = JSON.parse(data.data);
+            console.log('DEBUG: data.data is a JSON string that was parsed:', webhookData);
+          } catch (e) {
+            console.log('DEBUG: data.data is a string but not valid JSON:', data.data);
+            webhookData = null;
+          }
+        } else {
+          console.log('DEBUG: Unexpected data.data type:', typeof data.data);
+          webhookData = null;
+        }
         
         if (webhookData) {
           // Extract data from the webhook format
@@ -407,6 +429,7 @@ export class ZenderService {
         if (data.timestamp) {
           timestamp = new Date(parseInt(data.timestamp) * 1000);
         }
+        console.log('DEBUG: Extracted from direct properties (Format 1)');
       } 
       // Try nested data object (Format 3)
       else if (data.data && (data.data.from || data.data.phone || data.data.wid)) {
@@ -417,11 +440,14 @@ export class ZenderService {
         if (data.data.timestamp) {
           timestamp = new Date(parseInt(data.data.timestamp) * 1000);
         }
+        console.log('DEBUG: Extracted from nested data object (Format 3)');
       }
       // Try form-like data (Format 2)
       else {
         // Check for form-encoded data with data[property] format
         const keys = Object.keys(data);
+        console.log('DEBUG: Checking form-like data keys:', keys);
+        
         const fromKey = keys.find(k => k === 'data[from]' || k === 'data[phone]' || k === 'data[wid]');
         const messageKey = keys.find(k => k === 'data[message]');
         

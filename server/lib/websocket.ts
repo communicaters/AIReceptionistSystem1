@@ -256,11 +256,40 @@ function sendToClient(ws: WebSocket, data: any): boolean {
 // Broadcast message to all connected clients
 export function broadcastMessage(data: any): number {
   let successCount = 0;
+  let messageData: any;
+  
+  // If data is a string, try to parse it
+  if (typeof data === 'string') {
+    try {
+      messageData = JSON.parse(data);
+    } catch (e) {
+      // If it's not valid JSON, use it as is
+      messageData = { type: 'notification', message: data };
+    }
+  } else {
+    messageData = data;
+  }
+  
+  // Add timestamp if not already present
+  if (!messageData.timestamp) {
+    messageData.timestamp = new Date().toISOString();
+  }
+  
+  console.log(`Broadcasting message to ${connectedClients.size} clients:`, JSON.stringify(messageData).substring(0, 200));
   
   connectedClients.forEach(({ ws }, clientId) => {
     try {
-      if (sendToClient(ws, data)) {
+      if (ws.readyState === WebSocket.OPEN) {
+        // Use safeStringify to ensure we never throw JSON stringify errors
+        ws.send(typeof messageData === 'string' ? messageData : safeStringify(messageData));
         successCount++;
+        
+        // Log success at debug level
+        if (messageData.type) {
+          console.log(`Sent ${messageData.type} message to client ${clientId.substring(0, 8)}...`);
+        }
+      } else {
+        console.warn(`Cannot send to client ${clientId}: WebSocket not OPEN (state: ${ws.readyState})`);
       }
     } catch (error) {
       console.error(`Error broadcasting to client ${clientId}:`, error);
@@ -268,6 +297,7 @@ export function broadcastMessage(data: any): number {
   });
   
   // Return the number of successful sends
+  console.log(`Successfully broadcast message to ${successCount}/${connectedClients.size} clients`);
   return successCount;
 }
 

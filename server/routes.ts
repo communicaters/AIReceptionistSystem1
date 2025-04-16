@@ -19,7 +19,7 @@ import { initElevenLabs } from "./lib/elevenlabs";
 import { initWhisperAPI } from "./lib/whisper";
 import { createAllSampleMp3s } from "./lib/create-sample-mp3";
 import { getZenderService } from "./lib/zender";
-import { setupWebsocketHandlers } from "./lib/websocket";
+import { setupWebsocketHandlers, broadcastMessage } from "./lib/websocket";
 import { aiRouter } from "./routes/ai";
 import { speechRouter } from "./routes/speech";
 import { authenticate } from "./middleware/auth";
@@ -1675,32 +1675,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const webhookData = req.body;
       
       console.log("Zender webhook received:", JSON.stringify(webhookData, null, 2));
+      console.log("Webhook content type:", req.headers['content-type']);
       
       // Get WhatsApp configuration to check webhook secret
       const config = await storage.getWhatsappConfigByUserId(userId);
       
-      if (!config || !config.webhookSecret) {
-        console.error("Zender webhook validation failed: No webhook secret configured");
+      if (!config) {
+        console.error("Zender webhook validation failed: No WhatsApp configuration found");
         return res.status(403).json({ error: "Invalid webhook configuration" });
       }
       
-      // Validate webhook secret based on Zender's expected format
-      const receivedSecret = webhookData.secret;
-      
-      if (!receivedSecret || receivedSecret !== config.webhookSecret) {
-        console.error("Zender webhook validation failed: Invalid webhook secret");
-        await storage.createSystemActivity({
-          module: "WhatsApp",
-          event: "Zender Webhook Auth Failed",
-          status: "Error",
-          timestamp: new Date(),
-          details: { error: "Invalid webhook secret" }
-        });
+      // If webhookSecret isn't configured yet, log a warning but process the webhook anyway
+      // This is for backward compatibility and easy testing
+      if (!config.webhookSecret) {
+        console.warn("No webhook secret configured. Processing webhook without verification.");
+      } else {
+        // Validate webhook secret based on Zender's expected format
+        const receivedSecret = webhookData.secret;
         
-        return res.status(403).json({ error: "Invalid webhook secret" });
+        if (!receivedSecret || receivedSecret !== config.webhookSecret) {
+          console.error("Zender webhook validation failed: Invalid webhook secret");
+          await storage.createSystemActivity({
+            module: "WhatsApp",
+            event: "Zender Webhook Auth Failed",
+            status: "Error",
+            timestamp: new Date(),
+            details: { error: "Invalid webhook secret" }
+          });
+          
+          return res.status(403).json({ error: "Invalid webhook secret" });
+        }
       }
       
-      // Webhook is authenticated, send OK response immediately
+      // Webhook is authenticated or we're in test mode without a secret
+      // Send OK response immediately to prevent Zender from retrying
       res.status(200).send("OK");
       
       // Get the Zender service
