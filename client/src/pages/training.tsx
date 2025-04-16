@@ -50,6 +50,14 @@ const createTrainingData = async (data: Omit<TrainingData, 'id' | 'userId' | 'cr
   return response.json();
 };
 
+const updateTrainingDataItem = async ({ id, data }: { 
+  id: number, 
+  data: Partial<Omit<TrainingData, 'id' | 'userId' | 'createdAt' | 'metadata'>> 
+}) => {
+  const response = await apiRequest('PATCH', `/api/training/data/${id}`, data);
+  return response.json();
+};;
+
 const updateTrainingData = async (id: number, data: Partial<Omit<TrainingData, 'id' | 'userId' | 'createdAt' | 'metadata'>>) => {
   const response = await apiRequest('PATCH', `/api/training/data/${id}`, data);
   return response.json();

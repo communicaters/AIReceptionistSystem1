@@ -40,6 +40,14 @@ export const createTrainingData = async (data: {
   return response.json();
 };
 
+export const updateTrainingData = async (
+  id: number, 
+  data: Partial<Omit<TrainingData, 'id' | 'userId' | 'createdAt' | 'metadata'>>
+): Promise<TrainingData> => {
+  const response = await apiRequest('PATCH', `/api/training/data/${id}`, data);
+  return response.json();
+};
+
 export const deleteTrainingData = async (id: number): Promise<any> => {
   const response = await apiRequest('DELETE', `/api/training/data/${id}`);
   return response.json();
