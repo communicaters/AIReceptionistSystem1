@@ -277,21 +277,21 @@ export const scheduledEmailsRelations = relations(scheduledEmails, ({ one }) => 
   }),
 }));
 
+// Zender WhatsApp configuration (used for the Zender provider)
 export const whatsappConfig = pgTable("whatsapp_config", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
-  // Existing fields (can be used with other providers)
-  phoneNumberId: text("phone_number_id"),
-  accessToken: text("access_token"),
-  businessAccountId: text("business_account_id"),
-  webhookVerifyToken: text("webhook_verify_token"),
-  // Zender specific fields
   apiSecret: text("api_secret"),
   accountId: text("account_id"),
   zenderUrl: text("zender_url").default("https://pakgame.store/WA/Install/api"),
+  webhookVerifyToken: text("webhook_verify_token"),
   webhookSecret: text("webhook_secret"), // Secret for authenticating Zender webhooks
-  provider: text("provider").default("zender"), // To allow switching between different WhatsApp providers
-  isActive: boolean("is_active").notNull().default(true),
+  provider: text("provider").default("zender"), // Should always be "zender" for this table
+  isActive: boolean("is_active").notNull().default(false),
+  // Legacy fields that will be kept for backward compatibility
+  phoneNumberId: text("phone_number_id"),
+  accessToken: text("access_token"),
+  businessAccountId: text("business_account_id"),
 });
 
 export const insertWhatsappConfigSchema = createInsertSchema(whatsappConfig).omit({
@@ -301,6 +301,29 @@ export const insertWhatsappConfigSchema = createInsertSchema(whatsappConfig).omi
 export const whatsappConfigRelations = relations(whatsappConfig, ({ one }) => ({
   user: one(users, {
     fields: [whatsappConfig.userId],
+    references: [users.id],
+  }),
+}));
+
+// Facebook WhatsApp configuration (used for the Facebook/Meta provider)
+export const facebookWhatsappConfig = pgTable("facebook_whatsapp_config", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  phoneNumberId: text("phone_number_id").notNull(),
+  accessToken: text("access_token").notNull(),
+  businessAccountId: text("business_account_id").notNull(),
+  webhookVerifyToken: text("webhook_verify_token"),
+  webhookSecret: text("webhook_secret"), // Secret for authenticating Meta webhooks
+  isActive: boolean("is_active").notNull().default(false),
+});
+
+export const insertFacebookWhatsappConfigSchema = createInsertSchema(facebookWhatsappConfig).omit({
+  id: true,
+});
+
+export const facebookWhatsappConfigRelations = relations(facebookWhatsappConfig, ({ one }) => ({
+  user: one(users, {
+    fields: [facebookWhatsappConfig.userId],
     references: [users.id],
   }),
 }));
@@ -616,6 +639,9 @@ export type InsertScheduledEmail = z.infer<typeof insertScheduledEmailSchema>;
 
 export type WhatsappConfig = typeof whatsappConfig.$inferSelect;
 export type InsertWhatsappConfig = z.infer<typeof insertWhatsappConfigSchema>;
+
+export type FacebookWhatsappConfig = typeof facebookWhatsappConfig.$inferSelect;
+export type InsertFacebookWhatsappConfig = z.infer<typeof insertFacebookWhatsappConfigSchema>;
 
 export type CalendarConfig = typeof calendarConfig.$inferSelect;
 export type InsertCalendarConfig = z.infer<typeof insertCalendarConfigSchema>;

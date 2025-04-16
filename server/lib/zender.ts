@@ -2,6 +2,7 @@ import axios from 'axios';
 import FormData from 'form-data';
 import { storage } from '../storage';
 import { WhatsappConfig, InsertWhatsappLog } from '@shared/schema';
+import { broadcastMessage } from './websocket';
 
 // Extended interface that includes the new fields
 interface ExtendedWhatsappLog extends InsertWhatsappLog {
