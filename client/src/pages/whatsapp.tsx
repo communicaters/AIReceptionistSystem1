@@ -86,16 +86,70 @@ const WhatsApp = () => {
     queryFn: getWhatsappConfig
   });
 
+  // State for pagination
+  const [pagination, setPagination] = useState({
+    limit: 20,
+    offset: 0,
+    total: 0,
+    hasMore: false
+  });
+  
+  // State to keep track of conversation messages when using pagination
+  const [conversationMessages, setConversationMessages] = useState<WhatsappLog[]>([]);
+  
   // Query for WhatsApp logs
   const { 
-    data: whatsappLogs, 
+    data: whatsappLogsResponse, 
     isLoading: isLoadingLogs,
     error: logsError,
     refetch: refetchLogs
   } = useQuery({
-    queryKey: ["/api/whatsapp/logs"],
-    queryFn: () => getWhatsappLogs(undefined, 10)
+    queryKey: ["/api/whatsapp/logs", pagination.offset, selectedNumber],
+    queryFn: () => getWhatsappLogs(selectedNumber, pagination.limit, pagination.offset)
   });
+  
+  // Derive whatsappLogs from the response and update pagination state
+  const whatsappLogs = whatsappLogsResponse?.logs || [];
+  
+  // Update pagination when response changes
+  useEffect(() => {
+    if (whatsappLogsResponse?.pagination) {
+      setPagination(prev => ({
+        ...prev,
+        total: whatsappLogsResponse.pagination.total,
+        hasMore: whatsappLogsResponse.pagination.hasMore
+      }));
+    }
+  }, [whatsappLogsResponse]);
+  
+  // Update conversation messages when logs or selected number changes
+  useEffect(() => {
+    if (selectedNumber) {
+      const filtered = filterMessagesByPhoneNumber(whatsappLogs, selectedNumber);
+      setConversationMessages(prev => {
+        // If we're loading more (offset > 0), append new messages to existing ones
+        if (pagination.offset > 0) {
+          // Create a combined list, avoiding duplicates by ID
+          const existingIds = new Set(prev.map(msg => msg.id));
+          const newMessages = filtered.filter(msg => !existingIds.has(msg.id));
+          return [...prev, ...newMessages];
+        }
+        // Otherwise, replace with new messages (for initial load or refresh)
+        return filtered;
+      });
+    } else {
+      // Reset conversation messages when no number is selected
+      setConversationMessages([]);
+    }
+  }, [whatsappLogs, selectedNumber, pagination.offset]);
+  
+  // Function to load more messages
+  const handleLoadMoreMessages = () => {
+    setPagination(prev => ({
+      ...prev,
+      offset: prev.offset + prev.limit
+    }));
+  };
 
   // Mutation for saving WhatsApp configuration
   const saveConfigMutation = useMutation({
@@ -873,10 +927,17 @@ const WhatsApp = () => {
               <div className="flex-1 overflow-hidden">
                 <WhatsAppChat 
                   phoneNumber={selectedNumber}
-                  messages={filterMessagesByPhoneNumber(whatsappLogs || [], selectedNumber)}
+                  messages={conversationMessages}
                   isLoading={isLoadingLogs}
                   onBack={() => setSelectedNumber(null)}
                   onRefresh={refetchLogs}
+                  pagination={{
+                    total: pagination.total,
+                    limit: pagination.limit,
+                    offset: pagination.offset,
+                    hasMore: pagination.hasMore
+                  }}
+                  onLoadMore={handleLoadMoreMessages}
                 />
               </div>
             )}
