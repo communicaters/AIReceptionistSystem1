@@ -81,7 +81,7 @@ const commonCategories = [
 const TrainingPage = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showIntentDialog, setShowIntentDialog] = useState(false);
   const [allCategories, setAllCategories] = useState<string[]>([]);
@@ -93,7 +93,7 @@ const TrainingPage = () => {
     error: dataError
   } = useQuery<TrainingData[]>({
     queryKey: ['/api/training/data', selectedCategory],
-    queryFn: () => fetchTrainingData(selectedCategory || undefined),
+    queryFn: () => fetchTrainingData(selectedCategory === "all" ? undefined : selectedCategory),
   });
 
   // Intents queries and mutations
@@ -204,7 +204,7 @@ const TrainingPage = () => {
                       <SelectValue placeholder="Filter by category" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All Categories</SelectItem>
+                      <SelectItem value="all">All Categories</SelectItem>
                       {allCategories.map(category => (
                         <SelectItem key={category} value={category}>
                           {category.charAt(0).toUpperCase() + category.slice(1)}
@@ -212,11 +212,11 @@ const TrainingPage = () => {
                       ))}
                     </SelectContent>
                   </Select>
-                  {selectedCategory && (
+                  {selectedCategory && selectedCategory !== "all" && (
                     <Button 
                       variant="ghost" 
                       size="icon" 
-                      onClick={() => setSelectedCategory("")}
+                      onClick={() => setSelectedCategory("all")}
                     >
                       <X className="h-4 w-4" />
                     </Button>
@@ -236,7 +236,7 @@ const TrainingPage = () => {
                   <div className="text-center py-8 text-muted-foreground">
                     <p className="mb-2">No training data found</p>
                     <p className="text-sm">
-                      {selectedCategory 
+                      {selectedCategory && selectedCategory !== "all" 
                         ? `Try removing the category filter or add some training data for the "${selectedCategory}" category.`
                         : "Add some training data to get started."}
                     </p>
