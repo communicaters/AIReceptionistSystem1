@@ -6,8 +6,13 @@ import {
   saveWhatsappConfig, 
   testWhatsappConnection,
   sendWhatsappMessage,
+  getWhatsappTemplates,
+  createWhatsappTemplate,
+  updateWhatsappTemplate,
+  deleteWhatsappTemplate,
   WhatsappConfig,
-  WhatsappLog
+  WhatsappLog,
+  WhatsappTemplate
 } from "@/lib/api";
 import { 
   Card, 
@@ -29,7 +34,10 @@ import {
   AlertCircle, 
   Check, 
   Copy,
-  Loader2
+  Loader2,
+  Pencil,
+  Trash2,
+  PlusCircle
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -752,50 +760,30 @@ const WhatsApp = () => {
         </TabsContent>
         <TabsContent value="templates">
           <Card>
-            <CardHeader>
-              <CardTitle>Message Templates</CardTitle>
-              <CardDescription>
-                Manage pre-approved message templates for WhatsApp
-              </CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <div>
+                <CardTitle>Message Templates</CardTitle>
+                <CardDescription>
+                  Manage pre-approved message templates for WhatsApp
+                </CardDescription>
+              </div>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button>
+                    <MessageSquare className="mr-2 h-4 w-4" />
+                    Create New Template
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[525px]">
+                  <DialogHeader>
+                    <DialogTitle>Create WhatsApp Template</DialogTitle>
+                  </DialogHeader>
+                  <TemplateForm mode="create" />
+                </DialogContent>
+              </Dialog>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <div className="border rounded-md p-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="font-medium">Welcome Message</h3>
-                      <p className="text-sm text-neutral-500 mt-1">
-                        Hello [Name], welcome to our service! How can we help you today?
-                      </p>
-                    </div>
-                    <StatusBadge status="operational" />
-                  </div>
-                  <div className="flex space-x-2 mt-4">
-                    <Button variant="outline" size="sm">Edit</Button>
-                    <Button variant="outline" size="sm">Test</Button>
-                  </div>
-                </div>
-
-                <div className="border rounded-md p-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="font-medium">Appointment Confirmation</h3>
-                      <p className="text-sm text-neutral-500 mt-1">
-                        Your appointment is confirmed for [Date] at [Time]. Reply CONFIRM to confirm or RESCHEDULE to change.
-                      </p>
-                    </div>
-                    <StatusBadge status="operational" />
-                  </div>
-                  <div className="flex space-x-2 mt-4">
-                    <Button variant="outline" size="sm">Edit</Button>
-                    <Button variant="outline" size="sm">Test</Button>
-                  </div>
-                </div>
-
-                <Button className="mt-2">
-                  Add New Template
-                </Button>
-              </div>
+              <TemplatesManager />
             </CardContent>
           </Card>
         </TabsContent>
