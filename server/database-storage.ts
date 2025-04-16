@@ -13,6 +13,7 @@ import {
   emailTemplates, EmailTemplate, InsertEmailTemplate,
   scheduledEmails, ScheduledEmail, InsertScheduledEmail,
   whatsappConfig, WhatsappConfig, InsertWhatsappConfig,
+  facebookWhatsappConfig, FacebookWhatsappConfig, InsertFacebookWhatsappConfig,
   calendarConfig, CalendarConfig, InsertCalendarConfig,
   productData, ProductData, InsertProductData,
   inventoryStatus, InventoryStatus, InsertInventoryStatus,
