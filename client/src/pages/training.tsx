@@ -73,8 +73,15 @@ const commonCategories = [
   "whatsapp",
   "email",
   "voice",
+  "call",
+  "voicemail",
+  "chat",
+  "calendar",
   "scheduling",
-  "faq"
+  "meeting",
+  "business",
+  "faq",
+  "support"
 ];
 
 // Main component

@@ -9,6 +9,7 @@ import WhatsApp from "@/pages/whatsapp";
 import Calendar from "@/pages/calendar";
 import Products from "@/pages/products";
 import AITraining from "@/pages/training";
+import AddInitialTrainingData from "@/pages/add-initial-training-data";
 import SpeechEngines from "@/pages/speech-engines";
 import Settings from "@/pages/settings";
 import OAuthCallback from "@/pages/oauth-callback";
@@ -71,6 +72,9 @@ function App() {
               <AITraining />
             </DashboardLayout>
           )}
+        </Route>
+        <Route path="/ai-training/initialize">
+          {() => <AddInitialTrainingData />}
         </Route>
         <Route path="/speech-engines">
           {() => (
