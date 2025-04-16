@@ -1361,6 +1361,143 @@ export async function registerRoutes(app: Express): Promise<Server> {
       apiResponse(res, { error: "Failed to delete email template" }, 500);
     }
   });
+
+  // WhatsApp Templates
+  app.get("/api/whatsapp/templates", async (req, res) => {
+    try {
+      const userId = 1; // For demo, use fixed user ID
+      const { category, provider } = req.query;
+      
+      let templates;
+      if (category && provider) {
+        templates = await storage.getWhatsappTemplatesByCategoryAndProvider(
+          userId, 
+          category as string,
+          provider as string
+        );
+      } else if (category) {
+        templates = await storage.getWhatsappTemplatesByCategory(userId, category as string);
+      } else if (provider) {
+        templates = await storage.getWhatsappTemplatesByProvider(userId, provider as string);
+      } else {
+        templates = await storage.getWhatsappTemplatesByUserId(userId);
+      }
+      
+      apiResponse(res, templates);
+    } catch (error) {
+      console.error("Error fetching WhatsApp templates:", error);
+      apiResponse(res, { error: "Failed to fetch WhatsApp templates" }, 500);
+    }
+  });
+  
+  app.get("/api/whatsapp/templates/:id", async (req, res) => {
+    try {
+      const templateId = parseInt(req.params.id);
+      const template = await storage.getWhatsappTemplate(templateId);
+      
+      if (!template) {
+        return apiResponse(res, { error: "Template not found" }, 404);
+      }
+      
+      apiResponse(res, template);
+    } catch (error) {
+      console.error("Error fetching WhatsApp template:", error);
+      apiResponse(res, { error: "Failed to fetch WhatsApp template" }, 500);
+    }
+  });
+  
+  app.post("/api/whatsapp/templates", async (req, res) => {
+    try {
+      const userId = 1; // For demo, use fixed user ID
+      const { name, content, category, provider, description, componentsJson, templateId } = req.body;
+      
+      if (!name || !content || !category || !provider) {
+        return apiResponse(res, { error: "Missing required fields" }, 400);
+      }
+      
+      const newTemplate = await storage.createWhatsappTemplate({
+        userId,
+        name,
+        content,
+        category,
+        provider,
+        isActive: true,
+        description: description || null,
+        componentsJson: componentsJson || null,
+        templateId: templateId || null
+      });
+      
+      // Broadcast notification about the new template
+      if (broadcastMessage) {
+        broadcastMessage({
+          type: 'whatsapp_template_created',
+          timestamp: new Date().toISOString(),
+          data: newTemplate
+        });
+      }
+      
+      apiResponse(res, newTemplate, 201);
+    } catch (error) {
+      console.error("Error creating WhatsApp template:", error);
+      apiResponse(res, { error: "Failed to create WhatsApp template" }, 500);
+    }
+  });
+  
+  app.put("/api/whatsapp/templates/:id", async (req, res) => {
+    try {
+      const templateId = parseInt(req.params.id);
+      const template = await storage.getWhatsappTemplate(templateId);
+      
+      if (!template) {
+        return apiResponse(res, { error: "Template not found" }, 404);
+      }
+      
+      const updatedTemplate = await storage.updateWhatsappTemplate(templateId, {
+        ...req.body
+      });
+      
+      // Broadcast notification about the updated template
+      if (broadcastMessage) {
+        broadcastMessage({
+          type: 'whatsapp_template_updated',
+          timestamp: new Date().toISOString(),
+          data: updatedTemplate
+        });
+      }
+      
+      apiResponse(res, updatedTemplate);
+    } catch (error) {
+      console.error("Error updating WhatsApp template:", error);
+      apiResponse(res, { error: "Failed to update WhatsApp template" }, 500);
+    }
+  });
+  
+  app.delete("/api/whatsapp/templates/:id", async (req, res) => {
+    try {
+      const templateId = parseInt(req.params.id);
+      const template = await storage.getWhatsappTemplate(templateId);
+      
+      if (!template) {
+        return apiResponse(res, { error: "Template not found" }, 404);
+      }
+      
+      await storage.deleteWhatsappTemplate(templateId);
+      
+      // Broadcast notification about the deleted template
+      if (broadcastMessage) {
+        broadcastMessage({
+          type: 'whatsapp_template_deleted',
+          timestamp: new Date().toISOString(),
+          data: { id: templateId }
+        });
+      }
+      
+      apiResponse(res, { success: true });
+    } catch (error) {
+      console.error("Error deleting WhatsApp template:", error);
+      apiResponse(res, { error: "Failed to delete WhatsApp template" }, 500);
+    }
+  });
   
   // Scheduled Emails
   app.get("/api/email/scheduled", async (req, res) => {
