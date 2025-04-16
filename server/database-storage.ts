@@ -233,6 +233,27 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
+  // Facebook WhatsApp Config
+  async getFacebookWhatsappConfig(id: number): Promise<FacebookWhatsappConfig | undefined> {
+    const result = await db.select().from(facebookWhatsappConfig).where(eq(facebookWhatsappConfig.id, id));
+    return result[0];
+  }
+
+  async getFacebookWhatsappConfigByUserId(userId: number): Promise<FacebookWhatsappConfig | undefined> {
+    const result = await db.select().from(facebookWhatsappConfig).where(eq(facebookWhatsappConfig.userId, userId));
+    return result[0];
+  }
+
+  async createFacebookWhatsappConfig(config: InsertFacebookWhatsappConfig): Promise<FacebookWhatsappConfig> {
+    const result = await db.insert(facebookWhatsappConfig).values(config).returning();
+    return result[0];
+  }
+
+  async updateFacebookWhatsappConfig(id: number, config: Partial<InsertFacebookWhatsappConfig>): Promise<FacebookWhatsappConfig | undefined> {
+    const result = await db.update(facebookWhatsappConfig).set(config).where(eq(facebookWhatsappConfig.id, id)).returning();
+    return result[0];
+  }
+
   // Calendar Config
   async getCalendarConfig(id: number): Promise<CalendarConfig | undefined> {
     const result = await db.select().from(calendarConfig).where(eq(calendarConfig.id, id));
