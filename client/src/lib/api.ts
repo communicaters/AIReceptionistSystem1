@@ -596,6 +596,67 @@ export const sendWhatsappMessage = async (
   }
 };
 
+// WhatsApp Template Interface
+export interface WhatsappTemplate {
+  id: number;
+  name: string;
+  userId: number;
+  content: string;
+  category: string;
+  provider: string; // 'facebook' or 'zender'
+  isActive: boolean;
+  description: string | null;
+  componentsJson: string | null; // For storing structured components
+  templateId: string | null; // External template ID from provider
+  createdAt?: string;
+  updatedAt?: string;
+  lastUsed?: string | null;
+}
+
+// WhatsApp Templates API Functions
+export const getWhatsappTemplates = async (
+  category?: string,
+  provider?: string
+): Promise<WhatsappTemplate[]> => {
+  let queryParams = "";
+  
+  if (category && provider) {
+    queryParams = `?category=${category}&provider=${provider}`;
+  } else if (category) {
+    queryParams = `?category=${category}`;
+  } else if (provider) {
+    queryParams = `?provider=${provider}`;
+  }
+  
+  const response = await apiRequest("GET", `/api/whatsapp/templates${queryParams}`);
+  return response.json();
+};
+
+export const getWhatsappTemplate = async (id: number): Promise<WhatsappTemplate> => {
+  const response = await apiRequest("GET", `/api/whatsapp/templates/${id}`);
+  return response.json();
+};
+
+export const createWhatsappTemplate = async (
+  template: Omit<WhatsappTemplate, "id" | "createdAt" | "updatedAt" | "lastUsed">
+): Promise<WhatsappTemplate> => {
+  const response = await apiRequest("POST", "/api/whatsapp/templates", template);
+  return response.json();
+};
+
+export const updateWhatsappTemplate = async (
+  id: number,
+  template: Partial<WhatsappTemplate>
+): Promise<WhatsappTemplate> => {
+  const response = await apiRequest("PUT", `/api/whatsapp/templates/${id}`, template);
+  return response.json();
+};
+
+export const deleteWhatsappTemplate = async (id: number): Promise<{ success: boolean }> => {
+  const response = await apiRequest("DELETE", `/api/whatsapp/templates/${id}`);
+  return response.json();
+};
+
 export const getMeetingLogs = async (limit?: number): Promise<MeetingLog[]> => {
   const queryParams = limit ? `?limit=${limit}` : "";
   const response = await apiRequest("GET", `/api/calendar/meetings${queryParams}`);
