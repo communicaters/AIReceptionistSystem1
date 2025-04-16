@@ -778,7 +778,16 @@ const WhatsApp = () => {
                   <DialogHeader>
                     <DialogTitle>Create WhatsApp Template</DialogTitle>
                   </DialogHeader>
-                  <TemplateForm mode="create" />
+                  <TemplateForm 
+                    mode="create" 
+                    onSuccess={() => {
+                      // Close the dialog after successful template creation
+                      const closeButton = document.querySelector('[data-radix-collection-item]');
+                      if (closeButton && closeButton instanceof HTMLElement) {
+                        closeButton.click();
+                      }
+                    }}
+                  />
                 </DialogContent>
               </Dialog>
             </CardHeader>
@@ -932,6 +941,354 @@ const WhatsApp = () => {
               Send Message
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+// WhatsApp Template Form Component
+interface TemplateFormProps {
+  mode: 'create' | 'edit';
+  template?: WhatsappTemplate;
+  onSuccess?: () => void;
+}
+
+const TemplateForm = ({ mode, template, onSuccess }: TemplateFormProps) => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  
+  // Get active provider from WhatsApp config
+  const { data: whatsappConfig } = useQuery({
+    queryKey: ["/api/whatsapp/config"],
+    queryFn: getWhatsappConfig
+  });
+  
+  const activeProvider = (whatsappConfig?.provider as string) || 'facebook';
+  
+  // Create initial form state
+  const [formState, setFormState] = useState<Partial<WhatsappTemplate>>({
+    name: template?.name || '',
+    content: template?.content || '',
+    category: template?.category || 'general',
+    provider: template?.provider || 'facebook', // Default to facebook until config loads
+    isActive: template?.isActive !== undefined ? template.isActive : true,
+    description: template?.description || '',
+    componentsJson: template?.componentsJson || null,
+    templateId: template?.templateId || null
+  });
+  
+  // Update provider when WhatsApp config loads
+  useEffect(() => {
+    if (whatsappConfig && !template?.provider) {
+      setFormState(prev => ({
+        ...prev,
+        provider: whatsappConfig.provider || 'facebook'
+      }));
+    }
+  }, [whatsappConfig, template]);
+
+  // Mutation for creating a template
+  const createTemplateMutation = useMutation({
+    mutationFn: createWhatsappTemplate,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/whatsapp/templates'] });
+      toast({
+        title: 'Template created',
+        description: 'The WhatsApp template has been created successfully'
+      });
+      if (onSuccess) onSuccess();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Failed to create template',
+        description: error.message,
+        variant: 'destructive'
+      });
+    }
+  });
+
+  // Mutation for updating a template
+  const updateTemplateMutation = useMutation({
+    mutationFn: (data: { id: number; template: Partial<WhatsappTemplate> }) => 
+      updateWhatsappTemplate(data.id, data.template),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/whatsapp/templates'] });
+      toast({
+        title: 'Template updated',
+        description: 'The WhatsApp template has been updated successfully'
+      });
+      if (onSuccess) onSuccess();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Failed to update template',
+        description: error.message,
+        variant: 'destructive'
+      });
+    }
+  });
+
+  // Handle form input changes
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => {
+    const { name, value, type } = e.target;
+    
+    setFormState(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' 
+        ? (e.target as HTMLInputElement).checked 
+        : value
+    }));
+  };
+
+  // Handle form submission
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Form validation
+    if (!formState.name || !formState.content || !formState.category || !formState.provider) {
+      toast({
+        title: 'Validation error',
+        description: 'Please fill in all required fields',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    if (mode === 'create') {
+      createTemplateMutation.mutate(formState as Omit<WhatsappTemplate, 'id' | 'createdAt' | 'updatedAt' | 'lastUsed'>);
+    } else if (mode === 'edit' && template?.id) {
+      updateTemplateMutation.mutate({ 
+        id: template.id, 
+        template: formState 
+      });
+    }
+  };
+
+  const isPending = createTemplateMutation.isPending || updateTemplateMutation.isPending;
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="name">Template Name</Label>
+          <Input
+            id="name"
+            name="name"
+            placeholder="Welcome Message"
+            value={formState.name}
+            onChange={handleChange}
+            required
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="category">Category</Label>
+          <Input
+            id="category"
+            name="category"
+            placeholder="general"
+            value={formState.category}
+            onChange={handleChange}
+            required
+          />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="content">Message Content</Label>
+        <Textarea
+          id="content"
+          name="content"
+          placeholder="Hello [name], welcome to our service! How can we help you today?"
+          value={formState.content}
+          onChange={handleChange}
+          rows={4}
+          required
+        />
+        <p className="text-xs text-muted-foreground">
+          Use placeholders like [name] or [date] that will be replaced with actual values when sending.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="description">Description (Optional)</Label>
+        <Textarea
+          id="description"
+          name="description"
+          placeholder="This template is used for welcoming new users."
+          value={formState.description || ''}
+          onChange={handleChange}
+          rows={2}
+        />
+      </div>
+
+      <div className="flex items-center space-x-2">
+        <Switch
+          id="isActive"
+          name="isActive"
+          checked={formState.isActive}
+          onCheckedChange={(checked) => 
+            setFormState(prev => ({ ...prev, isActive: checked }))
+          }
+        />
+        <Label htmlFor="isActive">Active</Label>
+      </div>
+
+      <DialogFooter>
+        <Button type="submit" disabled={isPending}>
+          {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          {mode === 'create' ? 'Create Template' : 'Update Template'}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+};
+
+// WhatsApp Templates Manager Component
+const TemplatesManager = () => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [editingTemplate, setEditingTemplate] = useState<WhatsappTemplate | null>(null);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+
+  // Get active provider from WhatsApp config
+  const { data: whatsappConfig } = useQuery({
+    queryKey: ["/api/whatsapp/config"],
+    queryFn: getWhatsappConfig
+  });
+  
+  const activeProvider = (whatsappConfig?.provider as "facebook" | "zender") || "facebook";
+
+  // Query for WhatsApp templates
+  const { 
+    data: templates, 
+    isLoading: isLoadingTemplates,
+    error: templatesError 
+  } = useQuery({
+    queryKey: ['/api/whatsapp/templates'],
+    queryFn: () => getWhatsappTemplates()
+  });
+
+  // Mutation for deleting a template
+  const deleteTemplateMutation = useMutation({
+    mutationFn: deleteWhatsappTemplate,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/whatsapp/templates'] });
+      toast({
+        title: 'Template deleted',
+        description: 'The WhatsApp template has been deleted successfully'
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Failed to delete template',
+        description: error.message,
+        variant: 'destructive'
+      });
+    }
+  });
+
+  // Handle edit template
+  const handleEdit = (template: WhatsappTemplate) => {
+    setEditingTemplate(template);
+    setShowEditDialog(true);
+  };
+
+  // Handle delete template
+  const handleDelete = (id: number) => {
+    // Confirm deletion
+    if (window.confirm('Are you sure you want to delete this template?')) {
+      deleteTemplateMutation.mutate(id);
+    }
+  };
+
+  // Filter templates by provider if needed
+  const filteredTemplates = templates?.filter(t => 
+    t.provider === activeProvider || !t.provider
+  ) || [];
+
+  return (
+    <div className="space-y-4">
+      {isLoadingTemplates ? (
+        <div className="space-y-3">
+          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-20 w-full" />
+        </div>
+      ) : templatesError ? (
+        <div className="p-4 rounded-md bg-red-50 text-red-600">
+          Failed to load WhatsApp templates
+        </div>
+      ) : filteredTemplates.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground">
+          <MessageSquare className="mx-auto h-12 w-12 opacity-20 mb-2" />
+          <p>No templates found. Create your first template to get started.</p>
+        </div>
+      ) : (
+        filteredTemplates.map(template => (
+          <div key={template.id} className="border rounded-md p-4">
+            <div className="flex justify-between items-start">
+              <div>
+                <div className="flex items-center mb-1">
+                  <h3 className="font-medium">{template.name}</h3>
+                  <span className="ml-2 text-xs bg-slate-100 px-2 py-1 rounded-md">
+                    {template.category}
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {template.content}
+                </p>
+                {template.description && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    {template.description}
+                  </p>
+                )}
+              </div>
+              <StatusBadge status={template.isActive ? "operational" : "inactive"} />
+            </div>
+            <div className="flex space-x-2 mt-4">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => handleEdit(template)}
+              >
+                <Pencil className="h-4 w-4 mr-1" />
+                Edit
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="text-red-600 hover:text-red-700"
+                onClick={() => handleDelete(template.id)}
+                disabled={deleteTemplateMutation.isPending}
+              >
+                {deleteTemplateMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4 mr-1" />
+                )}
+                Delete
+              </Button>
+            </div>
+          </div>
+        ))
+      )}
+
+      {/* Edit Template Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="sm:max-w-[525px]">
+          <DialogHeader>
+            <DialogTitle>Edit WhatsApp Template</DialogTitle>
+          </DialogHeader>
+          {editingTemplate && (
+            <TemplateForm 
+              mode="edit" 
+              template={editingTemplate} 
+              onSuccess={() => setShowEditDialog(false)}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </div>
