@@ -8,7 +8,7 @@ import LiveChat from "@/pages/live-chat";
 import WhatsApp from "@/pages/whatsapp";
 import Calendar from "@/pages/calendar";
 import Products from "@/pages/products";
-import AITraining from "@/pages/ai-training";
+import AITraining from "@/pages/training";
 import SpeechEngines from "@/pages/speech-engines";
 import Settings from "@/pages/settings";
 import OAuthCallback from "@/pages/oauth-callback";
