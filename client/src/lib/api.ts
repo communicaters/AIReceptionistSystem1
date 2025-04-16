@@ -519,13 +519,23 @@ export const getChatLogs = async (
   return response.json();
 };
 
+export interface WhatsappLogResponse {
+  logs: WhatsappLog[];
+  pagination: {
+    total: number;
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+  };
+}
+
 export const getWhatsappLogs = async (
   phoneNumber?: string,
-  limit?: number
-): Promise<WhatsappLog[]> => {
-  let queryParams = "";
-  if (phoneNumber) queryParams = `?phoneNumber=${phoneNumber}`;
-  else if (limit) queryParams = `?limit=${limit}`;
+  limit: number = 20,
+  offset: number = 0
+): Promise<WhatsappLogResponse> => {
+  let queryParams = `?limit=${limit}&offset=${offset}`;
+  if (phoneNumber) queryParams += `&phoneNumber=${phoneNumber}`;
   
   const response = await apiRequest("GET", `/api/whatsapp/logs${queryParams}`);
   return response.json();

@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send, RefreshCw, ArrowLeft } from "lucide-react";
+import { Send, RefreshCw, ArrowLeft, ChevronUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { WhatsappLog, sendWhatsappMessage } from "@/lib/api";
+import { WhatsappLog, WhatsappLogResponse, sendWhatsappMessage, getWhatsappLogs } from "@/lib/api";
 import { Spinner } from "@/components/ui/spinner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -15,6 +15,13 @@ interface WhatsAppChatProps {
   isLoading: boolean;
   onBack?: () => void;
   onRefresh: () => void;
+  pagination?: {
+    total: number;
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+  };
+  onLoadMore?: () => void;
 }
 
 export function WhatsAppChat({
@@ -22,7 +29,9 @@ export function WhatsAppChat({
   messages,
   isLoading,
   onBack,
-  onRefresh
+  onRefresh,
+  pagination,
+  onLoadMore
 }: WhatsAppChatProps) {
   const [newMessage, setNewMessage] = useState("");
   const [localMessages, setLocalMessages] = useState<WhatsappLog[]>([]);
@@ -228,6 +237,21 @@ export function WhatsAppChat({
       
       {/* Chat Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
+        {/* "See More" button for loading older messages */}
+        {!isLoading && pagination && pagination.hasMore && (
+          <div className="flex justify-center mb-4">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={onLoadMore}
+              className="text-xs flex items-center gap-1"
+            >
+              <ChevronUp className="h-3 w-3" />
+              See More
+            </Button>
+          </div>
+        )}
+        
         {isLoading ? (
           <div className="flex justify-center items-center h-full">
             <Spinner size="lg" />
