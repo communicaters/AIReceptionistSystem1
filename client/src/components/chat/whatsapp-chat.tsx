@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Send, RefreshCw, ArrowLeft, ChevronUp } from "lucide-react";
@@ -39,12 +39,19 @@ export function WhatsAppChat({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
-  // Process messages from props - perform deduplication and sorting
-  // useCallback to avoid recreating this function on every render
-  const processDedupAndSort = useCallback((messagesToProcess: WhatsappLog[]): WhatsappLog[] => {
+  // Update local messages when server messages change
+  useEffect(() => {
+    setLocalMessages(messages);
+  }, [messages]);
+  
+  // Store deduplicated and sorted messages in state to prevent infinite renders
+  const [sortedMessages, setSortedMessages] = useState<WhatsappLog[]>([]);
+  
+  // Process messages when localMessages changes
+  useEffect(() => {
     // Deduplicate messages by combining multiple records of the same message
     // with different statuses (pending/sent/delivered/read)
-    const deduplicatedMessages = messagesToProcess.reduce((acc, current) => {
+    const deduplicatedMessages = localMessages.reduce((acc, current) => {
       // For outbound messages, we want to keep only the latest status of the same message
       if (current.direction === 'outbound') {
         // Try to find a message with the same content and close timestamp
@@ -81,27 +88,13 @@ export function WhatsAppChat({
     }, [] as WhatsappLog[]);
     
     // Sort the deduplicated messages by timestamp
-    return [...deduplicatedMessages].sort((a, b) => 
+    const sorted = [...deduplicatedMessages].sort((a, b) => 
       new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
-  }, []);
-  
-  // Initialize both states in a single useEffect to avoid multiple renders
-  useEffect(() => {
-    setLocalMessages(messages);
-    setSortedMessages(processDedupAndSort(messages));
-  }, [messages, processDedupAndSort]);
-  
-  // Store deduplicated and sorted messages in state
-  const [sortedMessages, setSortedMessages] = useState<WhatsappLog[]>([]);
-  
-  // When local messages are updated by sending a new message, also update sorted messages
-  useEffect(() => {
-    // Skip the initial render when localMessages is set from messages
-    if (localMessages !== messages) {
-      setSortedMessages(processDedupAndSort(localMessages));
-    }
-  }, [localMessages, messages, processDedupAndSort]);
+    
+    // Update the state
+    setSortedMessages(sorted);
+  }, [localMessages]);
 
   const sendMessageMutation = useMutation({
     mutationFn: ({ phoneNumber, message }: { phoneNumber: string; message: string }) => 
