@@ -84,7 +84,7 @@ async function migrateExistingFacebookConfigs() {
       const { rows: existingFacebookConfigs } = await db.execute(`
         SELECT * FROM facebook_whatsapp_config 
         WHERE user_id = $1
-      `, config.user_id);
+      `, [config.user_id]);
       
       if (existingFacebookConfigs.length > 0) {
         console.log(`User ${config.user_id} already has a Facebook WhatsApp config, updating it`);
@@ -100,13 +100,15 @@ async function migrateExistingFacebookConfigs() {
             is_active = $6,
             updated_at = NOW()
           WHERE user_id = $7
-        `, config.phone_number_id, 
+        `, [
+           config.phone_number_id, 
            config.access_token,
            config.business_account_id,
            config.webhook_verify_token,
            config.webhook_secret,
            config.is_active,
-           config.user_id);
+           config.user_id
+        ]);
       } else {
         console.log(`Creating new Facebook WhatsApp config for user ${config.user_id}`);
         
@@ -122,13 +124,13 @@ async function migrateExistingFacebookConfigs() {
           )
           VALUES ($1, $2, $3, $4, $5, $6, $7)
         `, [
-          config.user_id,
-          config.phone_number_id,
-          config.access_token,
-          config.business_account_id,
-          config.webhook_verify_token,
-          config.webhook_secret,
-          config.is_active
+           config.user_id,
+           config.phone_number_id,
+           config.access_token,
+           config.business_account_id,
+           config.webhook_verify_token,
+           config.webhook_secret,
+           config.is_active
         ]);
       }
     }
