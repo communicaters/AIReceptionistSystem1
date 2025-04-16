@@ -771,6 +771,33 @@ export class MemStorage implements IStorage {
     this.whatsappConfigs.set(id, updatedConfig);
     return updatedConfig;
   }
+  
+  // Facebook WhatsApp Config
+  async getFacebookWhatsappConfig(id: number): Promise<FacebookWhatsappConfig | undefined> {
+    return this.facebookWhatsappConfigs.get(id);
+  }
+
+  async getFacebookWhatsappConfigByUserId(userId: number): Promise<FacebookWhatsappConfig | undefined> {
+    return Array.from(this.facebookWhatsappConfigs.values()).find(
+      (config) => config.userId === userId,
+    );
+  }
+
+  async createFacebookWhatsappConfig(config: InsertFacebookWhatsappConfig): Promise<FacebookWhatsappConfig> {
+    const id = this.currentIds.facebookWhatsappConfigs++;
+    const newConfig: FacebookWhatsappConfig = { ...config, id };
+    this.facebookWhatsappConfigs.set(id, newConfig);
+    return newConfig;
+  }
+
+  async updateFacebookWhatsappConfig(id: number, config: Partial<InsertFacebookWhatsappConfig>): Promise<FacebookWhatsappConfig | undefined> {
+    const existingConfig = this.facebookWhatsappConfigs.get(id);
+    if (!existingConfig) return undefined;
+    
+    const updatedConfig: FacebookWhatsappConfig = { ...existingConfig, ...config };
+    this.facebookWhatsappConfigs.set(id, updatedConfig);
+    return updatedConfig;
+  }
 
   // Calendar Config
   async getCalendarConfig(id: number): Promise<CalendarConfig | undefined> {
