@@ -500,6 +500,29 @@ export class ZenderService {
       
       console.log(`Created WhatsApp log entry with ID: ${whatsappLog.id}`);
       
+      // Broadcast the message via WebSocket to update UI in real-time
+      if (broadcastMessage) {
+        try {
+          broadcastMessage({
+            type: 'whatsapp_message',
+            timestamp: new Date().toISOString(),
+            data: {
+              id: whatsappLog.id,
+              phoneNumber: sender,
+              message: message,
+              direction: 'inbound',
+              timestamp: timestamp,
+              status: 'received'
+            }
+          });
+          console.log('Broadcast WhatsApp message notification to all connected clients');
+        } catch (error) {
+          console.error('Error broadcasting WhatsApp message:', error);
+        }
+      } else {
+        console.warn('broadcastMessage function not available, cannot send real-time notification');
+      }
+      
       // Record system activity
       await storage.createSystemActivity({
         module: 'WhatsApp',

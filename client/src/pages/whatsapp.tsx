@@ -185,6 +185,54 @@ const WhatsApp = () => {
     const host = window.location.host;
     setWebhookUrl(`${protocol}//${host}/api/whatsapp/webhook`);
   }, []);
+  
+  // WebSocket connection for real-time updates
+  useEffect(() => {
+    // Establish WebSocket connection
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    
+    console.log('Connecting to WebSocket server for WhatsApp notifications:', wsUrl);
+    const socket = new WebSocket(wsUrl);
+    
+    // Handle incoming WebSocket messages
+    socket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        
+        // Check if it's a WhatsApp message event
+        if (data.type === 'whatsapp_message') {
+          console.log('Received WhatsApp message notification:', data);
+          
+          // Automatically refresh the message log
+          refetchLogs();
+          
+          // Show toast notification for the new message
+          if (data.data.direction === 'inbound') {
+            const phoneNumber = data.data.phoneNumber;
+            const message = data.data.message.substring(0, 30) + (data.data.message.length > 30 ? '...' : '');
+            
+            toast({
+              title: `New message from ${phoneNumber}`,
+              description: message,
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error parsing WebSocket message:', error);
+      }
+    };
+    
+    // Log connection events
+    socket.onopen = () => console.log('WebSocket connection established for WhatsApp notifications');
+    socket.onerror = (error) => console.error('WebSocket error:', error);
+    socket.onclose = (event) => console.log('WebSocket connection closed:', event.code, event.reason);
+    
+    // Clean up the WebSocket connection when the component unmounts
+    return () => {
+      socket.close();
+    };
+  }, [refetchLogs, toast]);
 
   // Handle form changes
   const handleConfigChange = (e: React.ChangeEvent<HTMLInputElement>) => {
