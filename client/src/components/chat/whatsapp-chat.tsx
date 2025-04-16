@@ -53,7 +53,7 @@ export function WhatsAppChat({
         // If the message exists and this version has a status, keep the one with the "better" status
         if (current.status) {
           const existingStatus = acc[existingMessageIndex].status || 'pending';
-          const statusPriority = {
+          const statusPriority: Record<string, number> = {
             'pending': 0,
             'sent': 1,
             'delivered': 2,
@@ -62,7 +62,7 @@ export function WhatsAppChat({
           };
           
           // If current message has a "better" status, replace the existing one
-          if ((statusPriority[current.status] || 0) > (statusPriority[existingStatus] || 0)) {
+          if ((statusPriority[current.status] ?? 0) > (statusPriority[existingStatus] ?? 0)) {
             acc[existingMessageIndex] = current;
           }
         }

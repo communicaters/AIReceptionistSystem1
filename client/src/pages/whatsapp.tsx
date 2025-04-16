@@ -608,11 +608,17 @@ const WhatsApp = () => {
                     <Switch 
                       id="active-status" 
                       checked={configForm.isActive || false}
-                      onCheckedChange={(checked) => 
-                        setConfigForm(prev => ({ ...prev, isActive: checked }))
-                      }
+                      onCheckedChange={(checked) => {
+                        // Only update isActive for the currently selected provider
+                        setConfigForm(prev => ({ 
+                          ...prev, 
+                          isActive: checked,
+                          // Make sure we're setting the correct provider
+                          provider: activeProvider
+                        }));
+                      }}
                     />
-                    <Label htmlFor="active-status">Enable WhatsApp Integration</Label>
+                    <Label htmlFor="active-status">Enable {activeProvider === "facebook" ? "Facebook/Meta" : "Zender"} WhatsApp Integration</Label>
                   </div>
                 </div>
               )}
