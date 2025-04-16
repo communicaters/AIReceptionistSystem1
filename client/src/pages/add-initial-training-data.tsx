@@ -3,9 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import DashboardLayout from "@/components/layout/dashboard-layout";
 import { createTrainingData, createIntent } from "@/lib/api";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Progress } from "@/components/ui/progress";
 
 // Sample training data examples for different categories
@@ -224,7 +223,7 @@ const AddInitialTrainingDataPage = () => {
   };
 
   return (
-    <DashboardLayout>
+    <div className="min-h-screen max-w-4xl mx-auto px-4 py-8">
       <div className="space-y-6">
         <h1 className="text-3xl font-bold tracking-tight">Add Initial Training Data</h1>
         <p className="text-muted-foreground">
@@ -308,7 +307,7 @@ const AddInitialTrainingDataPage = () => {
           </CardFooter>
         </Card>
       </div>
-    </DashboardLayout>
+    </div>
   );
 };
 
