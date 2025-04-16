@@ -2387,8 +2387,157 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     console.warn('broadcastMessage function not available, cannot send real-time notification');
                   }
                   
-                  // Here you would add code to pass the message to your AI for processing
-                  // and generating a response, which would then be sent back to the user.
+                  // Pass the message to AI for processing and generate a response
+                  try {
+                    console.log(`Processing WhatsApp message with AI for ${phoneNumber}: ${messageText}`);
+                    
+                    // Get chat configuration for this user
+                    const chatConfig = await storage.getChatConfigByUserId(userId);
+                    if (!chatConfig || !chatConfig.isActive) {
+                      console.warn(`Chat AI is not active for user ${userId}, skipping auto-response`);
+                      return;
+                    }
+                    
+                    // Get any previous messages with this number to maintain context
+                    const previousMessages = await storage.getWhatsappLogsByPhoneNumber(userId, phoneNumber);
+                    
+                    // Format previous messages for context 
+                    // (limit to last 10 to avoid token limits)
+                    const messageHistory = previousMessages
+                      .slice(-10)
+                      .map(msg => ({
+                        role: msg.direction === 'inbound' ? 'user' : 'assistant',
+                        content: msg.message
+                      }));
+                    
+                    // Create a system prompt based on training data
+                    const trainingData = await storage.getTrainingDataByCategory(userId, 'whatsapp');
+                    let systemPrompt = "You are an AI assistant for a business. Be helpful, concise, and professional.";
+                    
+                    if (trainingData && trainingData.length > 0) {
+                      // If we have specific training data, use that to enhance the system prompt
+                      const trainingText = trainingData
+                        .map(data => data.content)
+                        .join("\n\n");
+                      systemPrompt += "\n\n" + trainingText;
+                    }
+                    
+                    // Prepare the AI request
+                    const messages = [
+                      { role: 'system', content: systemPrompt },
+                      ...messageHistory,
+                      { role: 'user', content: messageText }
+                    ];
+                    
+                    // Call the OpenAI API
+                    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
+                      },
+                      body: JSON.stringify({
+                        model: "gpt-4o", // the newest OpenAI model is "gpt-4o" which was released May 13, 2024
+                        messages: messages,
+                        temperature: 0.7,
+                        max_tokens: 500
+                      })
+                    });
+                    
+                    if (!response.ok) {
+                      throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`);
+                    }
+                    
+                    const aiResponse = await response.json();
+                    const aiReplyText = aiResponse.choices[0].message.content.trim();
+                    
+                    console.log(`AI generated response: ${aiReplyText}`);
+                    
+                    // Determine which WhatsApp service to use for response
+                    const whatsappConfig = await storage.getWhatsappConfigByUserId(userId);
+                    if (!whatsappConfig || !whatsappConfig.isActive) {
+                      console.warn(`WhatsApp is not active for user ${userId}, cannot send auto-response`);
+                      return;
+                    }
+                    
+                    // Send the AI response back via the appropriate WhatsApp provider
+                    if (whatsappConfig.provider === 'zender' && whatsappConfig.apiSecret && whatsappConfig.accountId) {
+                      // Use Zender service
+                      const zenderService = getZenderService(userId);
+                      await zenderService.initialize();
+                      
+                      // Create a log entry for the outbound message
+                      const responseLogs = await storage.createWhatsappLog({
+                        userId,
+                        phoneNumber,
+                        message: aiReplyText,
+                        direction: "outbound",
+                        timestamp: new Date(),
+                        status: 'pending'
+                      });
+                      
+                      // Send message via Zender
+                      const result = await zenderService.sendMessage({
+                        recipient: phoneNumber,
+                        message: aiReplyText,
+                        type: 'text',
+                        logId: responseLogs.id
+                      });
+                      
+                      if (result.success) {
+                        console.log(`Auto-response sent successfully via Zender to ${phoneNumber}`);
+                        await storage.updateWhatsappLog(responseLogs.id, { 
+                          status: 'sent',
+                          externalId: result.messageId
+                        });
+                      } else {
+                        console.error(`Failed to send auto-response via Zender: ${result.error}`);
+                      }
+                    } else {
+                      // Use Facebook WhatsApp API
+                      const facebookService = getFacebookWhatsappService(userId);
+                      await facebookService.initialize();
+                      
+                      // Create a log entry for the outbound message
+                      const responseLogs = await storage.createWhatsappLog({
+                        userId,
+                        phoneNumber,
+                        message: aiReplyText,
+                        direction: "outbound",
+                        timestamp: new Date(),
+                        status: 'pending'
+                      });
+                      
+                      // Send message via Facebook
+                      const result = await facebookService.sendMessage({
+                        recipient: phoneNumber,
+                        message: aiReplyText
+                      });
+                      
+                      if (result.success) {
+                        console.log(`Auto-response sent successfully via Facebook to ${phoneNumber}`);
+                        await storage.updateWhatsappLog(responseLogs.id, { 
+                          status: 'sent',
+                          externalId: result.messageId
+                        });
+                      } else {
+                        console.error(`Failed to send auto-response via Facebook: ${result.error}`);
+                      }
+                    }
+                  } catch (aiError) {
+                    console.error("Error processing WhatsApp message with AI:", aiError);
+                    
+                    await storage.createSystemActivity({
+                      module: "WhatsApp",
+                      event: "AIProcessingError",
+                      status: "error",
+                      timestamp: new Date(),
+                      details: { 
+                        error: (aiError as Error).message,
+                        phoneNumber
+                      }
+                    });
+                  }
                   
                   console.log(`WhatsApp message processed from ${phoneNumber}: ${messageText}`);
                 }
