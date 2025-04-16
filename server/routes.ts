@@ -19,6 +19,7 @@ import { initElevenLabs } from "./lib/elevenlabs";
 import { initWhisperAPI } from "./lib/whisper";
 import { createAllSampleMp3s } from "./lib/create-sample-mp3";
 import { getZenderService } from "./lib/zender";
+import { getFacebookWhatsappService } from "./lib/facebook-whatsapp";
 import { setupWebsocketHandlers, broadcastMessage } from "./lib/websocket";
 import { aiRouter } from "./routes/ai";
 import { speechRouter } from "./routes/speech";
@@ -2351,14 +2352,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   }
                   
                   // Store the message in our logs
-                  await storage.createWhatsappLog({
+                  const whatsappLog = await storage.createWhatsappLog({
                     userId,
                     phoneNumber,
                     message: messageText,
                     mediaUrl,
                     direction: "inbound",
-                    timestamp
+                    timestamp,
+                    status: "received",
+                    externalId: message.id
                   });
+                  
+                  // Broadcast the message via WebSocket to update UI in real-time
+                  if (broadcastMessage) {
+                    try {
+                      broadcastMessage({
+                        type: 'whatsapp_message',
+                        timestamp: new Date().toISOString(),
+                        data: {
+                          id: whatsappLog.id,
+                          phoneNumber,
+                          message: messageText,
+                          direction: 'inbound',
+                          timestamp,
+                          status: 'received',
+                          mediaUrl
+                        }
+                      });
+                      console.log('Broadcast Facebook WhatsApp message notification to all connected clients');
+                    } catch (error) {
+                      console.error('Error broadcasting Facebook WhatsApp message:', error);
+                    }
+                  } else {
+                    console.warn('broadcastMessage function not available, cannot send real-time notification');
+                  }
                   
                   // Here you would add code to pass the message to your AI for processing
                   // and generating a response, which would then be sent back to the user.
@@ -2494,34 +2521,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Legacy WhatsApp API (Facebook) provider - for backward compatibility
-      console.log(`Sending WhatsApp message to ${phoneNumber} using legacy provider: ${message}`);
+      // Use Facebook WhatsApp API provider
+      console.log(`Sending WhatsApp message to ${phoneNumber} using Facebook provider: ${message}`);
       
-      // Log the outgoing message
-      const whatsappLog = await storage.createWhatsappLog({
-        userId,
-        phoneNumber,
-        message,
-        mediaUrl,
-        direction: "outbound",
-        timestamp: new Date()
-      });
-      
-      await storage.createSystemActivity({
-        module: "WhatsApp",
-        event: "MessageSent",
-        status: "success",
-        timestamp: new Date(),
-        details: { userId, phoneNumber, messageId: whatsappLog.id, provider: 'facebook' }
-      });
-      
-      apiResponse(res, { 
-        success: true, 
-        messageId: whatsappLog.id,
-        logId: whatsappLog.id,
-        message: "Message queued for delivery",
-        provider: 'facebook'
-      });
+      try {
+        // Get Facebook WhatsApp service
+        const facebookService = getFacebookWhatsappService(userId);
+        
+        // Initialize the service
+        const initialized = await facebookService.initialize();
+        if (!initialized) {
+          return apiResponse(res, { error: "Failed to initialize Facebook WhatsApp service" }, 500);
+        }
+        
+        // Create a basic log entry first so we can track this message
+        const initialLog = await storage.createWhatsappLog({
+          userId,
+          phoneNumber,
+          message,
+          mediaUrl,
+          direction: "outbound",
+          timestamp: new Date(),
+          status: 'pending'
+        });
+        
+        // Send the message
+        const result = await facebookService.sendMessage({
+          recipient: phoneNumber,
+          message,
+          mediaUrl
+        });
+        
+        if (result.success) {
+          console.log(`Message sent successfully via Facebook, ID: ${result.messageId}`);
+          
+          await storage.createSystemActivity({
+            module: "WhatsApp",
+            event: "MessageSent",
+            status: "success",
+            timestamp: new Date(),
+            details: { userId, phoneNumber, messageId: result.messageId, provider: 'facebook' }
+          });
+          
+          apiResponse(res, { 
+            success: true, 
+            messageId: result.messageId || initialLog.id,
+            logId: initialLog.id,
+            message: "Message sent via Facebook WhatsApp API",
+            provider: 'facebook'
+          });
+        } else {
+          console.error(`Failed to send message via Facebook: ${result.error}`);
+          
+          await storage.createSystemActivity({
+            module: "WhatsApp",
+            event: "MessageSendError",
+            status: "error",
+            timestamp: new Date(),
+            details: { error: result.error, provider: 'facebook' }
+          });
+          
+          apiResponse(res, { 
+            success: false, 
+            error: result.error || "Failed to send message via Facebook"
+          }, 500);
+        }
+      } catch (fbError) {
+        console.error("Error using Facebook WhatsApp service:", fbError);
+        
+        await storage.createSystemActivity({
+          module: "WhatsApp",
+          event: "MessageSendError",
+          status: "error",
+          timestamp: new Date(),
+          details: { error: (fbError as Error).message, provider: 'facebook' }
+        });
+        
+        apiResponse(res, { error: "Failed to send WhatsApp message via Facebook" }, 500);
+      }
     } catch (error) {
       console.error("Error sending WhatsApp message:", error);
       
@@ -2570,9 +2647,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           isSuccessful = false;
         }
       } else {
-        // Legacy Facebook/WhatsApp API test
-        isSuccessful = config.isActive && config.accessToken && config.phoneNumberId;
-        provider = 'facebook';
+        // Facebook WhatsApp API test
+        try {
+          const facebookService = getFacebookWhatsappService(userId);
+          
+          // Initialize and test the connection
+          await facebookService.initialize();
+          isSuccessful = await facebookService.testConnection();
+          provider = 'facebook';
+        } catch (error) {
+          console.error("Error testing Facebook WhatsApp connection:", error);
+          isSuccessful = false;
+          provider = 'facebook';
+        }
       }
       
       await storage.createSystemActivity({
