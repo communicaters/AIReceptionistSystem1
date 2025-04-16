@@ -16,6 +16,9 @@ const Header = ({ setIsMobileOpen }: HeaderProps) => {
     
     if (!path) return "Dashboard";
     
+    // Special case for AI training to avoid duplication with page header
+    if (path === "ai-training") return "";
+    
     // Convert kebab-case to title case
     return path
       .split("-")
