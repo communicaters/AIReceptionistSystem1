@@ -44,49 +44,57 @@ export function WhatsAppChat({
     setLocalMessages(messages);
   }, [messages]);
   
-  // Sort messages by timestamp in ascending order (oldest first)
-  // Deduplicate messages by combining multiple records of the same message
-  // with different statuses (pending/sent/delivered/read)
-  const deduplicatedMessages = localMessages.reduce((acc, current) => {
-    // For outbound messages, we want to keep only the latest status of the same message
-    if (current.direction === 'outbound') {
-      // Try to find a message with the same content and close timestamp
-      const existingMessageIndex = acc.findIndex(msg => 
-        msg.direction === 'outbound' && 
-        msg.message === current.message &&
-        // Messages sent within 5 seconds are considered the same
-        Math.abs(new Date(msg.timestamp).getTime() - new Date(current.timestamp).getTime()) < 5000
-      );
-      
-      if (existingMessageIndex >= 0) {
-        // If the message exists and this version has a status, keep the one with the "better" status
-        if (current.status) {
-          const existingStatus = acc[existingMessageIndex].status || 'pending';
-          const statusPriority: Record<string, number> = {
-            'pending': 0,
-            'sent': 1,
-            'delivered': 2,
-            'read': 3,
-            'failed': 4
-          };
-          
-          // If current message has a "better" status, replace the existing one
-          if ((statusPriority[current.status] ?? 0) > (statusPriority[existingStatus] ?? 0)) {
-            acc[existingMessageIndex] = current;
-          }
-        }
-        return acc;
-      }
-    }
-    
-    // Add the message if it's not a duplicate or it's inbound
-    return [...acc, current];
-  }, [] as WhatsappLog[]);
+  // Store deduplicated and sorted messages in state to prevent infinite renders
+  const [sortedMessages, setSortedMessages] = useState<WhatsappLog[]>([]);
   
-  // Sort the deduplicated messages by timestamp
-  const sortedMessages = [...deduplicatedMessages].sort((a, b) => 
-    new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-  );
+  // Process messages when localMessages changes
+  useEffect(() => {
+    // Deduplicate messages by combining multiple records of the same message
+    // with different statuses (pending/sent/delivered/read)
+    const deduplicatedMessages = localMessages.reduce((acc, current) => {
+      // For outbound messages, we want to keep only the latest status of the same message
+      if (current.direction === 'outbound') {
+        // Try to find a message with the same content and close timestamp
+        const existingMessageIndex = acc.findIndex(msg => 
+          msg.direction === 'outbound' && 
+          msg.message === current.message &&
+          // Messages sent within 5 seconds are considered the same
+          Math.abs(new Date(msg.timestamp).getTime() - new Date(current.timestamp).getTime()) < 5000
+        );
+        
+        if (existingMessageIndex >= 0) {
+          // If the message exists and this version has a status, keep the one with the "better" status
+          if (current.status) {
+            const existingStatus = acc[existingMessageIndex].status || 'pending';
+            const statusPriority: Record<string, number> = {
+              'pending': 0,
+              'sent': 1,
+              'delivered': 2,
+              'read': 3,
+              'failed': 4
+            };
+            
+            // If current message has a "better" status, replace the existing one
+            if ((statusPriority[current.status] ?? 0) > (statusPriority[existingStatus] ?? 0)) {
+              acc[existingMessageIndex] = current;
+            }
+          }
+          return acc;
+        }
+      }
+      
+      // Add the message if it's not a duplicate or it's inbound
+      return [...acc, current];
+    }, [] as WhatsappLog[]);
+    
+    // Sort the deduplicated messages by timestamp
+    const sorted = [...deduplicatedMessages].sort((a, b) => 
+      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
+    
+    // Update the state
+    setSortedMessages(sorted);
+  }, [localMessages]);
 
   const sendMessageMutation = useMutation({
     mutationFn: ({ phoneNumber, message }: { phoneNumber: string; message: string }) => 
