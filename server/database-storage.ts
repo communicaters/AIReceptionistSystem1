@@ -255,6 +255,63 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
+  // WhatsApp Templates
+  async getWhatsappTemplate(id: number): Promise<WhatsappTemplate | undefined> {
+    const result = await db.select().from(whatsappTemplates).where(eq(whatsappTemplates.id, id));
+    return result[0];
+  }
+
+  async getWhatsappTemplatesByUserId(userId: number): Promise<WhatsappTemplate[]> {
+    return await db.select().from(whatsappTemplates)
+      .where(eq(whatsappTemplates.userId, userId))
+      .orderBy(desc(whatsappTemplates.updatedAt));
+  }
+
+  async getWhatsappTemplatesByCategory(userId: number, category: string): Promise<WhatsappTemplate[]> {
+    return await db.select().from(whatsappTemplates)
+      .where(and(
+        eq(whatsappTemplates.userId, userId),
+        eq(whatsappTemplates.category, category)
+      ))
+      .orderBy(desc(whatsappTemplates.updatedAt));
+  }
+
+  async getWhatsappTemplatesByProvider(userId: number, provider: string): Promise<WhatsappTemplate[]> {
+    return await db.select().from(whatsappTemplates)
+      .where(and(
+        eq(whatsappTemplates.userId, userId),
+        eq(whatsappTemplates.provider, provider)
+      ))
+      .orderBy(desc(whatsappTemplates.updatedAt));
+  }
+
+  async createWhatsappTemplate(template: InsertWhatsappTemplate): Promise<WhatsappTemplate> {
+    const now = new Date();
+    const result = await db.insert(whatsappTemplates).values({
+      ...template,
+      createdAt: now,
+      updatedAt: now,
+      lastUsed: null
+    }).returning();
+    return result[0];
+  }
+
+  async updateWhatsappTemplate(id: number, template: Partial<InsertWhatsappTemplate>): Promise<WhatsappTemplate | undefined> {
+    const result = await db.update(whatsappTemplates)
+      .set({
+        ...template,
+        updatedAt: new Date()
+      })
+      .where(eq(whatsappTemplates.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteWhatsappTemplate(id: number): Promise<boolean> {
+    await db.delete(whatsappTemplates).where(eq(whatsappTemplates.id, id));
+    return true;
+  }
+
   // Calendar Config
   async getCalendarConfig(id: number): Promise<CalendarConfig | undefined> {
     const result = await db.select().from(calendarConfig).where(eq(calendarConfig.id, id));

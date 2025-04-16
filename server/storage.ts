@@ -211,6 +211,7 @@ export class MemStorage implements IStorage {
   private chatConfigs: Map<number, ChatConfig>;
   private emailTemplates: Map<number, EmailTemplate>;
   private scheduledEmails: Map<number, ScheduledEmail>;
+  private whatsappTemplates: Map<number, WhatsappTemplate>;
   private whatsappConfigs: Map<number, WhatsappConfig>;
   private facebookWhatsappConfigs: Map<number, FacebookWhatsappConfig>;
   private calendarConfigs: Map<number, CalendarConfig>;
@@ -238,6 +239,7 @@ export class MemStorage implements IStorage {
     chatConfigs: number;
     whatsappConfigs: number;
     facebookWhatsappConfigs: number;
+    whatsappTemplates: number;
     calendarConfigs: number;
     products: number;
     inventories: number;
@@ -265,6 +267,7 @@ export class MemStorage implements IStorage {
     this.chatConfigs = new Map();
     this.emailTemplates = new Map();
     this.scheduledEmails = new Map();
+    this.whatsappTemplates = new Map();
     this.whatsappConfigs = new Map();
     this.facebookWhatsappConfigs = new Map();
     this.calendarConfigs = new Map();
@@ -293,6 +296,7 @@ export class MemStorage implements IStorage {
       chatConfigs: 1,
       emailTemplates: 1,
       scheduledEmails: 1,
+      whatsappTemplates: 1,
       whatsappConfigs: 1,
       facebookWhatsappConfigs: 1,
       calendarConfigs: 1,
