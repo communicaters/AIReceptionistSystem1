@@ -2495,6 +2495,134 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.warn('broadcastMessage function not available, cannot send real-time notification');
             }
             
+            // Process with AI and generate auto-response
+            try {
+              console.log(`Processing WhatsApp message with AI for ${sender}: ${message}`);
+              
+              // Get chat configuration for this user
+              const chatConfig = await storage.getChatConfigByUserId(userId);
+              if (!chatConfig || !chatConfig.isActive) {
+                console.warn(`Chat AI is not active for user ${userId}, skipping auto-response`);
+                return;
+              }
+              
+              // Get any previous messages with this number to maintain context
+              const previousMessages = await storage.getWhatsappLogsByPhoneNumber(userId, sender);
+              
+              // Format previous messages for context 
+              // (limit to last 10 to avoid token limits)
+              const messageHistory = previousMessages
+                .slice(-10)
+                .map(msg => ({
+                  role: msg.direction === 'inbound' ? 'user' : 'assistant',
+                  content: msg.message
+                }));
+              
+              // Create a system prompt based on training data
+              const trainingData = await storage.getTrainingDataByCategory(userId, 'whatsapp');
+              let systemPrompt = "You are an AI assistant for a business. Be helpful, concise, and professional.";
+              
+              if (trainingData && trainingData.length > 0) {
+                // If we have specific training data, use that to enhance the system prompt
+                const trainingText = trainingData
+                  .map(data => data.content)
+                  .join("\n\n");
+                systemPrompt += "\n\n" + trainingText;
+              }
+              
+              console.log("Using system prompt for WhatsApp AI response:", systemPrompt.substring(0, 200) + "...");
+              
+              // Prepare the AI request
+              const messages = [
+                { role: 'system', content: systemPrompt },
+                ...messageHistory,
+                { role: 'user', content: message }
+              ];
+              
+              console.log(`Sending ${messages.length} messages to OpenAI for processing`);
+              
+              // Call the OpenAI API
+              const response = await fetch("https://api.openai.com/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
+                },
+                body: JSON.stringify({
+                  model: "gpt-4o", // the newest OpenAI model is "gpt-4o" which was released May 13, 2024
+                  messages: messages,
+                  temperature: 0.7,
+                  max_tokens: 500
+                })
+              });
+              
+              if (!response.ok) {
+                throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`);
+              }
+              
+              const aiResponse = await response.json();
+              const aiReplyText = aiResponse.choices[0].message.content.trim();
+              
+              console.log(`AI generated response: ${aiReplyText}`);
+              
+              // Send the AI response back via Zender
+              const zenderService = getZenderService(userId);
+              await zenderService.initialize();
+              
+              // Create a log entry for the outbound message
+              const responseLogs = await storage.createWhatsappLog({
+                userId,
+                phoneNumber: sender,
+                message: aiReplyText,
+                direction: "outbound",
+                timestamp: new Date(),
+                status: 'pending'
+              });
+              
+              // Send message via Zender
+              const result = await zenderService.sendMessage({
+                recipient: sender,
+                message: aiReplyText,
+                type: 'text'
+              });
+              
+              if (result.success) {
+                console.log(`Auto-response sent successfully via Zender to ${sender}`);
+                await storage.updateWhatsappLog(responseLogs.id, { 
+                  status: 'sent',
+                  externalId: result.messageId
+                });
+                
+                // Broadcast the response via WebSocket
+                if (broadcastMessage) {
+                  broadcastMessage({
+                    type: 'whatsapp_message',
+                    timestamp: new Date().toISOString(),
+                    data: {
+                      id: responseLogs.id,
+                      phoneNumber: sender,
+                      message: aiReplyText,
+                      direction: 'outbound',
+                      timestamp: new Date(),
+                      status: 'sent'
+                    }
+                  });
+                }
+              } else {
+                console.error(`Failed to send auto-response via Zender: ${result.error}`);
+                await storage.updateWhatsappLog(responseLogs.id, { status: 'failed' });
+              }
+            } catch (error) {
+              console.error("Error generating AI response for WhatsApp:", error);
+              await storage.createSystemActivity({
+                module: "WhatsApp",
+                event: "AI Response Failed",
+                status: "Error",
+                timestamp: new Date(),
+                details: { error: (error as Error).message }
+              });
+            }
+            
             return;
           }
         } catch (error) {
