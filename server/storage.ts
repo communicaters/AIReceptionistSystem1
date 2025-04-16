@@ -1046,18 +1046,32 @@ export class MemStorage implements IStorage {
     return this.whatsappLogs.get(id);
   }
 
-  async getWhatsappLogsByUserId(userId: number, limit?: number): Promise<WhatsappLog[]> {
+  async getWhatsappLogsByUserId(userId: number, limit: number = 20, offset: number = 0): Promise<WhatsappLog[]> {
     const logs = Array.from(this.whatsappLogs.values())
       .filter((log) => log.userId === userId)
       .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
-    return limit ? logs.slice(0, limit) : logs;
+    return logs.slice(offset, offset + limit);
   }
 
-  async getWhatsappLogsByPhoneNumber(userId: number, phoneNumber: string): Promise<WhatsappLog[]> {
-    return Array.from(this.whatsappLogs.values())
+  async getWhatsappLogsByPhoneNumber(userId: number, phoneNumber: string, limit: number = 20, offset: number = 0): Promise<WhatsappLog[]> {
+    const logs = Array.from(this.whatsappLogs.values())
       .filter((log) => log.userId === userId && log.phoneNumber === phoneNumber)
       .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+      
+    return logs.slice(offset, offset + limit);
+  }
+  
+  async getWhatsappLogCountByUserId(userId: number): Promise<number> {
+    return Array.from(this.whatsappLogs.values())
+      .filter((log) => log.userId === userId)
+      .length;
+  }
+  
+  async getWhatsappLogCountByPhoneNumber(userId: number, phoneNumber: string): Promise<number> {
+    return Array.from(this.whatsappLogs.values())
+      .filter((log) => log.userId === userId && log.phoneNumber === phoneNumber)
+      .length;
   }
 
   async createWhatsappLog(log: InsertWhatsappLog): Promise<WhatsappLog> {

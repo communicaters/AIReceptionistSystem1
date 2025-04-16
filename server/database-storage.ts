@@ -1,6 +1,6 @@
 import { IStorage } from './storage';
 import { db } from './db';
-import { eq, desc, and } from 'drizzle-orm';
+import { eq, desc, and, asc, sql, count } from 'drizzle-orm';
 import { 
   users, User, InsertUser,
   sipConfig, SipConfig, InsertSipConfig,
@@ -514,20 +514,38 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async getWhatsappLogsByUserId(userId: number, limit: number = 100): Promise<WhatsappLog[]> {
+  async getWhatsappLogsByUserId(userId: number, limit: number = 20, offset: number = 0): Promise<WhatsappLog[]> {
     return await db.select().from(whatsappLogs)
       .where(eq(whatsappLogs.userId, userId))
       .orderBy(desc(whatsappLogs.timestamp))
-      .limit(limit);
+      .limit(limit)
+      .offset(offset);
   }
 
-  async getWhatsappLogsByPhoneNumber(userId: number, phoneNumber: string): Promise<WhatsappLog[]> {
+  async getWhatsappLogsByPhoneNumber(userId: number, phoneNumber: string, limit: number = 20, offset: number = 0): Promise<WhatsappLog[]> {
     return await db.select().from(whatsappLogs)
       .where(and(
         eq(whatsappLogs.userId, userId),
         eq(whatsappLogs.phoneNumber, phoneNumber)
       ))
-      .orderBy(desc(whatsappLogs.timestamp));
+      .orderBy(asc(whatsappLogs.timestamp))
+      .limit(limit)
+      .offset(offset);
+  }
+  
+  async getWhatsappLogCountByUserId(userId: number): Promise<number> {
+    const result = await db.select({ count: count() }).from(whatsappLogs)
+      .where(eq(whatsappLogs.userId, userId));
+    return result[0].count;
+  }
+  
+  async getWhatsappLogCountByPhoneNumber(userId: number, phoneNumber: string): Promise<number> {
+    const result = await db.select({ count: count() }).from(whatsappLogs)
+      .where(and(
+        eq(whatsappLogs.userId, userId),
+        eq(whatsappLogs.phoneNumber, phoneNumber)
+      ));
+    return result[0].count;
   }
 
   async createWhatsappLog(log: InsertWhatsappLog): Promise<WhatsappLog> {

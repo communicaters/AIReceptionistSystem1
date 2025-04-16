@@ -3171,17 +3171,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/whatsapp/logs", async (req, res) => {
     try {
       const userId = 1; // For demo, use fixed user ID
-      const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 20; // Default to 20 messages
+      const offset = req.query.offset ? parseInt(req.query.offset as string) : 0;
       const phoneNumber = req.query.phoneNumber as string;
       
       let logs;
       if (phoneNumber) {
-        logs = await storage.getWhatsappLogsByPhoneNumber(userId, phoneNumber);
+        logs = await storage.getWhatsappLogsByPhoneNumber(userId, phoneNumber, limit, offset);
       } else {
-        logs = await storage.getWhatsappLogsByUserId(userId, limit);
+        logs = await storage.getWhatsappLogsByUserId(userId, limit, offset);
       }
       
-      apiResponse(res, logs);
+      // Get total count for pagination info
+      const totalCount = phoneNumber 
+        ? await storage.getWhatsappLogCountByPhoneNumber(userId, phoneNumber)
+        : await storage.getWhatsappLogCountByUserId(userId);
+        
+      apiResponse(res, {
+        logs,
+        pagination: {
+          total: totalCount,
+          limit,
+          offset,
+          hasMore: offset + logs.length < totalCount
+        }
+      });
     } catch (error) {
       console.error("Error fetching WhatsApp logs:", error);
       apiResponse(res, { error: "Failed to fetch WhatsApp logs" }, 500);
