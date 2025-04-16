@@ -150,18 +150,28 @@ const AddInitialTrainingDataPage = () => {
     setResults({ trainingData: 0, intents: 0, failed: 0 });
 
     try {
+      let successfulTrainingData = 0;
+      let successfulIntents = 0;
+      let failedItems = 0;
+
       // Add training data
       for (let i = 0; i < trainingExamples.length; i++) {
         try {
           const example = trainingExamples[i];
-          await createTrainingData({ 
+          const result = await createTrainingData({ 
             category: example.category, 
-            content: example.content
+            content: example.content,
+            userId: 1 // Explicitly set userId
           });
-          setResults(prev => ({ ...prev, trainingData: prev.trainingData + 1 }));
+          
+          if (result && result.id) {
+            successfulTrainingData++;
+          } else {
+            failedItems++;
+          }
         } catch (e) {
           console.error("Failed to add training example:", e);
-          setResults(prev => ({ ...prev, failed: prev.failed + 1 }));
+          failedItems++;
         }
         setProgress(Math.round(((i + 1) / totalItems) * 100));
       }
@@ -171,17 +181,30 @@ const AddInitialTrainingDataPage = () => {
       for (let i = 0; i < intentExamples.length; i++) {
         try {
           const intent = intentExamples[i];
-          await createIntent({
+          const result = await createIntent({
             intent: intent.intent,
-            examples: intent.examples
+            examples: intent.examples,
+            userId: 1 // Explicitly set userId
           });
-          setResults(prev => ({ ...prev, intents: prev.intents + 1 }));
+          
+          if (result && result.id) {
+            successfulIntents++;
+          } else {
+            failedItems++;
+          }
         } catch (e) {
           console.error("Failed to add intent:", e);
-          setResults(prev => ({ ...prev, failed: prev.failed + 1 }));
+          failedItems++;
         }
         setProgress(Math.round(((startIdx + i + 1) / totalItems) * 100));
       }
+
+      // Update results with actual counts
+      setResults({
+        trainingData: successfulTrainingData,
+        intents: successfulIntents,
+        failed: failedItems
+      });
 
       // Invalidate queries to refresh the data
       queryClient.invalidateQueries({ queryKey: ['/api/training/data'] });
@@ -190,7 +213,7 @@ const AddInitialTrainingDataPage = () => {
       setCompleted(true);
       toast({
         title: "Training data added successfully",
-        description: `Added ${results.trainingData} training examples and ${results.intents} intent mappings.`,
+        description: `Added ${successfulTrainingData} training examples and ${successfulIntents} intent mappings.`,
       });
     } catch (e) {
       console.error("Error adding training data:", e);
