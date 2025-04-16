@@ -659,6 +659,17 @@ export class ZenderService {
       return false;
     }
   }
+
+  /**
+   * Simplified method to send a message to a phone number with text content
+   */
+  async sendTextMessage(phoneNumber: string, text: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    return this.sendMessage({
+      recipient: phoneNumber,
+      message: text,
+      type: 'text'
+    });
+  }
   
   /**
    * Generate an AI response to an incoming message and send it back to the user
@@ -674,9 +685,9 @@ export class ZenderService {
       ).join('\n\n');
       
       // Get product data to include in the prompt
-      const products = await storage.getProductDataByUserId(this.userId);
-      const productContent = products.map(product => 
-        `Product: ${product.name}\nDescription: ${product.description || 'N/A'}\nPrice: $${(product.priceInCents / 100).toFixed(2)}\nSKU: ${product.sku}`
+      const products = await storage.getProductsByUserId(this.userId);
+      const productContent = products.map(p => 
+        `Product: ${p.name}\nDescription: ${p.description || 'N/A'}\nPrice: $${(p.priceInCents / 100).toFixed(2)}\nSKU: ${p.sku}`
       ).join('\n\n');
       
       // Create the prompt
@@ -760,7 +771,11 @@ Be friendly but professional at all times.`;
       }
       
       // Send the AI response back to the user
-      await this.sendMessage(phoneNumber, messageBody);
+      const result = await this.sendTextMessage(phoneNumber, messageBody);
+      
+      if (!result.success) {
+        throw new Error(`Failed to send AI response: ${result.error}`);
+      }
       
       // Log system activity
       await storage.createSystemActivity({
