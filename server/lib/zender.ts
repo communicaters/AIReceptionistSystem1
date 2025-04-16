@@ -536,6 +536,25 @@ export class ZenderService {
         }
       });
       
+      // Generate AI response to the incoming message
+      try {
+        await this.generateAndSendAIResponse(sender, message);
+      } catch (error) {
+        console.error('Error generating AI response:', error);
+        
+        // Log the error but don't fail the entire webhook processing
+        await storage.createSystemActivity({
+          module: 'WhatsApp',
+          event: 'AI Response Failed',
+          status: 'Error',
+          timestamp: new Date(),
+          details: {
+            error: error instanceof Error ? error.message : String(error),
+            from: sender
+          }
+        });
+      }
+      
       return true;
     } catch (error) {
       console.error('Error processing Zender webhook:', error);
@@ -638,6 +657,125 @@ export class ZenderService {
     } catch (error) {
       console.error('Error processing status update webhook:', error);
       return false;
+    }
+  }
+  
+  /**
+   * Generate an AI response to an incoming message and send it back to the user
+   */
+  private async generateAndSendAIResponse(phoneNumber: string, incomingMessage: string): Promise<void> {
+    try {
+      console.log(`Generating AI response to message from ${phoneNumber}: ${incomingMessage.substring(0, 50)}...`);
+      
+      // Get training data to include in the prompt
+      const trainingData = await storage.getTrainingDataByUserId(this.userId);
+      const trainingContent = trainingData.map(item => 
+        `${item.category}: ${item.content}`
+      ).join('\n\n');
+      
+      // Get product data to include in the prompt
+      const products = await storage.getProductDataByUserId(this.userId);
+      const productContent = products.map(product => 
+        `Product: ${product.name}\nDescription: ${product.description || 'N/A'}\nPrice: $${(product.priceInCents / 100).toFixed(2)}\nSKU: ${product.sku}`
+      ).join('\n\n');
+      
+      // Create the prompt
+      const systemPrompt = `You are an AI assistant for a business. Respond to customer inquiries in a helpful, professional manner. 
+Keep responses concise but informative (max 3-4 sentences). Include relevant information about products or services when needed.
+
+Available products:
+${productContent}
+
+Business information and common responses:
+${trainingContent}
+
+If the customer is asking about pricing, availability, or product details, provide the relevant information from the product catalog.
+If the customer requests a meeting or callback, politely acknowledge this and state someone will contact them soon.
+Be friendly but professional at all times.`;
+
+      // Create messages array
+      const messages = [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: incomingMessage }
+      ];
+      
+      // Request completion from OpenAI
+      if (!process.env.OPENAI_API_KEY) {
+        throw new Error("OpenAI API key not configured");
+      }
+      
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: "gpt-4o", // Use the latest model
+          messages: messages,
+          max_tokens: 300,
+          temperature: 0.7
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error('OpenAI API error:', errorData);
+        throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`);
+      }
+      
+      const responseData = await response.json();
+      const aiResponse = responseData.choices[0].message.content.trim();
+      
+      console.log(`AI generated response: ${aiResponse.substring(0, 100)}...`);
+      
+      // Log system activity about AI generating a response
+      await storage.createSystemActivity({
+        module: 'WhatsApp',
+        event: 'AI Response Generated',
+        status: 'Completed',
+        timestamp: new Date(),
+        details: {
+          to: phoneNumber,
+          messagePreview: aiResponse.substring(0, 100) + (aiResponse.length > 100 ? '...' : '')
+        }
+      });
+      
+      // Get active WhatsApp template for sent messages
+      const sentTemplates = await storage.getWhatsappTemplatesByCategory(this.userId, 'sent');
+      let messageBody = aiResponse;
+      
+      // Use template if available
+      if (sentTemplates.length > 0) {
+        // Sort by most recently updated and take the first one
+        const template = sentTemplates.sort((a, b) => 
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        )[0];
+        
+        // Update template's lastUsed timestamp
+        await storage.updateWhatsappTemplate(template.id, {});
+        
+        // Use the template content with AI message as a variable
+        messageBody = template.content.replace('{{message}}', aiResponse);
+      }
+      
+      // Send the AI response back to the user
+      await this.sendMessage(phoneNumber, messageBody);
+      
+      // Log system activity
+      await storage.createSystemActivity({
+        module: 'WhatsApp',
+        event: 'AI Response Sent',
+        status: 'Completed',
+        timestamp: new Date(),
+        details: {
+          to: phoneNumber,
+          messageContent: messageBody.substring(0, 100) + (messageBody.length > 100 ? '...' : '')
+        }
+      });
+    } catch (error) {
+      console.error('Error generating or sending AI response:', error);
+      throw error;
     }
   }
 }
