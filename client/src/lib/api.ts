@@ -1,5 +1,72 @@
 import { apiRequest } from "./queryClient";
 
+// AI Training Data Types
+export interface TrainingData {
+  id: number;
+  userId: number;
+  category: string;
+  content: string;
+  metadata?: any;
+  embedding?: any;
+  createdAt: string;
+}
+
+export interface Intent {
+  id: number;
+  userId: number;
+  intent: string;
+  examples: string[];
+}
+
+// AI Training API Functions
+export const getTrainingData = async (category?: string): Promise<TrainingData[]> => {
+  const url = category 
+    ? `/api/training/data?category=${encodeURIComponent(category)}` 
+    : '/api/training/data';
+  const response = await apiRequest('GET', url);
+  return response.json();
+};
+
+export const createTrainingData = async (data: {
+  category: string;
+  content: string;
+  userId?: number;
+  metadata?: any;
+}): Promise<TrainingData> => {
+  const response = await apiRequest('POST', '/api/training/data', {
+    ...data,
+    userId: data.userId || 1 // Default to user 1 if not provided
+  });
+  return response.json();
+};
+
+export const deleteTrainingData = async (id: number): Promise<any> => {
+  const response = await apiRequest('DELETE', `/api/training/data/${id}`);
+  return response.json();
+};
+
+export const getIntents = async (): Promise<Intent[]> => {
+  const response = await apiRequest('GET', '/api/training/intents');
+  return response.json();
+};
+
+export const createIntent = async (data: {
+  intent: string;
+  examples: string[];
+  userId?: number;
+}): Promise<Intent> => {
+  const response = await apiRequest('POST', '/api/training/intents', {
+    ...data,
+    userId: data.userId || 1 // Default to user 1 if not provided
+  });
+  return response.json();
+};
+
+export const deleteIntent = async (id: number): Promise<any> => {
+  const response = await apiRequest('DELETE', `/api/training/intents/${id}`);
+  return response.json();
+};
+
 export interface ModuleStatus {
   id: number;
   name: string;
@@ -241,20 +308,7 @@ export interface Product {
   } | null;
 }
 
-export interface TrainingData {
-  id: number;
-  userId: number;
-  category: string;
-  question: string;
-  answer: string;
-}
-
-export interface IntentMap {
-  id: number;
-  userId: number;
-  intent: string;
-  examples: string[];
-}
+// These interfaces were replaced by the ones at the top of the file
 
 // API functions
 export const updateModuleStatus = async (
@@ -728,27 +782,4 @@ export const createProduct = async (product: Omit<Product, "id">): Promise<Produ
   return response.json();
 };
 
-export const getTrainingData = async (category?: string): Promise<TrainingData[]> => {
-  const queryParams = category ? `?category=${category}` : "";
-  const response = await apiRequest("GET", `/api/training/data${queryParams}`);
-  return response.json();
-};
-
-export const createTrainingData = async (
-  data: Omit<TrainingData, "id">
-): Promise<TrainingData> => {
-  const response = await apiRequest("POST", "/api/training/data", data);
-  return response.json();
-};
-
-export const getIntents = async (): Promise<IntentMap[]> => {
-  const response = await apiRequest("GET", "/api/training/intents");
-  return response.json();
-};
-
-export const createIntent = async (
-  intent: Omit<IntentMap, "id">
-): Promise<IntentMap> => {
-  const response = await apiRequest("POST", "/api/training/intents", intent);
-  return response.json();
-};
+// Training data and intent functions have been moved to the top of this file
