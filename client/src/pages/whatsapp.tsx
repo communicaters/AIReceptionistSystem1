@@ -131,13 +131,21 @@ const WhatsApp = () => {
   // Update pagination when response changes
   useEffect(() => {
     if (whatsappLogsResponse?.pagination) {
-      setActivePagination(prev => ({
-        ...prev,
-        total: whatsappLogsResponse.pagination.total,
-        hasMore: whatsappLogsResponse.pagination.hasMore
-      }));
+      if (selectedNumber) {
+        setConversationPagination(prev => ({
+          ...prev,
+          total: whatsappLogsResponse.pagination.total,
+          hasMore: whatsappLogsResponse.pagination.hasMore
+        }));
+      } else {
+        setAllMessagesPagination(prev => ({
+          ...prev,
+          total: whatsappLogsResponse.pagination.total,
+          hasMore: whatsappLogsResponse.pagination.hasMore
+        }));
+      }
     }
-  }, [whatsappLogsResponse, setActivePagination]);
+  }, [whatsappLogsResponse, selectedNumber]);
   
   // Update messages state when logs or selected number changes
   useEffect(() => {
@@ -191,10 +199,19 @@ const WhatsApp = () => {
   
   // Function to load more messages
   const handleLoadMoreMessages = () => {
-    setActivePagination(prev => ({
-      ...prev,
-      offset: prev.offset + prev.limit
-    }));
+    if (selectedNumber) {
+      // If we have a selected number, update the conversation pagination
+      setConversationPagination(prev => ({
+        ...prev,
+        offset: prev.offset + prev.limit
+      }));
+    } else {
+      // Otherwise, update the all messages pagination
+      setAllMessagesPagination(prev => ({
+        ...prev,
+        offset: prev.offset + prev.limit
+      }));
+    }
   };
 
   // Mutation for saving WhatsApp configuration
