@@ -50,6 +50,16 @@ const createTrainingData = async (data: Omit<TrainingData, 'id' | 'userId' | 'cr
   return response.json();
 };
 
+const updateTrainingData = async (id: number, data: Partial<Omit<TrainingData, 'id' | 'userId' | 'createdAt' | 'metadata'>>) => {
+  const response = await apiRequest('PATCH', `/api/training/data/${id}`, data);
+  return response.json();
+};
+
+const deleteTrainingData = async (id: number) => {
+  const response = await apiRequest('DELETE', `/api/training/data/${id}`);
+  return response.json();
+};
+
 const fetchIntents = async () => {
   const response = await apiRequest('GET', '/api/training/intents');
   return response.json();
@@ -91,6 +101,8 @@ const TrainingPage = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showIntentDialog, setShowIntentDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editingTrainingData, setEditingTrainingData] = useState<TrainingData | null>(null);
   const [allCategories, setAllCategories] = useState<string[]>([]);
   
   // Training data queries and mutations
@@ -130,7 +142,7 @@ const TrainingPage = () => {
     }
   }, [trainingData]);
 
-  // Training data mutation
+  // Training data mutations
   const addTrainingDataMutation = useMutation({
     mutationFn: createTrainingData,
     onSuccess: () => {
@@ -144,6 +156,47 @@ const TrainingPage = () => {
     onError: (error: Error) => {
       toast({
         title: "Failed to add training data",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+  
+  // Update training data mutation
+  const updateTrainingDataMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number, data: Partial<Omit<TrainingData, 'id' | 'userId' | 'createdAt' | 'metadata'>> }) => 
+      updateTrainingData(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/training/data'] });
+      toast({
+        title: "Training data updated",
+        description: "Your training data has been successfully updated.",
+      });
+      setShowEditDialog(false);
+      setEditingTrainingData(null);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to update training data",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+  
+  // Delete training data mutation
+  const deleteTrainingDataMutation = useMutation({
+    mutationFn: deleteTrainingData,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/training/data'] });
+      toast({
+        title: "Training data deleted",
+        description: "Your training data has been removed.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to delete training data",
         description: error.message,
         variant: "destructive",
       });
@@ -279,10 +332,25 @@ const TrainingPage = () => {
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex justify-end gap-2">
-                                <Button variant="ghost" size="icon" disabled>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => {
+                                    setEditingTrainingData(item);
+                                    setShowEditDialog(true);
+                                  }}
+                                >
                                   <Edit className="h-4 w-4" />
                                 </Button>
-                                <Button variant="ghost" size="icon" disabled>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => {
+                                    if (confirm('Are you sure you want to delete this training data?')) {
+                                      deleteTrainingDataMutation.mutate(item.id);
+                                    }
+                                  }}
+                                >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </div>
@@ -377,6 +445,29 @@ const TrainingPage = () => {
           </DialogHeader>
           <AddIntentForm onSubmit={(data) => addIntentMutation.mutate(data)} 
                         isLoading={addIntentMutation.isPending} />
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog for editing training data */}
+      <Dialog open={showEditDialog} onOpenChange={(open) => {
+        setShowEditDialog(open);
+        if (!open) setEditingTrainingData(null);
+      }}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Edit Training Data</DialogTitle>
+          </DialogHeader>
+          {editingTrainingData && (
+            <EditTrainingDataForm 
+              trainingData={editingTrainingData}
+              onSubmit={(data) => updateTrainingDataMutation.mutate({ 
+                id: editingTrainingData.id, 
+                data 
+              })} 
+              isLoading={updateTrainingDataMutation.isPending}
+              categories={allCategories} 
+            />
+          )}
         </DialogContent>
       </Dialog>
     </DashboardLayout>
@@ -591,6 +682,107 @@ const AddIntentForm = ({ onSubmit, isLoading }: AddIntentFormProps) => {
         >
           {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Add Intent
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+};
+
+// Edit Training Data form component
+interface EditTrainingDataFormProps {
+  trainingData: TrainingData;
+  onSubmit: (data: Partial<Omit<TrainingData, 'id' | 'userId' | 'createdAt' | 'metadata'>>) => void;
+  isLoading: boolean;
+  categories: string[];
+}
+
+const EditTrainingDataForm = ({ trainingData, onSubmit, isLoading, categories }: EditTrainingDataFormProps) => {
+  const [formData, setFormData] = useState({
+    category: trainingData.category,
+    customCategory: "",
+    content: trainingData.content
+  });
+  
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const category = formData.category === "custom" 
+      ? formData.customCategory.toLowerCase().trim() 
+      : formData.category;
+      
+    if (!category) {
+      return; // Prevent submission without category
+    }
+    
+    onSubmit({
+      category,
+      content: formData.content
+    });
+  };
+  
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="category">Category</Label>
+        <Select 
+          name="category" 
+          value={formData.category} 
+          onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}
+          required
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Select a category" />
+          </SelectTrigger>
+          <SelectContent>
+            {categories.map(category => (
+              <SelectItem key={category} value={category}>
+                {category.charAt(0).toUpperCase() + category.slice(1)}
+              </SelectItem>
+            ))}
+            <SelectItem value="custom">Custom Category</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      
+      {formData.category === "custom" && (
+        <div className="space-y-2">
+          <Label htmlFor="customCategory">Custom Category Name</Label>
+          <Input
+            id="customCategory"
+            name="customCategory"
+            value={formData.customCategory}
+            onChange={handleChange}
+            placeholder="Enter a custom category name"
+            required={formData.category === "custom"}
+          />
+        </div>
+      )}
+      
+      <div className="space-y-2">
+        <Label htmlFor="content">Content</Label>
+        <Textarea
+          id="content"
+          name="content"
+          value={formData.content}
+          onChange={handleChange}
+          placeholder="Enter the training data content. This can be a question, response, or conversation example."
+          rows={8}
+          required
+        />
+      </div>
+      
+      <DialogFooter>
+        <Button type="submit" disabled={isLoading}>
+          {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          Update Training Data
         </Button>
       </DialogFooter>
     </form>
