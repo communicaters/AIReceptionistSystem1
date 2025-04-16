@@ -37,7 +37,9 @@ import {
   Loader2,
   Pencil,
   Trash2,
-  PlusCircle
+  PlusCircle,
+  ChevronUp,
+  ArrowLeft
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -926,20 +928,35 @@ const WhatsApp = () => {
             {!selectedNumber ? (
               // Show conversation list
               <CardContent className="flex-1 overflow-y-auto">
+                {/* "See More" button for loading older messages in "View All" mode */}
+                {!isLoadingLogs && allMessagesPagination.hasMore && (
+                  <div className="flex justify-center mb-4">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={handleLoadMoreMessages}
+                      className="text-xs flex items-center gap-1"
+                    >
+                      <ChevronUp className="h-3 w-3" />
+                      See More Conversations
+                    </Button>
+                  </div>
+                )}
+                
                 {isLoadingLogs ? (
                   <Skeleton className="h-64 w-full" />
                 ) : logsError ? (
                   <div className="bg-red-50 p-4 rounded-md text-red-600">
                     Failed to load WhatsApp message logs
                   </div>
-                ) : !whatsappLogs?.length ? (
+                ) : !allMessages?.length ? (
                   <div className="text-center py-8 text-neutral-500">
                     No WhatsApp conversations found
                   </div>
                 ) : (
                   <div className="space-y-1">
                     {/* Group messages by phone number and show the latest for each */}
-                    {getUniqueConversations(whatsappLogs).map((conversation) => (
+                    {getUniqueConversations(allMessages).map((conversation) => (
                       <div 
                         key={conversation.phoneNumber} 
                         className="flex items-center justify-between p-3 rounded-md hover:bg-accent/50 cursor-pointer"
@@ -976,28 +993,17 @@ const WhatsApp = () => {
                   onBack={() => setSelectedNumber(null)}
                   onRefresh={refetchLogs}
                   pagination={{
-                    total: pagination.total,
-                    limit: pagination.limit,
-                    offset: pagination.offset,
-                    hasMore: pagination.hasMore
+                    total: conversationPagination.total,
+                    limit: conversationPagination.limit,
+                    offset: conversationPagination.offset,
+                    hasMore: conversationPagination.hasMore
                   }}
                   onLoadMore={handleLoadMoreMessages}
                 />
               </div>
             )}
             
-            {!selectedNumber && (
-              <CardFooter>
-                <Button 
-                  variant="outline" 
-                  className="w-full"
-                  onClick={() => refetchLogs()}
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Load More
-                </Button>
-              </CardFooter>
-            )}
+            {/* No footer needed in "View All" mode as we now have the "See More" button at the top */}
           </Card>
         </TabsContent>
       </Tabs>
