@@ -1286,6 +1286,47 @@ export class MemStorage implements IStorage {
   async deleteScheduledEmail(id: number): Promise<boolean> {
     return this.scheduledEmails.delete(id);
   }
+
+  // WhatsApp Templates
+  async getWhatsappTemplate(id: number): Promise<WhatsappTemplate | undefined> {
+    return this.whatsappTemplates.get(id);
+  }
+
+  async getWhatsappTemplatesByUserId(userId: number): Promise<WhatsappTemplate[]> {
+    return Array.from(this.whatsappTemplates.values())
+      .filter((template) => template.userId === userId);
+  }
+
+  async getWhatsappTemplatesByCategory(userId: number, category: string): Promise<WhatsappTemplate[]> {
+    return Array.from(this.whatsappTemplates.values())
+      .filter((template) => template.userId === userId && template.category === category);
+  }
+
+  async getWhatsappTemplatesByProvider(userId: number, provider: string): Promise<WhatsappTemplate[]> {
+    return Array.from(this.whatsappTemplates.values())
+      .filter((template) => template.userId === userId && template.provider === provider);
+  }
+
+  async createWhatsappTemplate(template: InsertWhatsappTemplate): Promise<WhatsappTemplate> {
+    const id = this.currentIds.whatsappTemplates++;
+    const newTemplate: WhatsappTemplate = { ...template, id };
+    this.whatsappTemplates.set(id, newTemplate);
+    return newTemplate;
+  }
+
+  async updateWhatsappTemplate(id: number, template: Partial<InsertWhatsappTemplate>): Promise<WhatsappTemplate | undefined> {
+    const existingTemplate = this.whatsappTemplates.get(id);
+    if (!existingTemplate) return undefined;
+    
+    const updatedTemplate: WhatsappTemplate = { ...existingTemplate, ...template };
+    this.whatsappTemplates.set(id, updatedTemplate);
+    return updatedTemplate;
+  }
+
+  async deleteWhatsappTemplate(id: number): Promise<boolean> {
+    if (!this.whatsappTemplates.has(id)) return false;
+    return this.whatsappTemplates.delete(id);
+  }
 }
 
 import { DatabaseStorage } from './database-storage';
