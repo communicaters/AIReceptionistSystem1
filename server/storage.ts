@@ -11,6 +11,7 @@ import {
   scheduledEmails, ScheduledEmail, InsertScheduledEmail,
   whatsappConfig, WhatsappConfig, InsertWhatsappConfig,
   facebookWhatsappConfig, FacebookWhatsappConfig, InsertFacebookWhatsappConfig,
+  whatsappTemplates, WhatsappTemplate, InsertWhatsappTemplate,
   calendarConfig, CalendarConfig, InsertCalendarConfig,
   productData, ProductData, InsertProductData,
   inventoryStatus, InventoryStatus, InsertInventoryStatus,
@@ -103,6 +104,15 @@ export interface IStorage {
   getFacebookWhatsappConfigByUserId(userId: number): Promise<FacebookWhatsappConfig | undefined>;
   createFacebookWhatsappConfig(config: InsertFacebookWhatsappConfig): Promise<FacebookWhatsappConfig>;
   updateFacebookWhatsappConfig(id: number, config: Partial<InsertFacebookWhatsappConfig>): Promise<FacebookWhatsappConfig | undefined>;
+  
+  // WhatsApp Templates
+  getWhatsappTemplate(id: number): Promise<WhatsappTemplate | undefined>;
+  getWhatsappTemplatesByUserId(userId: number): Promise<WhatsappTemplate[]>;
+  getWhatsappTemplatesByCategory(userId: number, category: string): Promise<WhatsappTemplate[]>;
+  getWhatsappTemplatesByProvider(userId: number, provider: string): Promise<WhatsappTemplate[]>;
+  createWhatsappTemplate(template: InsertWhatsappTemplate): Promise<WhatsappTemplate>;
+  updateWhatsappTemplate(id: number, template: Partial<InsertWhatsappTemplate>): Promise<WhatsappTemplate | undefined>;
+  deleteWhatsappTemplate(id: number): Promise<boolean>;
 
   // Calendar Config
   getCalendarConfig(id: number): Promise<CalendarConfig | undefined>;
