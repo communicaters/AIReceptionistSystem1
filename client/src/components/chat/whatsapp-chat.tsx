@@ -162,9 +162,22 @@ export function WhatsAppChat({
   });
 
   // Auto-scroll to bottom when new messages arrive
+  // Use a ref to prevent infinite updates
+  const prevMessagesLengthRef = useRef<number>(0);
+  
   useEffect(() => {
-    scrollToBottom();
-  }, [localMessages, messages]);
+    // Only scroll down on new messages or first load
+    const currentLength = sortedMessages.length;
+    const prevLength = prevMessagesLengthRef.current;
+    
+    // If this is loading more (pagination) at the top, don't scroll
+    // Only scroll if messages are added at the bottom (new messages) or initial load
+    if (currentLength > prevLength || prevLength === 0) {
+      scrollToBottom();
+    }
+    
+    prevMessagesLengthRef.current = currentLength;
+  }, [sortedMessages.length]);
   
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });

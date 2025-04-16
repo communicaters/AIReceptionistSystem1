@@ -86,16 +86,31 @@ const WhatsApp = () => {
     queryFn: getWhatsappConfig
   });
 
-  // State for pagination
-  const [pagination, setPagination] = useState({
+  // State for pagination (per-conversation pagination)
+  const [conversationPagination, setConversationPagination] = useState({
     limit: 20,
     offset: 0,
     total: 0,
     hasMore: false
   });
   
+  // State for "View All" pagination
+  const [allMessagesPagination, setAllMessagesPagination] = useState({
+    limit: 20,
+    offset: 0,
+    total: 0,
+    hasMore: false
+  });
+  
+  // Get the active pagination based on whether we're looking at a specific conversation
+  const activePagination = selectedNumber ? conversationPagination : allMessagesPagination;
+  const setActivePagination = selectedNumber ? setConversationPagination : setAllMessagesPagination;
+  
   // State to keep track of conversation messages when using pagination
   const [conversationMessages, setConversationMessages] = useState<WhatsappLog[]>([]);
+  
+  // State to keep track of all messages when using pagination in "View All" mode
+  const [allMessages, setAllMessages] = useState<WhatsappLog[]>([]);
   
   // Query for WhatsApp logs
   const { 
@@ -104,8 +119,8 @@ const WhatsApp = () => {
     error: logsError,
     refetch: refetchLogs
   } = useQuery({
-    queryKey: ["/api/whatsapp/logs", pagination.offset, selectedNumber],
-    queryFn: () => getWhatsappLogs(selectedNumber, pagination.limit, pagination.offset)
+    queryKey: ["/api/whatsapp/logs", activePagination.offset, selectedNumber],
+    queryFn: () => getWhatsappLogs(selectedNumber, activePagination.limit, activePagination.offset)
   });
   
   // Derive whatsappLogs from the response and update pagination state
@@ -114,21 +129,23 @@ const WhatsApp = () => {
   // Update pagination when response changes
   useEffect(() => {
     if (whatsappLogsResponse?.pagination) {
-      setPagination(prev => ({
+      setActivePagination(prev => ({
         ...prev,
         total: whatsappLogsResponse.pagination.total,
         hasMore: whatsappLogsResponse.pagination.hasMore
       }));
     }
-  }, [whatsappLogsResponse]);
+  }, [whatsappLogsResponse, setActivePagination]);
   
-  // Update conversation messages when logs or selected number changes
+  // Update messages state when logs or selected number changes
   useEffect(() => {
     if (selectedNumber) {
+      // Individual conversation mode
       const filtered = filterMessagesByPhoneNumber(whatsappLogs, selectedNumber);
+      
       setConversationMessages(prev => {
         // If we're loading more (offset > 0), append new messages to existing ones
-        if (pagination.offset > 0) {
+        if (conversationPagination.offset > 0) {
           // Create a combined list, avoiding duplicates by ID
           const existingIds = new Set(prev.map(msg => msg.id));
           const newMessages = filtered.filter(msg => !existingIds.has(msg.id));
@@ -138,14 +155,41 @@ const WhatsApp = () => {
         return filtered;
       });
     } else {
-      // Reset conversation messages when no number is selected
-      setConversationMessages([]);
+      // "View All" mode
+      // Only update the list when we're specifically in "View All" mode
+      setAllMessages(prev => {
+        // If we're loading more (offset > 0), append new messages to existing ones
+        if (allMessagesPagination.offset > 0) {
+          // Create a combined list, avoiding duplicates by ID
+          const existingIds = new Set(prev.map(msg => msg.id));
+          const newMessages = whatsappLogs.filter(msg => !existingIds.has(msg.id));
+          return [...prev, ...newMessages];
+        }
+        // Otherwise, replace with new messages (for initial load or refresh)
+        return whatsappLogs;
+      });
     }
-  }, [whatsappLogs, selectedNumber, pagination.offset]);
+  }, [whatsappLogs, selectedNumber, conversationPagination.offset, allMessagesPagination.offset]);
+  
+  // When we switch views, reset the conversation messages and pagination
+  useEffect(() => {
+    if (selectedNumber) {
+      // Reset conversation pagination when selecting a new conversation
+      setConversationPagination({
+        limit: 20,
+        offset: 0,
+        total: 0,
+        hasMore: false
+      });
+      setConversationMessages([]);
+    } else {
+      // When going back to "View All" mode, no need to reset allMessages as they're preserved
+    }
+  }, [selectedNumber]);
   
   // Function to load more messages
   const handleLoadMoreMessages = () => {
-    setPagination(prev => ({
+    setActivePagination(prev => ({
       ...prev,
       offset: prev.offset + prev.limit
     }));
