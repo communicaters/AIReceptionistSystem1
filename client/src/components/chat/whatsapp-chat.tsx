@@ -185,7 +185,7 @@ export function WhatsAppChat({
     }
     
     prevMessagesLengthRef.current = currentLength;
-  }, [sortedMessages]); // Watch the whole sortedMessages array for changes
+  }, [sortedMessages.length]);
   
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
