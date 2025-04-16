@@ -635,6 +635,40 @@ export type EmailTemplate = typeof emailTemplates.$inferSelect;
 export type InsertEmailTemplate = z.infer<typeof insertEmailTemplateSchema>;
 
 export type ScheduledEmail = typeof scheduledEmails.$inferSelect;
+
+// WhatsApp message templates
+export const whatsappTemplates = pgTable("whatsapp_templates", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text("name").notNull(),
+  content: text("content").notNull(),
+  description: text("description"),
+  category: text("category").notNull(), // general, support, sales, etc.
+  componentsJson: text("components_json"), // JSON string for template components
+  isActive: boolean("is_active").notNull().default(true),
+  provider: text("provider").notNull().default('facebook'), // facebook, zender
+  templateId: text("template_id"), // ID from the WhatsApp service provider
+  lastUsed: timestamp("last_used"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertWhatsappTemplateSchema = createInsertSchema(whatsappTemplates).omit({
+  id: true,
+  lastUsed: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const whatsappTemplatesRelations = relations(whatsappTemplates, ({ one }) => ({
+  user: one(users, {
+    fields: [whatsappTemplates.userId],
+    references: [users.id],
+  }),
+}));
+
+export type WhatsappTemplate = typeof whatsappTemplates.$inferSelect;
+export type InsertWhatsappTemplate = z.infer<typeof insertWhatsappTemplateSchema>;
 export type InsertScheduledEmail = z.infer<typeof insertScheduledEmailSchema>;
 
 export type WhatsappConfig = typeof whatsappConfig.$inferSelect;
