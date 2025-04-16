@@ -184,6 +184,12 @@ const TrainingPage = () => {
               <Plus className="h-4 w-4 mr-2" />
               Add Intent
             </Button>
+            <Button
+              variant="secondary"
+              onClick={() => window.location.href = "/ai-training/initialize"}
+            >
+              Initialize Training Data
+            </Button>
           </div>
         </div>
 
