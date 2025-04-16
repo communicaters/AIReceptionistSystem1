@@ -73,9 +73,7 @@ function App() {
             </DashboardLayout>
           )}
         </Route>
-        <Route path="/ai-training/initialize">
-          {() => <AddInitialTrainingData />}
-        </Route>
+        <Route path="/ai-training/initialize" component={AddInitialTrainingData} />
         <Route path="/speech-engines">
           {() => (
             <DashboardLayout>
