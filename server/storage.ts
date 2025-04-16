@@ -10,6 +10,7 @@ import {
   emailTemplates, EmailTemplate, InsertEmailTemplate,
   scheduledEmails, ScheduledEmail, InsertScheduledEmail,
   whatsappConfig, WhatsappConfig, InsertWhatsappConfig,
+  facebookWhatsappConfig, FacebookWhatsappConfig, InsertFacebookWhatsappConfig,
   calendarConfig, CalendarConfig, InsertCalendarConfig,
   productData, ProductData, InsertProductData,
   inventoryStatus, InventoryStatus, InsertInventoryStatus,
@@ -91,11 +92,17 @@ export interface IStorage {
   updateScheduledEmailStatus(id: number, status: string, sentAt?: Date): Promise<ScheduledEmail | undefined>;
   deleteScheduledEmail(id: number): Promise<boolean>;
 
-  // WhatsApp Config
+  // WhatsApp Config (Zender)
   getWhatsappConfig(id: number): Promise<WhatsappConfig | undefined>;
   getWhatsappConfigByUserId(userId: number): Promise<WhatsappConfig | undefined>;
   createWhatsappConfig(config: InsertWhatsappConfig): Promise<WhatsappConfig>;
   updateWhatsappConfig(id: number, config: Partial<InsertWhatsappConfig>): Promise<WhatsappConfig | undefined>;
+  
+  // Facebook WhatsApp Config
+  getFacebookWhatsappConfig(id: number): Promise<FacebookWhatsappConfig | undefined>;
+  getFacebookWhatsappConfigByUserId(userId: number): Promise<FacebookWhatsappConfig | undefined>;
+  createFacebookWhatsappConfig(config: InsertFacebookWhatsappConfig): Promise<FacebookWhatsappConfig>;
+  updateFacebookWhatsappConfig(id: number, config: Partial<InsertFacebookWhatsappConfig>): Promise<FacebookWhatsappConfig | undefined>;
 
   // Calendar Config
   getCalendarConfig(id: number): Promise<CalendarConfig | undefined>;
@@ -195,6 +202,7 @@ export class MemStorage implements IStorage {
   private emailTemplates: Map<number, EmailTemplate>;
   private scheduledEmails: Map<number, ScheduledEmail>;
   private whatsappConfigs: Map<number, WhatsappConfig>;
+  private facebookWhatsappConfigs: Map<number, FacebookWhatsappConfig>;
   private calendarConfigs: Map<number, CalendarConfig>;
   private products: Map<number, ProductData>;
   private inventories: Map<number, InventoryStatus>;
@@ -219,6 +227,7 @@ export class MemStorage implements IStorage {
     mailgunConfigs: number;
     chatConfigs: number;
     whatsappConfigs: number;
+    facebookWhatsappConfigs: number;
     calendarConfigs: number;
     products: number;
     inventories: number;
@@ -247,6 +256,7 @@ export class MemStorage implements IStorage {
     this.emailTemplates = new Map();
     this.scheduledEmails = new Map();
     this.whatsappConfigs = new Map();
+    this.facebookWhatsappConfigs = new Map();
     this.calendarConfigs = new Map();
     this.products = new Map();
     this.inventories = new Map();
@@ -274,6 +284,7 @@ export class MemStorage implements IStorage {
       emailTemplates: 1,
       scheduledEmails: 1,
       whatsappConfigs: 1,
+      facebookWhatsappConfigs: 1,
       calendarConfigs: 1,
       products: 1,
       inventories: 1,
