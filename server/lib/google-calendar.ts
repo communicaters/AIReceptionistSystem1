@@ -172,7 +172,10 @@ export async function getAvailableTimeSlots(
     
     // Create map of busy times
     const busyTimes = new Map();
-    busySlots.forEach((slot: { start: string; end: string }) => {
+    busySlots.forEach((slot) => {
+      // Skip slots with undefined start/end
+      if (!slot.start || !slot.end) return;
+      
       const start = new Date(slot.start);
       const end = new Date(slot.end);
       
@@ -219,5 +222,117 @@ export async function getAvailableTimeSlots(
     console.error('Error generating available time slots:', error);
     // Return empty array in case of error
     return [];
+  }
+}
+
+// Helper function for AI to handle meeting scheduling
+// Parse time string in various formats, handle timezones, and create calendar event
+export async function scheduleMeeting(
+  userId: number,
+  options: {
+    attendeeEmail: string,
+    subject?: string,
+    description?: string,
+    dateTimeString: string,
+    duration?: number // in minutes
+  }
+): Promise<{ success: boolean; message: string; eventId?: string; error?: string }> {
+  try {
+    console.log(`Attempting to schedule meeting with options:`, options);
+    
+    const { attendeeEmail, subject = 'Meeting', description = '', dateTimeString, duration = 60 } = options;
+    
+    // Get user's calendar config
+    const config = await storage.getCalendarConfigByUserId(userId);
+    if (!config || !config.isActive) {
+      return { 
+        success: false, 
+        message: 'Calendar integration is not properly configured', 
+        error: 'CALENDAR_NOT_CONFIGURED'
+      };
+    }
+
+    // Parse the date-time string
+    let startDateTime: Date;
+    try {
+      // Handle various date formats
+      startDateTime = new Date(dateTimeString);
+      
+      // Check if the date is valid
+      if (isNaN(startDateTime.getTime())) {
+        throw new Error('Invalid date format');
+      }
+      
+      // If the date is in the past, return error
+      if (startDateTime < new Date()) {
+        return {
+          success: false,
+          message: 'Cannot schedule meetings in the past',
+          error: 'PAST_DATE'
+        };
+      }
+    } catch (error) {
+      console.error('Error parsing date string:', error);
+      return {
+        success: false,
+        message: `Could not understand the date/time format: "${dateTimeString}"`,
+        error: 'INVALID_DATE_FORMAT'
+      };
+    }
+    
+    // Calculate end time
+    const endDateTime = new Date(startDateTime.getTime());
+    endDateTime.setMinutes(endDateTime.getMinutes() + duration);
+    
+    // Check if the requested time is available
+    const busySlots = await getFreebusy(
+      userId,
+      new Date(startDateTime.getTime() - 5 * 60000), // 5 minutes padding before
+      new Date(endDateTime.getTime() + 5 * 60000) // 5 minutes padding after
+    );
+    
+    if (busySlots.length > 0) {
+      return {
+        success: false,
+        message: 'The requested time conflicts with an existing appointment',
+        error: 'TIME_CONFLICT'
+      };
+    }
+    
+    // Create the event
+    const event = await createEvent(userId, {
+      summary: subject,
+      description,
+      start: { dateTime: startDateTime.toISOString() },
+      end: { dateTime: endDateTime.toISOString() },
+      attendees: [{ email: attendeeEmail }]
+    });
+    
+    // Log the meeting in our system
+    const meetingLog = await storage.createMeetingLog({
+      userId,
+      subject,
+      description,
+      startTime: startDateTime,
+      endTime: endDateTime,
+      attendees: [attendeeEmail],
+      googleEventId: event.id,
+      status: 'scheduled'
+    });
+    
+    console.log(`Successfully scheduled meeting: ${event.id}`);
+    
+    return {
+      success: true,
+      message: `Meeting scheduled successfully for ${startDateTime.toLocaleString()}`,
+      eventId: event.id || undefined
+    };
+  } catch (error: any) {
+    console.error('Error scheduling meeting:', error);
+    return {
+      success: false,
+      message: `Failed to schedule meeting: ${error?.message || 'Unknown error'}`,
+      error: 'CALENDAR_API_ERROR'
+    };
   }
 }

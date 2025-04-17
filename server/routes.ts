@@ -2746,14 +2746,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       systemPrompt += "\n\n" + trainingText;
                     }
                     
+                    // Check if this might be a meeting scheduling request
+                    const scheduleKeywords = [
+                      'schedule', 'meeting', 'appointment', 'call', 'book', 'calendar',
+                      'today', 'tomorrow', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday',
+                      'set up', 'meet', 'slot', 'time', 'available', 'pm', 'am'
+                    ];
+                    
+                    const messageHasScheduleKeywords = scheduleKeywords.some(
+                      keyword => messageText.toLowerCase().includes(keyword.toLowerCase())
+                    );
+                    
+                    // Check for email addresses in the message
+                    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+                    const emailMatches = messageText.match(emailRegex);
+                    const attendeeEmail = emailMatches ? emailMatches[0] : null;
+                    
+                    // Add scheduling intent detection to system prompt if keywords detected
+                    let enhancedSystemPrompt = systemPrompt;
+                    if (messageHasScheduleKeywords) {
+                      enhancedSystemPrompt += `\n\nThis appears to be a meeting scheduling request. If the user wants to schedule a meeting:
+1. Extract the requested date and time (convert to ISO format when possible)
+2. Identify the attendee email address
+3. Determine the meeting subject/purpose
+4. Respond in JSON format with these properties: 
+   {
+     "is_scheduling_request": true,
+     "date_time": "YYYY-MM-DD HH:MM:SS", 
+     "email": "user@example.com",
+     "subject": "Meeting subject",
+     "duration_minutes": 30
+   }
+
+For example, if the user says "Schedule a meeting for tomorrow at 2pm with john@example.com", respond with:
+{
+  "is_scheduling_request": true,
+  "date_time": "2025-04-18 14:00:00",
+  "email": "john@example.com",
+  "subject": "Follow-up Meeting",
+  "duration_minutes": 30
+}
+
+If this is NOT a meeting scheduling request, respond normally and set is_scheduling_request to false.`;
+                    }
+                    
                     // Prepare the AI request
                     const messages = [
-                      { role: 'system', content: systemPrompt },
+                      { role: 'system', content: enhancedSystemPrompt },
                       ...messageHistory,
                       { role: 'user', content: messageText }
                     ];
                     
-                    // Call the OpenAI API
+                    // Call the OpenAI API with structured output format
                     const response = await fetch("https://api.openai.com/v1/chat/completions", {
                       method: "POST",
                       headers: {
@@ -2764,7 +2808,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                         model: "gpt-4o", // the newest OpenAI model is "gpt-4o" which was released May 13, 2024
                         messages: messages,
                         temperature: 0.7,
-                        max_tokens: 500
+                        max_tokens: 1000,
+                        response_format: messageHasScheduleKeywords ? { type: "json_object" } : undefined
                       })
                     });
                     
@@ -2773,9 +2818,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     }
                     
                     const aiResponse = await response.json();
-                    const aiReplyText = aiResponse.choices[0].message.content.trim();
+                    let aiReplyText = aiResponse.choices[0].message.content.trim();
+                    let replyToUser = aiReplyText;
+                    
+                    // If this is a scheduling request, process it
+                    if (messageHasScheduleKeywords) {
+                      try {
+                        // Try to parse the response as JSON
+                        const schedulingData = JSON.parse(aiReplyText);
+                        
+                        if (schedulingData.is_scheduling_request === true) {
+                          console.log('Detected meeting scheduling request:', schedulingData);
+                          
+                          // Import the Google Calendar module
+                          const { scheduleMeeting } = require('./lib/google-calendar');
+                          
+                          // Attempt to schedule the meeting
+                          const result = await scheduleMeeting(userId, {
+                            attendeeEmail: schedulingData.email,
+                            subject: schedulingData.subject || 'Meeting',
+                            dateTimeString: schedulingData.date_time,
+                            duration: schedulingData.duration_minutes || 30
+                          });
+                          
+                          if (result.success) {
+                            // Success message to user
+                            replyToUser = `I've scheduled your meeting for ${new Date(schedulingData.date_time).toLocaleString()}. A confirmation has been sent to ${schedulingData.email}. Is there anything else you need help with?`;
+                          } else {
+                            // Send error message
+                            if (result.error === 'CALENDAR_NOT_CONFIGURED') {
+                              replyToUser = "I'm sorry, the calendar system is not properly configured. Please contact support to set up the calendar integration.";
+                            } else if (result.error === 'TIME_CONFLICT') {
+                              replyToUser = "I'm sorry, that time conflicts with an existing appointment. Would you like to try a different time?";
+                            } else if (result.error === 'INVALID_DATE_FORMAT') {
+                              replyToUser = "I couldn't understand the time format. Could you please specify the date and time in a clearer format? For example: 'April 20, 2025 at 2:30 PM'";
+                            } else {
+                              replyToUser = `I'm sorry, I couldn't schedule the meeting. ${result.message}. Please try again later or contact support.`;
+                            }
+                          }
+                        }
+                      } catch (error) {
+                        console.log('Error parsing or processing scheduling data:', error);
+                        // Just use the original AI response if JSON parsing fails
+                      }
+                    }
                     
                     console.log(`AI generated response: ${aiReplyText}`);
+                    
+                    // Replace the original AI response with our final response
+                    aiReplyText = replyToUser;
                     
                     // Determine which WhatsApp service to use for response
                     const whatsappConfig = await storage.getWhatsappConfigByUserId(userId);
