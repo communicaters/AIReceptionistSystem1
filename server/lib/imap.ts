@@ -26,19 +26,50 @@ export async function initImapClient(userId: number): Promise<IMAP | null> {
       return null;
     }
     
-    // Use IMAP-specific settings if provided, otherwise determine from SMTP settings
-    const host = smtpConfig.imapHost || smtpConfig.host.replace('smtp.', 'imap.');
-    const port = smtpConfig.imapPort || 993; // Default to 993 if not specified
+    // Determine IMAP host with better fallback strategy
+    let host = smtpConfig.imapHost;
+    if (!host) {
+      // Try to derive IMAP host from SMTP host with different patterns
+      const smtpHost = smtpConfig.host;
+      if (smtpHost.startsWith('smtp.')) {
+        host = smtpHost.replace('smtp.', 'imap.');
+      } else if (smtpHost.includes('mail.')) {
+        // For generic mail servers, host might be the same
+        host = smtpHost;
+      } else {
+        // Try adding "imap." prefix as a last resort
+        host = `imap.${smtpHost.split('.').slice(1).join('.')}`;
+      }
+      
+      console.log(`IMAP host not explicitly set, derived ${host} from SMTP host ${smtpHost}`);
+    }
+    
+    // Common IMAP port defaults for different security protocols
+    const port = smtpConfig.imapPort || 993; // Default to 993 for secure
     const tls = smtpConfig.imapSecure ?? true; // Default to true if not specified
     
-    // Create IMAP client
+    console.log(`Initializing IMAP client with host=${host}, port=${port}, user=${smtpConfig.username}, tls=${tls ? 'enabled' : 'disabled'}`);
+    
+    // For mail.18plus.io, use specific connection settings that are known to work
+    if (smtpConfig.host === 'mail.18plus.io') {
+      console.log('Detected mail.18plus.io server, using optimized IMAP settings');
+      host = 'mail.18plus.io';
+      // Note: Some mail servers may need a specific port like 143 with STARTTLS instead of 993 with TLS
+    }
+    
+    // Create IMAP client with enhanced debug information
     const imapClient = new IMAP({
       user: smtpConfig.username,
       password: smtpConfig.password,
       host: host,
       port: port,
       tls: tls,
-      tlsOptions: { rejectUnauthorized: false } // For development only
+      debug: console.log, // Enable debug logging for connection issues
+      autotls: 'always', // Try STARTTLS if available
+      tlsOptions: { 
+        rejectUnauthorized: false, // For development only
+        enableTrace: true // Enable TLS trace for debugging
+      }
     });
     
     // Log initialization
@@ -47,7 +78,7 @@ export async function initImapClient(userId: number): Promise<IMAP | null> {
       event: "IMAP Client Initialized",
       status: "Completed",
       timestamp: new Date(),
-      details: { userId, host }
+      details: { userId, host, port, tls, username: smtpConfig.username }
     });
     
     return imapClient;
