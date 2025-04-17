@@ -39,11 +39,12 @@ import {
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { pool } from './db';
+import { userManagement } from './user-management';
 
 const PostgresSessionStore = connectPg(session);
 
 export class DatabaseStorage implements IStorage {
-  sessionStore: session.SessionStore;
+  sessionStore: session.Store;
 
   constructor() {
     this.sessionStore = new PostgresSessionStore({ 
@@ -55,123 +56,59 @@ export class DatabaseStorage implements IStorage {
 
   // Users
   async getUser(id: number): Promise<User | undefined> {
-    try {
-      // Only select columns that definitely exist in the current schema
-      const result = await db
-        .select({
-          id: users.id,
-          username: users.username,
-          password: users.password,
-          fullName: users.fullName,
-          role: users.role,
-          email: users.email,
-        })
-        .from(users)
-        .where(eq(users.id, id));
-      
-      if (result.length === 0) {
-        return undefined;
-      }
-      
-      // Add default values for properties that might not exist in the database yet
-      return {
-        ...result[0],
-        status: 'active',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        emailVerified: false,
-      } as User;
-    } catch (error) {
-      console.error("Error in getUser:", error);
-      return undefined;
-    }
+    return userManagement.getUser(id);
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    try {
-      // Only select columns that definitely exist in the current schema
-      const result = await db
-        .select({
-          id: users.id,
-          username: users.username,
-          password: users.password,
-          fullName: users.fullName,
-          role: users.role,
-          email: users.email,
-        })
-        .from(users)
-        .where(eq(users.username, username));
-      
-      if (result.length === 0) {
-        return undefined;
-      }
-      
-      // Add default values for properties that might not exist in the database yet
-      return {
-        ...result[0],
-        status: 'active',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        emailVerified: false,
-      } as User;
-    } catch (error) {
-      console.error("Error in getUserByUsername:", error);
-      return undefined;
-    }
+    return userManagement.getUserByUsername(username);
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    return userManagement.getUserByEmail(email);
   }
 
   async createUser(user: InsertUser): Promise<User> {
-    // Only include fields that definitely exist in the database
-    const userToInsert = {
-      username: user.username,
-      password: user.password,
-      fullName: user.fullName,
-      role: user.role,
-      email: user.email,
-    };
-    
-    const result = await db.insert(users).values(userToInsert).returning();
-    
-    if (result.length === 0) {
-      throw new Error("Failed to create user");
-    }
-    
-    // Add default values for properties that might not exist in the database yet
-    return {
-      ...result[0],
-      status: 'active',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      emailVerified: false,
-    } as User;
+    return userManagement.createUser(user);
+  }
+
+  async updateUser(id: number, user: Partial<InsertUser>): Promise<User | undefined> {
+    return userManagement.updateUser(id, user);
   }
 
   async getAllUsers(): Promise<User[]> {
-    try {
-      // Only select columns that definitely exist in the current schema
-      const result = await db
-        .select({
-          id: users.id,
-          username: users.username,
-          password: users.password,
-          fullName: users.fullName,
-          role: users.role,
-          email: users.email,
-        })
-        .from(users);
-      
-      // Add default values for properties that might not exist in the database yet
-      return result.map(user => ({
-        ...user,
-        status: 'active',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        emailVerified: false,
-      } as User));
-    } catch (error) {
-      console.error("Error in getAllUsers:", error);
-      return [];
-    }
+    return userManagement.getAllUsers();
+  }
+
+  async updateUserStatus(id: number, status: string): Promise<User | undefined> {
+    return userManagement.updateUserStatus(id, status);
+  }
+
+  async updateUserRole(id: number, role: string): Promise<User | undefined> {
+    return userManagement.updateUserRole(id, role);
+  }
+
+  async updateUserPassword(id: number, password: string): Promise<User | undefined> {
+    return userManagement.updateUserPassword(id, password);
+  }
+
+  async updateUserLastLogin(id: number): Promise<User | undefined> {
+    return userManagement.updateUserLastLogin(id);
+  }
+
+  async verifyUserEmail(id: number): Promise<User | undefined> {
+    return userManagement.verifyUserEmail(id);
+  }
+
+  async setUserResetToken(id: number, token: string, expiry: Date): Promise<User | undefined> {
+    return userManagement.setUserResetToken(id, token, expiry);
+  }
+
+  async getUserByResetToken(token: string): Promise<User | undefined> {
+    return userManagement.getUserByResetToken(token);
+  }
+
+  async deleteUser(id: number): Promise<boolean> {
+    return userManagement.deleteUser(id);
   }
 
   // SIP Config
@@ -781,6 +718,140 @@ export class DatabaseStorage implements IStorage {
   async deleteVoiceSettings(id: number): Promise<boolean> {
     await db.delete(voiceSettings).where(eq(voiceSettings.id, id));
     return true;
+  }
+
+  // User Management - Packages
+  async getPackage(id: number): Promise<Package | undefined> {
+    return userManagement.getPackage(id);
+  }
+
+  async getPackageByName(name: string): Promise<Package | undefined> {
+    return userManagement.getPackageByName(name);
+  }
+
+  async getAllPackages(): Promise<Package[]> {
+    return userManagement.getAllPackages();
+  }
+
+  async getActivePackages(): Promise<Package[]> {
+    return userManagement.getActivePackages();
+  }
+
+  async createPackage(pkg: InsertPackage): Promise<Package> {
+    return userManagement.createPackage(pkg);
+  }
+
+  async updatePackage(id: number, pkg: Partial<InsertPackage>): Promise<Package | undefined> {
+    return userManagement.updatePackage(id, pkg);
+  }
+
+  async deletePackage(id: number): Promise<boolean> {
+    return userManagement.deletePackage(id);
+  }
+
+  // Package Features
+  async getPackageFeature(id: number): Promise<PackageFeature | undefined> {
+    return userManagement.getPackageFeature(id);
+  }
+
+  async getPackageFeaturesByPackageId(packageId: number): Promise<PackageFeature[]> {
+    return userManagement.getPackageFeaturesByPackageId(packageId);
+  }
+
+  async getPackageFeatureByKey(packageId: number, featureKey: string): Promise<PackageFeature | undefined> {
+    return userManagement.getPackageFeatureByKey(packageId, featureKey);
+  }
+
+  async createPackageFeature(feature: InsertPackageFeature): Promise<PackageFeature> {
+    return userManagement.createPackageFeature(feature);
+  }
+
+  async updatePackageFeature(id: number, feature: Partial<InsertPackageFeature>): Promise<PackageFeature | undefined> {
+    return userManagement.updatePackageFeature(id, feature);
+  }
+
+  async deletePackageFeature(id: number): Promise<boolean> {
+    return userManagement.deletePackageFeature(id);
+  }
+
+  // User Packages
+  async getUserPackage(id: number): Promise<UserPackage | undefined> {
+    return userManagement.getUserPackage(id);
+  }
+
+  async getUserPackagesByUserId(userId: number): Promise<UserPackage[]> {
+    return userManagement.getUserPackagesByUserId(userId);
+  }
+
+  async getActiveUserPackage(userId: number): Promise<UserPackage | undefined> {
+    return userManagement.getActiveUserPackage(userId);
+  }
+
+  async createUserPackage(userPackage: InsertUserPackage): Promise<UserPackage> {
+    return userManagement.createUserPackage(userPackage);
+  }
+
+  async updateUserPackage(id: number, userPackage: Partial<InsertUserPackage>): Promise<UserPackage | undefined> {
+    return userManagement.updateUserPackage(id, userPackage);
+  }
+
+  async deactivateUserPackage(id: number): Promise<UserPackage | undefined> {
+    return userManagement.deactivateUserPackage(id);
+  }
+
+  async deleteUserPackage(id: number): Promise<boolean> {
+    return userManagement.deleteUserPackage(id);
+  }
+
+  // Feature Usage Logs
+  async getFeatureUsageLog(id: number): Promise<FeatureUsageLog | undefined> {
+    return userManagement.getFeatureUsageLog(id);
+  }
+
+  async getFeatureUsageLogsByUserId(userId: number): Promise<FeatureUsageLog[]> {
+    return userManagement.getFeatureUsageLogsByUserId(userId);
+  }
+
+  async getFeatureUsageLogsByFeatureKey(userId: number, featureKey: string): Promise<FeatureUsageLog[]> {
+    return userManagement.getFeatureUsageLogsByFeatureKey(userId, featureKey);
+  }
+
+  async getFeatureUsageSummary(userId: number, timeframe?: string): Promise<any> {
+    return userManagement.getFeatureUsageSummary(userId, timeframe);
+  }
+
+  async createFeatureUsageLog(log: InsertFeatureUsageLog): Promise<FeatureUsageLog> {
+    return userManagement.createFeatureUsageLog(log);
+  }
+
+  // Login Activity
+  async getLoginActivity(id: number): Promise<LoginActivity | undefined> {
+    return userManagement.getLoginActivity(id);
+  }
+
+  async getLoginActivitiesByUserId(userId: number, limit?: number): Promise<LoginActivity[]> {
+    return userManagement.getLoginActivitiesByUserId(userId, limit);
+  }
+
+  async createLoginActivity(activity: InsertLoginActivity): Promise<LoginActivity> {
+    return userManagement.createLoginActivity(activity);
+  }
+
+  // Admin Reports Cache
+  async getReportCache(id: number): Promise<AdminReportsCache | undefined> {
+    return userManagement.getReportCache(id);
+  }
+
+  async getReportCacheByType(reportType: string): Promise<AdminReportsCache | undefined> {
+    return userManagement.getReportCacheByType(reportType);
+  }
+
+  async createReportCache(report: InsertAdminReportsCache): Promise<AdminReportsCache> {
+    return userManagement.createReportCache(report);
+  }
+
+  async deleteReportCache(id: number): Promise<boolean> {
+    return userManagement.deleteReportCache(id);
   }
 
   // Email Templates
