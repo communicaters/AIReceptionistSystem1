@@ -387,7 +387,41 @@ export class ZenderService {
       if (data.type === 'whatsapp') {
         console.log('Processing webhook in Zender whatsapp format (type=whatsapp)');
         
-        // Handle both array format and object format
+        // Special handling for the form-encoded format with data[property] AND type=whatsapp
+        if (!data.data && Object.keys(data).some(k => k.startsWith('data['))) {
+          console.log('DEBUG: Detected form-encoded data with type=whatsapp');
+          
+          // Extract form-encoded data directly
+          const keys = Object.keys(data);
+          const widKey = keys.find(k => k === 'data[wid]');
+          const phoneKey = keys.find(k => k === 'data[phone]');
+          const messageKey = keys.find(k => k === 'data[message]');
+          const idKey = keys.find(k => k === 'data[id]');
+          const attachmentKey = keys.find(k => k === 'data[attachment]');
+          const timestampKey = keys.find(k => k === 'data[timestamp]');
+          
+          if ((widKey || phoneKey) && messageKey) {
+            sender = widKey ? data[widKey] : data[phoneKey];
+            message = data[messageKey];
+            
+            if (idKey) {
+              messageId = data[idKey];
+            }
+            
+            if (attachmentKey && data[attachmentKey] !== '0') {
+              mediaUrl = data[attachmentKey];
+            }
+            
+            if (timestampKey && data[timestampKey]) {
+              timestamp = new Date(parseInt(data[timestampKey]) * 1000);
+            }
+            
+            console.log(`Extracted data from whatsapp webhook form-encoded format: ${sender}, ${message}`);
+            return { sender, message, mediaUrl, timestamp, messageId };
+          }
+        }
+        
+        // Regular handling for data object
         let webhookData;
         
         if (typeof data.data === 'object') {
