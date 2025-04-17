@@ -538,6 +538,7 @@ export const meetingLogs = pgTable("meeting_logs", {
   googleEventId: text("google_event_id"),
   status: text("status").notNull(),
   meetingLink: text("meeting_link"),
+  timezone: text("timezone"), // Add timezone field
 });
 
 export const insertMeetingLogSchema = createInsertSchema(meetingLogs).omit({

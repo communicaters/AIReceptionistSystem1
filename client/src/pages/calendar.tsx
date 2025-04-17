@@ -165,6 +165,7 @@ const Calendar = () => {
       startTime: string;
       endTime: string;
       attendees: string[];
+      timezone?: string;
     }) => createMeeting(meetingData),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/calendar/meetings"] });
@@ -348,12 +349,17 @@ const Calendar = () => {
       .map(email => email.trim())
       .filter(email => email.length > 0);
     
+    // Get browser timezone
+    const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    console.log(`Creating meeting in timezone: ${userTimezone}`);
+    
     createMeetingMutation.mutate({
       subject,
       description: description || undefined,
       startTime: startTime.toISOString(),
       endTime: endTime.toISOString(),
-      attendees: attendeesList
+      attendees: attendeesList,
+      timezone: userTimezone
     });
   };
 

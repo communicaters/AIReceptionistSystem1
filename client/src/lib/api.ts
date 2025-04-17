@@ -774,9 +774,18 @@ export const createMeeting = async (
     startTime: string;
     endTime: string;
     attendees: string[];
+    timezone?: string; // Add timezone parameter
   }
 ): Promise<MeetingLog> => {
-  const response = await apiRequest("POST", "/api/calendar/meetings", meeting);
+  // Get browser timezone if not explicitly provided
+  const userTimezone = meeting.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  
+  // Include timezone in meeting data
+  const response = await apiRequest("POST", "/api/calendar/meetings", {
+    ...meeting,
+    timezone: userTimezone
+  });
+  
   return response.json();
 };
 
