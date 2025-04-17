@@ -312,13 +312,19 @@ export async function scheduleMeeting(
       };
     }
     
-    // Create the event
+    // Create the event with Google Meet enabled
     const event = await createEvent(userId, {
       summary: subject,
       description,
       start: { dateTime: startDateTime.toISOString() },
       end: { dateTime: endDateTime.toISOString() },
-      attendees: [{ email: attendeeEmail }]
+      attendees: [{ email: attendeeEmail }],
+      // Add conferenceData to request a Google Meet link
+      conferenceData: {
+        createRequest: {
+          requestId: `meeting-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
+        }
+      }
     });
     
     // Extract meeting link from event data

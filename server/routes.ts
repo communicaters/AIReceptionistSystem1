@@ -2928,7 +2928,63 @@ If this is NOT a meeting scheduling request, respond normally and set is_schedul
                             } else {
                               // No meeting link available
                               if (schedulingData.email) {
-                                replyToUser = `I've scheduled your meeting for ${formattedDate}. A confirmation has been sent to ${schedulingData.email}. Is there anything else you need help with?`;
+                                // Send confirmation email with meeting details
+                                try {
+                                  const emailService = await getEmailServiceForUser(userId);
+                                  
+                                  // Create email content with the meeting details
+                                  const emailSubject = `Meeting Confirmation: ${subject}`;
+                                  const emailBody = `
+                                    <h2>Meeting Confirmation</h2>
+                                    <p>Your meeting has been scheduled for <strong>${formattedDate}</strong>.</p>
+                                    <p><strong>Subject:</strong> ${subject}</p>
+                                    ${description ? `<p><strong>Description:</strong> ${description}</p>` : ''}
+                                    ${result.meetingLink ? `<p><strong>Meeting Link:</strong> <a href="${result.meetingLink}">${result.meetingLink}</a></p>` : ''}
+                                    <p>This meeting has been added to your calendar.</p>
+                                    <p>Thank you for using our AI Receptionist service.</p>
+                                  `;
+                                  
+                                  // Send the email
+                                  const emailSendResult = await emailService.sendEmail({
+                                    to: schedulingData.email,
+                                    subject: emailSubject,
+                                    html: emailBody,
+                                    text: emailBody.replace(/<[^>]*>/g, '') // Strip HTML for text version
+                                  });
+                                  
+                                  // Log the result
+                                  await storage.createEmailLog({
+                                    userId,
+                                    fromEmail: emailService.fromEmail,
+                                    toEmail: schedulingData.email,
+                                    subject: emailSubject,
+                                    body: emailBody,
+                                    timestamp: new Date(),
+                                    status: emailSendResult.success ? 'sent' : 'failed',
+                                    service: emailService.type,
+                                    messageId: emailSendResult.messageId || null
+                                  });
+                                  
+                                  console.log(`Meeting confirmation email ${emailSendResult.success ? 'sent' : 'failed'} to ${schedulingData.email}`);
+                                  
+                                  // Create system activity log
+                                  await storage.createSystemActivity({
+                                    module: "Email",
+                                    event: "Meeting Confirmation Email",
+                                    status: emailSendResult.success ? "success" : "failed",
+                                    timestamp: new Date(),
+                                    details: { 
+                                      email: schedulingData.email,
+                                      meetingTime: formattedDate,
+                                      meetingLink: result.meetingLink || 'No link available'
+                                    }
+                                  });
+                                  
+                                  replyToUser = `I've scheduled your meeting for ${formattedDate}. A confirmation has been sent to ${schedulingData.email}. Is there anything else you need help with?`;
+                                } catch (error) {
+                                  console.error("Error sending meeting confirmation email:", error);
+                                  replyToUser = `I've scheduled your meeting for ${formattedDate}. However, there was an issue sending the confirmation email. The event has been added to the calendar. Is there anything else you need help with?`;
+                                }
                               } else {
                                 replyToUser = `I've scheduled your meeting for ${formattedDate}. The event has been added to the calendar. Is there anything else you need help with?`;
                               }
