@@ -36,18 +36,24 @@ export default function Login() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
     try {
-      const response = await apiRequest("/api/auth/login", {
+      const requestOptions: RequestInit = {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
         body: JSON.stringify(values),
-      });
+      };
+      
+      const response = await fetch("/api/auth/login", requestOptions);
+      const data = await response.json();
 
-      if (response.token) {
+      if (response.ok && data.token) {
         // Save the token to localStorage
-        localStorage.setItem("authToken", response.token);
+        localStorage.setItem("authToken", data.token);
         
         // Store user info
-        if (response.user) {
-          localStorage.setItem("userInfo", JSON.stringify(response.user));
+        if (data.user) {
+          localStorage.setItem("userInfo", JSON.stringify(data.user));
         }
         
         toast({
@@ -60,7 +66,7 @@ export default function Login() {
       } else {
         toast({
           title: "Login failed",
-          description: response.message || "Invalid credentials",
+          description: data.message || "Invalid credentials",
           variant: "destructive",
         });
       }

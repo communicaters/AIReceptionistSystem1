@@ -51,12 +51,18 @@ export default function Register() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
     try {
-      const response = await apiRequest("/api/auth/register", {
+      const requestOptions: RequestInit = {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
         body: JSON.stringify(values),
-      });
+      };
+      
+      const response = await fetch("/api/auth/register", requestOptions);
+      const data = await response.json();
 
-      if (response.user) {
+      if (response.ok && data.user) {
         toast({
           title: "Registration successful",
           description: "Please check your email to verify your account.",
@@ -66,7 +72,7 @@ export default function Register() {
       } else {
         toast({
           title: "Registration failed",
-          description: response.message || "An error occurred during registration.",
+          description: data.message || "An error occurred during registration.",
           variant: "destructive",
         });
       }
