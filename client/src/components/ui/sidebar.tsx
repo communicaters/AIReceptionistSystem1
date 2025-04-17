@@ -12,7 +12,13 @@ import {
   HelpCircle,
   LogOut,
   Home,
+  Users,
+  PackageCheck,
+  BarChart,
+  ShieldCheck,
+  UserCog
 } from "lucide-react";
+import { useAuth } from "@/components/providers/auth-provider";
 
 interface SidebarProps {
   isMobileOpen: boolean;
@@ -21,7 +27,10 @@ interface SidebarProps {
 
 const Sidebar = ({ isMobileOpen, setIsMobileOpen }: SidebarProps) => {
   const [location] = useLocation();
-
+  const { user, logout } = useAuth();
+  
+  const isAdmin = user?.role === 'admin';
+  
   const isActive = (path: string) => {
     return location === path;
   };
@@ -212,6 +221,62 @@ const Sidebar = ({ isMobileOpen, setIsMobileOpen }: SidebarProps) => {
           </a>
         </Link>
 
+        {isAdmin && (
+          <>
+            <div className="px-4 py-2 mt-4 text-neutral-400 text-xs uppercase font-semibold">
+              Administration
+            </div>
+            <Link href="/admin/dashboard">
+              <a
+                className={`flex items-center px-4 py-3 ${
+                  isActive("/admin/dashboard")
+                    ? "text-white bg-primary hover:bg-primary-dark"
+                    : "text-neutral-300 hover:bg-neutral-700"
+                }`}
+              >
+                <ShieldCheck className="w-5 h-5" />
+                <span className="ml-3">Admin Dashboard</span>
+              </a>
+            </Link>
+            <Link href="/admin/users">
+              <a
+                className={`flex items-center px-4 py-3 ${
+                  isActive("/admin/users")
+                    ? "text-white bg-primary hover:bg-primary-dark"
+                    : "text-neutral-300 hover:bg-neutral-700"
+                }`}
+              >
+                <Users className="w-5 h-5" />
+                <span className="ml-3">User Management</span>
+              </a>
+            </Link>
+            <Link href="/admin/packages">
+              <a
+                className={`flex items-center px-4 py-3 ${
+                  isActive("/admin/packages")
+                    ? "text-white bg-primary hover:bg-primary-dark"
+                    : "text-neutral-300 hover:bg-neutral-700"
+                }`}
+              >
+                <PackageCheck className="w-5 h-5" />
+                <span className="ml-3">Package Management</span>
+              </a>
+            </Link>
+            <Link href="/admin/reports">
+              <a
+                className={`flex items-center px-4 py-3 ${
+                  isActive("/admin/reports")
+                    ? "text-white bg-primary hover:bg-primary-dark"
+                    : "text-neutral-300 hover:bg-neutral-700"
+                }`}
+              >
+                <BarChart className="w-5 h-5" />
+                <span className="ml-3">Reports & Analytics</span>
+              </a>
+            </Link>
+          </>
+        )}
+        
         <div className="px-4 py-2 mt-4 text-neutral-400 text-xs uppercase font-semibold">
           More
         </div>
@@ -222,13 +287,13 @@ const Sidebar = ({ isMobileOpen, setIsMobileOpen }: SidebarProps) => {
           <HelpCircle className="w-5 h-5" />
           <span className="ml-3">Help & Support</span>
         </a>
-        <a
-          href="#"
-          className="flex items-center px-4 py-3 text-neutral-300 hover:bg-neutral-700"
+        <button
+          onClick={logout}
+          className="w-full text-left flex items-center px-4 py-3 text-neutral-300 hover:bg-neutral-700"
         >
           <LogOut className="w-5 h-5" />
           <span className="ml-3">Logout</span>
-        </a>
+        </button>
       </nav>
     </aside>
   );
