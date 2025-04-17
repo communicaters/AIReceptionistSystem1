@@ -2869,16 +2869,23 @@ If this is NOT a meeting scheduling request, respond normally and set is_schedul
                           });
                           
                           if (result.success) {
-                            // Format date for better readability
-                            const formattedDate = new Date(schedulingData.date_time).toLocaleString('en-US', {
+                            // Format date for better readability with timezone
+                            const meetingDate = new Date(schedulingData.date_time);
+                            
+                            // Create formatter with timezone if specified
+                            const formatOptions = {
                               weekday: 'long',
                               year: 'numeric',
                               month: 'long',
                               day: 'numeric',
                               hour: 'numeric',
                               minute: 'numeric',
-                              hour12: true
-                            });
+                              hour12: true,
+                              timeZone: schedulingData.timezone || 'America/New_York' // Default to Eastern Time
+                            };
+                            
+                            console.log(`Formatting meeting date with timezone: ${formatOptions.timeZone}`);
+                            const formattedDate = meetingDate.toLocaleString('en-US', formatOptions);
                             
                             // Success message to user with meeting link if available
                             if (result.meetingLink) {
