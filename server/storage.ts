@@ -218,6 +218,8 @@ export interface IStorage {
   // Email Logs
   getEmailLog(id: number): Promise<EmailLog | undefined>;
   getEmailLogsByUserId(userId: number, limit?: number): Promise<EmailLog[]>;
+  getEmailLogByMessageId(messageId: string): Promise<EmailLog | undefined>;
+  getEmailLogsByFromAndSubject(userId: number, from: string, subject: string): Promise<EmailLog[]>;
   createEmailLog(log: InsertEmailLog): Promise<EmailLog>;
 
   // Chat Logs
@@ -1198,6 +1200,24 @@ export class MemStorage implements IStorage {
       .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
     return limit ? logs.slice(0, limit) : logs;
+  }
+  
+  async getEmailLogByMessageId(messageId: string): Promise<EmailLog | undefined> {
+    if (!messageId) return undefined;
+    
+    return Array.from(this.emailLogs.values())
+      .find((log) => log.messageId === messageId);
+  }
+  
+  async getEmailLogsByFromAndSubject(userId: number, from: string, subject: string): Promise<EmailLog[]> {
+    return Array.from(this.emailLogs.values())
+      .filter((log) => 
+        log.userId === userId && 
+        log.from === from && 
+        log.subject === subject
+      )
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+      .slice(0, 10);
   }
 
   async createEmailLog(log: InsertEmailLog): Promise<EmailLog> {
