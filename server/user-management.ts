@@ -99,12 +99,17 @@ export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage
   };
   
   storage.updateUserLastLogin = async function(id: number): Promise<User> {
-    const [result] = await this.db
-      .update(this.schema.users)
-      .set({ lastLogin: new Date(), updatedAt: new Date() })
-      .where(eq(this.schema.users.id, id))
-      .returning();
-    return result;
+    try {
+      const [result] = await db
+        .update(users)
+        .set({ lastLogin: new Date(), updatedAt: new Date() })
+        .where(eq(users.id, id))
+        .returning();
+      return result;
+    } catch (error) {
+      console.error("Error in updateUserLastLogin:", error);
+      throw error;
+    }
   };
   
   storage.verifyUserEmail = async function(id: number): Promise<User> {
@@ -455,8 +460,13 @@ export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage
    */
   
   storage.createLoginActivity = async function(activity: InsertLoginActivity): Promise<LoginActivity> {
-    const [result] = await this.db.insert(this.schema.loginActivity).values(activity).returning();
-    return result;
+    try {
+      const [result] = await db.insert(loginActivity).values(activity).returning();
+      return result;
+    } catch (error) {
+      console.error("Error in createLoginActivity:", error);
+      throw error;
+    }
   };
   
   storage.getLoginActivitiesByUserId = async function(userId: number, limit: number = 10): Promise<LoginActivity[]> {
