@@ -1304,7 +1304,7 @@ const EmailManagement = () => {
         });
         
         // Refresh email logs to show updated replied status
-        emailLogsQuery.refetch();
+        refetchEmailLogs();
       } else {
         toast({
           title: "Failed to send reply",
