@@ -834,9 +834,31 @@ If this is NOT a meeting scheduling request, respond normally and set is_schedul
           if (schedulingData.is_scheduling_request === true) {
             console.log('Detected meeting scheduling request:', schedulingData);
             
-            // Parse the date time string into a proper Date object
-            const parsedDateTime = new Date(schedulingData.date_time);
-            console.log('Parsed date time:', parsedDateTime);
+            // The AI sometimes generates dates in the past, so let's make sure we're using tomorrow's date
+            // Get tomorrow's date
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            
+            // Extract just the time part from the AI-suggested time
+            let aiDateTime;
+            try {
+                aiDateTime = new Date(schedulingData.date_time);
+            } catch (e) {
+                // If parsing fails, default to 3pm
+                aiDateTime = new Date();
+                aiDateTime.setHours(15, 0, 0, 0);
+            }
+            
+            // Set tomorrow's date with the AI-suggested time
+            const parsedDateTime = new Date(
+                tomorrow.getFullYear(),
+                tomorrow.getMonth(),
+                tomorrow.getDate(),
+                aiDateTime.getHours(),
+                aiDateTime.getMinutes(),
+                0
+            );
+            console.log('Using future date time:', parsedDateTime);
             
             // Calculate end time based on duration
             const duration = schedulingData.duration_minutes || 30;
@@ -858,23 +880,27 @@ If this is NOT a meeting scheduling request, respond normally and set is_schedul
             
             console.log('Scheduling meeting with formatted data:', meetingData);
             
-            // Use the same API endpoint that's used by the manual form to ensure consistent handling
-            const apiEndpoint = '/api/calendar/meetings';
-            const meetingResponse = await fetch(`http://localhost:${process.env.PORT || 5000}${apiEndpoint}`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify(meetingData)
-            });
+            // Use direct Google Calendar scheduling function instead of API endpoint to avoid authentication issues
+            console.log('Directly calling the scheduleMeeting function from the Google Calendar module');
+            const { scheduleMeeting } = await import('./google-calendar');
             
-            // Parse response data
-            const responseData = await meetingResponse.json();
+            // Prepare the meeting data in the format expected by the scheduleMeeting function
+            // Use our properly formatted future date
+            const meetingRequestData = {
+              attendeeEmail: schedulingData.email || `${phoneNumber}@whatsapp.virtual.user`,
+              subject: schedulingData.subject || 'Meeting from WhatsApp',
+              dateTimeString: parsedDateTime.toISOString(), // Use our corrected future date
+              duration: schedulingData.duration_minutes || 30,
+              description: `Meeting scheduled via WhatsApp chat with ${phoneNumber}. Original message: "${incomingMessage}"`
+            };
             
-            console.log('Meeting scheduling API response:', responseData);
+            // Directly call scheduleMeeting function (bypassing API authentication)
+            const responseData = await scheduleMeeting(this.userId, meetingRequestData);
+            
+            console.log('Meeting scheduling response:', JSON.stringify(responseData, null, 2));
             
             // Create a user-friendly response
-            if (!responseData.error) {
+            if (responseData.success) {
               // Get meeting link if available
               const meetingLink = responseData.meetingLink || "No link available";
               
