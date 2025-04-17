@@ -1,8 +1,12 @@
 import { Router } from 'express';
 import { storage } from '../storage';
-import { apiResponse } from '../lib/utils';
 import { scheduleMeeting } from '../lib/google-calendar';
 import { getZenderService } from '../lib/zender';
+
+// Helper function to handle API responses
+function apiResponse(res: any, data: any, status = 200) {
+  return res.status(status).json(data);
+}
 
 const router = Router();
 

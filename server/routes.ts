@@ -23,6 +23,7 @@ import { getFacebookWhatsappService } from "./lib/facebook-whatsapp";
 import { setupWebsocketHandlers, broadcastMessage } from "./lib/websocket";
 import { aiRouter } from "./routes/ai";
 import { speechRouter } from "./routes/speech";
+import whatsappRouter from "./routes/whatsapp";
 import { authenticate } from "./middleware/auth";
 import express from "express";
 import path from "path";
@@ -295,6 +296,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Register Speech routes
   app.use("/api/speech", speechRouter);
+  
+  // Register WhatsApp routes
+  app.use("/api/whatsapp", whatsappRouter);
   
   // API routes
   app.get("/api/health", (req, res) => {
