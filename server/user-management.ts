@@ -2,8 +2,8 @@ import { eq, and, gte, lt, desc, sql, asc, count, ne, isNull, not, inArray, or }
 import { DatabaseStorage } from './database-storage';
 import { 
   User, InsertUser, 
-  users, packages, packageFeatures, userPackages, featureUsageLogs, loginActivity, reportCache, systemActivity, moduleStatus,
-  insertPackageSchema, insertPackageFeatureSchema, insertUserPackageSchema, insertFeatureUsageLogSchema, insertLoginActivitySchema, insertReportCacheSchema
+  users, packages, packageFeatures, userPackages, featureUsageLogs, loginActivity, adminReportsCache, systemActivity, moduleStatus,
+  insertPackageSchema, insertPackageFeatureSchema, insertUserPackageSchema, insertFeatureUsageLogSchema, insertLoginActivitySchema, insertAdminReportsCacheSchema
 } from '@shared/schema';
 import { compare } from './lib/encryption';
 import { db } from './db';
@@ -486,48 +486,63 @@ export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage
    */
   
   storage.logFeatureUsage = async function(data: InsertFeatureUsageLog): Promise<FeatureUsageLog> {
-    const [result] = await this.db.insert(this.schema.featureUsageLogs).values(data).returning();
-    return result;
+    try {
+      const [result] = await db.insert(featureUsageLogs).values(data).returning();
+      return result;
+    } catch (error) {
+      console.error("Error in logFeatureUsage:", error);
+      throw error;
+    }
   };
   
   storage.getFeatureUsageLogsByUserId = async function(userId: number, limit: number = 100): Promise<FeatureUsageLog[]> {
-    const result = await this.db.query.featureUsageLogs.findMany({
-      where: eq(this.schema.featureUsageLogs.userId, userId),
-      orderBy: [desc(this.schema.featureUsageLogs.usedAt as any)],
-      limit
-    });
-    return result;
+    try {
+      const result = await db.query.featureUsageLogs.findMany({
+        where: eq(featureUsageLogs.userId, userId),
+        orderBy: [desc(featureUsageLogs.usedAt as any)],
+        limit
+      });
+      return result;
+    } catch (error) {
+      console.error("Error in getFeatureUsageLogsByUserId:", error);
+      return [];
+    }
   };
   
   storage.getFeatureUsageLogsByUserIdAndTimeframe = async function(userId: number, timeframe: string): Promise<FeatureUsageLog[]> {
-    const startDate = new Date();
-    
-    switch (timeframe) {
-      case 'day':
-        startDate.setDate(startDate.getDate() - 1);
-        break;
-      case 'week':
-        startDate.setDate(startDate.getDate() - 7);
-        break;
-      case 'month':
-        startDate.setMonth(startDate.getMonth() - 1);
-        break;
-      case 'year':
-        startDate.setFullYear(startDate.getFullYear() - 1);
-        break;
-      default:
-        startDate.setDate(startDate.getDate() - 30); // Default to 30 days
+    try {
+      const startDate = new Date();
+      
+      switch (timeframe) {
+        case 'day':
+          startDate.setDate(startDate.getDate() - 1);
+          break;
+        case 'week':
+          startDate.setDate(startDate.getDate() - 7);
+          break;
+        case 'month':
+          startDate.setMonth(startDate.getMonth() - 1);
+          break;
+        case 'year':
+          startDate.setFullYear(startDate.getFullYear() - 1);
+          break;
+        default:
+          startDate.setDate(startDate.getDate() - 30); // Default to 30 days
+      }
+      
+      const result = await db.query.featureUsageLogs.findMany({
+        where: and(
+          eq(featureUsageLogs.userId, userId),
+          gte(featureUsageLogs.usedAt as any, startDate)
+        ),
+        orderBy: [desc(featureUsageLogs.usedAt as any)]
+      });
+      
+      return result;
+    } catch (error) {
+      console.error("Error in getFeatureUsageLogsByUserIdAndTimeframe:", error);
+      return [];
     }
-    
-    const result = await this.db.query.featureUsageLogs.findMany({
-      where: and(
-        eq(this.schema.featureUsageLogs.userId, userId),
-        gte(this.schema.featureUsageLogs.usedAt as any, startDate)
-      ),
-      orderBy: [desc(this.schema.featureUsageLogs.usedAt as any)]
-    });
-    
-    return result;
   };
   
   storage.getFeatureUsageSummary = async function(userId: number, timeframe: string = 'month'): Promise<any> {
@@ -571,36 +586,41 @@ export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage
   };
   
   storage.getFeatureUsageSummaryByTimeframe = async function(timeframe: string): Promise<any> {
-    const startDate = new Date();
-    
-    switch (timeframe) {
-      case '7days':
-        startDate.setDate(startDate.getDate() - 7);
-        break;
-      case '30days':
-        startDate.setDate(startDate.getDate() - 30);
-        break;
-      case '90days':
-        startDate.setDate(startDate.getDate() - 90);
-        break;
-      case '12months':
-        startDate.setMonth(startDate.getMonth() - 12);
-        break;
-      default:
-        startDate.setDate(startDate.getDate() - 30); // Default to 30 days
+    try {
+      const startDate = new Date();
+      
+      switch (timeframe) {
+        case '7days':
+          startDate.setDate(startDate.getDate() - 7);
+          break;
+        case '30days':
+          startDate.setDate(startDate.getDate() - 30);
+          break;
+        case '90days':
+          startDate.setDate(startDate.getDate() - 90);
+          break;
+        case '12months':
+          startDate.setMonth(startDate.getMonth() - 12);
+          break;
+        default:
+          startDate.setDate(startDate.getDate() - 30); // Default to 30 days
+      }
+      
+      // Query to get sum of usage count grouped by user and feature
+      const result = await db.select({
+        userId: featureUsageLogs.userId,
+        featureKey: featureUsageLogs.featureKey,
+        totalUsage: sql<number>`sum(${featureUsageLogs.usageCount})`,
+      })
+      .from(featureUsageLogs)
+      .where(gte(featureUsageLogs.usedAt as any, startDate))
+      .groupBy(featureUsageLogs.userId, featureUsageLogs.featureKey);
+      
+      return result;
+    } catch (error) {
+      console.error("Error in getFeatureUsageSummaryByTimeframe:", error);
+      return [];
     }
-    
-    // Query to get sum of usage count grouped by user and feature
-    const result = await this.db.select({
-      userId: this.schema.featureUsageLogs.userId,
-      featureKey: this.schema.featureUsageLogs.featureKey,
-      totalUsage: sql<number>`sum(${this.schema.featureUsageLogs.usageCount})`,
-    })
-    .from(this.schema.featureUsageLogs)
-    .where(gte(this.schema.featureUsageLogs.usedAt as any, startDate))
-    .groupBy(this.schema.featureUsageLogs.userId, this.schema.featureUsageLogs.featureKey);
-    
-    return result;
   };
   
   /**
@@ -632,12 +652,17 @@ export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage
   };
   
   storage.getLoginActivitySince = async function(date: Date, limit: number = 100): Promise<LoginActivity[]> {
-    const result = await this.db.query.loginActivity.findMany({
-      where: gte(this.schema.loginActivity.loginTime as any, date),
-      orderBy: [desc(this.schema.loginActivity.loginTime as any)],
-      limit
-    });
-    return result;
+    try {
+      const result = await db.query.loginActivity.findMany({
+        where: gte(loginActivity.loginTime as any, date),
+        orderBy: [desc(loginActivity.loginTime as any)],
+        limit
+      });
+      return result;
+    } catch (error) {
+      console.error("Error in getLoginActivitySince:", error);
+      return [];
+    }
   };
   
   /**
@@ -686,20 +711,30 @@ export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage
    */
   
   storage.createReportCache = async function(data: InsertReportCache): Promise<ReportCache> {
-    // Delete any existing cache for this report type
-    await this.db.delete(this.schema.reportCache)
-      .where(eq(this.schema.reportCache.reportType, data.reportType));
-    
-    // Create new cache entry
-    const [result] = await this.db.insert(this.schema.reportCache).values(data).returning();
-    return result;
+    try {
+      // Delete any existing cache for this report type
+      await db.delete(reportCache)
+        .where(eq(reportCache.reportType, data.reportType));
+      
+      // Create new cache entry
+      const [result] = await db.insert(reportCache).values(data).returning();
+      return result;
+    } catch (error) {
+      console.error("Error in createReportCache:", error);
+      throw error;
+    }
   };
   
   storage.getReportCacheByType = async function(reportType: string): Promise<ReportCache | undefined> {
-    const result = await this.db.query.reportCache.findFirst({
-      where: eq(this.schema.reportCache.reportType, reportType)
-    });
-    return result;
+    try {
+      const result = await db.query.reportCache.findFirst({
+        where: eq(reportCache.reportType, reportType)
+      });
+      return result;
+    } catch (error) {
+      console.error("Error in getReportCacheByType:", error);
+      return undefined;
+    }
   };
   
   /**
@@ -707,10 +742,15 @@ export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage
    */
   
   storage.getAllModuleStatuses = async function(): Promise<any[]> {
-    const result = await this.db.query.moduleStatus.findMany({
-      orderBy: [asc(this.schema.moduleStatus.name)]
-    });
-    return result;
+    try {
+      const result = await db.query.moduleStatus.findMany({
+        orderBy: [asc(moduleStatus.name)]
+      });
+      return result;
+    } catch (error) {
+      console.error("Error in getAllModuleStatuses:", error);
+      return [];
+    }
   };
   
   return storage;
