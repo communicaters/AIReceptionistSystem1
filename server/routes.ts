@@ -2930,15 +2930,81 @@ If this is NOT a meeting scheduling request, respond normally and set is_schedul
                               if (schedulingData.email) {
                                 // Send confirmation email with meeting details
                                 try {
-                                  const emailService = await getEmailServiceForUser(userId);
+                                  // Get email service
+                                  const emailConfig = await storage.getEmailConfigByUserId(userId);
+                                  let emailService;
+                                  
+                                  // Determine which email service to use based on configuration
+                                  if (emailConfig?.smtpEnabled) {
+                                    // Try SMTP first if enabled
+                                    const smtpConfig = await storage.getSMTPConfigByUserId(userId);
+                                    if (smtpConfig && smtpConfig.host && smtpConfig.port && smtpConfig.username) {
+                                      emailService = {
+                                        type: 'smtp',
+                                        sendEmail: async (params) => {
+                                          // Create SMTP client
+                                          const nodemailer = require('nodemailer');
+                                          const transporter = nodemailer.createTransport({
+                                            host: smtpConfig.host,
+                                            port: smtpConfig.port,
+                                            secure: smtpConfig.secure,
+                                            auth: {
+                                              user: smtpConfig.username,
+                                              pass: smtpConfig.password
+                                            }
+                                          });
+                                          
+                                          // Send email
+                                          const info = await transporter.sendMail({
+                                            from: smtpConfig.fromEmail,
+                                            to: params.to,
+                                            subject: params.subject,
+                                            text: params.text,
+                                            html: params.html
+                                          });
+                                          
+                                          return { success: true, messageId: info.messageId };
+                                        },
+                                        fromEmail: smtpConfig.fromEmail
+                                      };
+                                    }
+                                  } else if (emailConfig?.sendgridEnabled) {
+                                    // Try SendGrid if enabled
+                                    const sendgridConfig = await storage.getSendgridConfigByUserId(userId);
+                                    if (sendgridConfig && sendgridConfig.apiKey) {
+                                      emailService = {
+                                        type: 'sendgrid',
+                                        sendEmail: async (params) => {
+                                          const sgMail = require('@sendgrid/mail');
+                                          sgMail.setApiKey(sendgridConfig.apiKey);
+                                          
+                                          const msg = {
+                                            to: params.to,
+                                            from: sendgridConfig.fromEmail,
+                                            subject: params.subject,
+                                            text: params.text,
+                                            html: params.html
+                                          };
+                                          
+                                          await sgMail.send(msg);
+                                          return { success: true, messageId: null };
+                                        },
+                                        fromEmail: sendgridConfig.fromEmail
+                                      };
+                                    }
+                                  }
+                                  
+                                  if (!emailService) {
+                                    throw new Error("No email service configured");
+                                  }
                                   
                                   // Create email content with the meeting details
-                                  const emailSubject = `Meeting Confirmation: ${subject}`;
+                                  const emailSubject = `Meeting Confirmation: ${schedulingData.subject || 'Scheduled Meeting'}`;
                                   const emailBody = `
                                     <h2>Meeting Confirmation</h2>
                                     <p>Your meeting has been scheduled for <strong>${formattedDate}</strong>.</p>
-                                    <p><strong>Subject:</strong> ${subject}</p>
-                                    ${description ? `<p><strong>Description:</strong> ${description}</p>` : ''}
+                                    <p><strong>Subject:</strong> ${schedulingData.subject || 'Scheduled Meeting'}</p>
+                                    ${schedulingData.description ? `<p><strong>Description:</strong> ${schedulingData.description}</p>` : ''}
                                     ${result.meetingLink ? `<p><strong>Meeting Link:</strong> <a href="${result.meetingLink}">${result.meetingLink}</a></p>` : ''}
                                     <p>This meeting has been added to your calendar.</p>
                                     <p>Thank you for using our AI Receptionist service.</p>
@@ -2955,8 +3021,8 @@ If this is NOT a meeting scheduling request, respond normally and set is_schedul
                                   // Log the result
                                   await storage.createEmailLog({
                                     userId,
-                                    fromEmail: emailService.fromEmail,
-                                    toEmail: schedulingData.email,
+                                    from: emailService.fromEmail,
+                                    to: schedulingData.email,
                                     subject: emailSubject,
                                     body: emailBody,
                                     timestamp: new Date(),

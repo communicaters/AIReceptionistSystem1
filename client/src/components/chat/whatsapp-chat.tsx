@@ -187,6 +187,12 @@ export function WhatsAppChat({
     prevMessagesLengthRef.current = currentLength;
   }, [sortedMessages.length]);
   
+  // Force scroll to bottom when component mounts or phoneNumber changes
+  useEffect(() => {
+    scrollToBottom();
+    console.log(`WhatsApp chat component mounted/updated for phone number: ${phoneNumber}`);
+  }, [phoneNumber]);
+  
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };

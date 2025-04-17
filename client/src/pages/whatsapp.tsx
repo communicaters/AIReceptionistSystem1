@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { 
   getWhatsappLogs, 
@@ -125,7 +125,9 @@ const WhatsApp = () => {
     queryFn: () => getWhatsappLogs(selectedNumber, activePagination.limit, activePagination.offset),
     staleTime: 0, // Ensure fresh data is fetched each time
     refetchOnWindowFocus: true, // Refetch when the window is focused
-    refetchOnMount: true // Always refetch when component mounts
+    refetchOnMount: true, // Always refetch when component mounts
+    gcTime: 5 * 60 * 1000, // Cache data for 5 minutes (v5 uses gcTime instead of cacheTime)
+    placeholderData: keepPreviousData // Keep the previous data while fetching new data
   });
   
   // Derive whatsappLogs from the response and update pagination state
