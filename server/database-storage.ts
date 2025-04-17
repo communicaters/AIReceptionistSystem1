@@ -528,7 +528,7 @@ export class DatabaseStorage implements IStorage {
         eq(whatsappLogs.userId, userId),
         eq(whatsappLogs.phoneNumber, phoneNumber)
       ))
-      .orderBy(asc(whatsappLogs.timestamp))
+      .orderBy(desc(whatsappLogs.timestamp))
       .limit(limit)
       .offset(offset);
   }

@@ -2510,13 +2510,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const previousMessages = await storage.getWhatsappLogsByPhoneNumber(userId, sender);
               
               // Format previous messages for context 
-              // (limit to last 10 to avoid token limits)
+              // Get the most recent messages, but preserve conversation flow (30 is enough for good context)
+              // Since we're now getting messages DESC (newest first), we need to reverse them for the AI
+              // to maintain chronological conversation flow
               const messageHistory = previousMessages
-                .slice(-10)
+                .slice(0, 30) // Get the most recent 30 messages for context (query already returns newest first)
+                .reverse() // Reverse to maintain chronological order (oldest first for the conversation)
                 .map(msg => ({
                   role: msg.direction === 'inbound' ? 'user' : 'assistant',
                   content: msg.message
                 }));
+                
+              console.log(`Using ${messageHistory.length} messages for context history`);
               
               // Create a system prompt based on training data
               const trainingData = await storage.getTrainingDataByCategory(userId, 'whatsapp');
@@ -2727,8 +2732,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     
                     // Format previous messages for context 
                     // Get the most recent messages, but preserve conversation flow (30 is enough for good context)
+                    // Since we're now getting messages DESC (newest first), we need to reverse them for the AI
+                    // to maintain chronological conversation flow
                     const messageHistory = previousMessages
-                      .slice(-30) // Get the last 30 messages to maintain deep context
+                      .slice(0, 30) // Get the most recent 30 messages for context (query already returns newest first)
+                      .reverse() // Reverse to maintain chronological order (oldest first for the conversation)
                       .map(msg => ({
                         role: msg.direction === 'inbound' ? 'user' : 'assistant',
                         content: msg.message
@@ -2845,8 +2853,12 @@ If this is NOT a meeting scheduling request, respond normally and set is_schedul
                           });
                           
                           if (result.success) {
-                            // Success message to user
-                            replyToUser = `I've scheduled your meeting for ${new Date(schedulingData.date_time).toLocaleString()}. A confirmation has been sent to ${schedulingData.email}. Is there anything else you need help with?`;
+                            // Success message to user - handle both with and without email addresses
+                            if (schedulingData.email) {
+                              replyToUser = `I've scheduled your meeting for ${new Date(schedulingData.date_time).toLocaleString()}. A confirmation has been sent to ${schedulingData.email}. Is there anything else you need help with?`;
+                            } else {
+                              replyToUser = `I've scheduled your meeting for ${new Date(schedulingData.date_time).toLocaleString()}. The event has been added to the calendar. Is there anything else you need help with?`;
+                            }
                           } else {
                             // Send error message
                             if (result.error === 'CALENDAR_NOT_CONFIGURED') {
