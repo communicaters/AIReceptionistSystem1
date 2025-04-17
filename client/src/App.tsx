@@ -16,6 +16,13 @@ import AddInitialTrainingData from "@/pages/add-initial-training-data";
 import SpeechEngines from "@/pages/speech-engines";
 import Settings from "@/pages/settings";
 import OAuthCallback from "@/pages/oauth-callback";
+
+// Admin pages
+import AdminDashboard from "@/pages/admin/dashboard";
+import UserManagement from "@/pages/admin/users";
+import PackagesManagement from "@/pages/admin/packages";
+import ReportsManagement from "@/pages/admin/reports";
+import UserPackageManagement from "@/pages/admin/user-packages";
 import { ConnectionStatus } from "@/components/ui/connection-status";
 import { WebSocketProvider } from "@/components/providers/websocket-provider";
 import { CallProvider } from "@/components/providers/call-provider";
@@ -117,6 +124,44 @@ function App() {
               </DashboardLayout>
             </ProtectedRoute>
           </Route>
+          
+          {/* Admin routes */}
+          <Route path="/admin/dashboard">
+            <ProtectedRoute requireAdmin={true}>
+              <DashboardLayout>
+                <AdminDashboard />
+              </DashboardLayout>
+            </ProtectedRoute>
+          </Route>
+          <Route path="/admin/users">
+            <ProtectedRoute requireAdmin={true}>
+              <DashboardLayout>
+                <UserManagement />
+              </DashboardLayout>
+            </ProtectedRoute>
+          </Route>
+          <Route path="/admin/packages">
+            <ProtectedRoute requireAdmin={true}>
+              <DashboardLayout>
+                <PackagesManagement />
+              </DashboardLayout>
+            </ProtectedRoute>
+          </Route>
+          <Route path="/admin/reports">
+            <ProtectedRoute requireAdmin={true}>
+              <DashboardLayout>
+                <ReportsManagement />
+              </DashboardLayout>
+            </ProtectedRoute>
+          </Route>
+          <Route path="/admin/users/:id/packages">
+            <ProtectedRoute requireAdmin={true}>
+              <DashboardLayout>
+                <UserPackageManagement />
+              </DashboardLayout>
+            </ProtectedRoute>
+          </Route>
+          
           <Route path="/oauth-callback" component={OAuthCallback} />
           <Route component={NotFound} />
         </Switch>
