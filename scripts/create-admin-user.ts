@@ -18,7 +18,7 @@ async function main() {
 
   // Check if admin already exists
   const existingAdmin = await db.query.users.findFirst({
-    where: eq(users.username, 'admin'),
+    where: eq(users.username, 'adminuser'),
   });
 
   if (existingAdmin) {
@@ -28,7 +28,7 @@ async function main() {
 
   // Admin credentials
   const adminUser = {
-    username: 'admin',
+    username: 'adminuser',
     email: 'admin@example.com',
     password: await hashPassword('admin123'),
     fullName: 'System Admin',
