@@ -33,7 +33,6 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
-import DashboardLayout from "@/components/layout/dashboard-layout";
 import { format } from "date-fns";
 
 // Define types for the admin dashboard data
@@ -208,7 +207,6 @@ export default function AdminDashboard() {
   };
   
   return (
-    <DashboardLayout>
       <div className="flex flex-col gap-6 p-4 md:p-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Admin Dashboard</h1>
@@ -622,6 +620,5 @@ export default function AdminDashboard() {
           </>
         )}
       </div>
-    </DashboardLayout>
   );
 }
