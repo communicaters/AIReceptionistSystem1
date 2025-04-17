@@ -466,6 +466,7 @@ async function handleMeetingScheduling(message: string, userId: number, sessionI
       - duration (in minutes, default to 30 if not specified)
       - attendees (array of email addresses, or empty array if none specified)
       - description (string, additional notes or empty string if none)
+      - timezone (string, extract any mentioned timezone like EST, PST, UTC, etc. or "unknown" if not specified)
       
       Message: ${message}
     `;
@@ -558,6 +559,13 @@ async function handleMeetingScheduling(message: string, userId: number, sessionI
       };
     }
     
+    // Get timezone information
+    const timezone = meetingData.timezone && meetingData.timezone !== "unknown" 
+      ? meetingData.timezone 
+      : "America/New_York"; // Default to Eastern Time if not specified
+      
+    console.log(`Creating meeting with timezone: ${timezone}`);
+      
     // Create the meeting
     const meeting = {
       userId,
@@ -567,7 +575,8 @@ async function handleMeetingScheduling(message: string, userId: number, sessionI
       endTime: endTime,
       attendees: meetingData.attendees || [],
       status: "scheduled",
-      googleEventId: null
+      googleEventId: null,
+      timezone: timezone // Add timezone information
     };
     
     // Save meeting to database
@@ -582,10 +591,12 @@ async function handleMeetingScheduling(message: string, userId: number, sessionI
           summary: meeting.subject,
           description: meeting.description || '',
           start: { 
-            dateTime: startTime.toISOString() 
+            dateTime: startTime.toISOString(),
+            timeZone: timezone
           },
           end: { 
-            dateTime: endTime.toISOString() 
+            dateTime: endTime.toISOString(),
+            timeZone: timezone 
           },
           attendees: meeting.attendees.map((email: string) => ({ email }))
         };
