@@ -2944,77 +2944,13 @@ If this is NOT a meeting scheduling request, respond normally and set is_schedul
                               if (schedulingData.email) {
                                 // Send confirmation email with meeting details
                                 try {
-                                  // Get email service
-                                  const emailConfig = await storage.getEmailConfigByUserId(userId);
-                                  let emailService;
+                                  console.log(`Sending meeting confirmation email to ${schedulingData.email}`);
                                   
-                                  // Determine which email service to use based on configuration
-                                  if (emailConfig?.smtpEnabled) {
-                                    // Try SMTP first if enabled
-                                    const smtpConfig = await storage.getSMTPConfigByUserId(userId);
-                                    if (smtpConfig && smtpConfig.host && smtpConfig.port && smtpConfig.username) {
-                                      emailService = {
-                                        type: 'smtp',
-                                        sendEmail: async (params) => {
-                                          // Create SMTP client
-                                          const nodemailer = require('nodemailer');
-                                          const transporter = nodemailer.createTransport({
-                                            host: smtpConfig.host,
-                                            port: smtpConfig.port,
-                                            secure: smtpConfig.secure,
-                                            auth: {
-                                              user: smtpConfig.username,
-                                              pass: smtpConfig.password
-                                            }
-                                          });
-                                          
-                                          // Send email
-                                          const info = await transporter.sendMail({
-                                            from: smtpConfig.fromEmail,
-                                            to: params.to,
-                                            subject: params.subject,
-                                            text: params.text,
-                                            html: params.html
-                                          });
-                                          
-                                          return { success: true, messageId: info.messageId };
-                                        },
-                                        fromEmail: smtpConfig.fromEmail
-                                      };
-                                    }
-                                  } else if (emailConfig?.sendgridEnabled) {
-                                    // Try SendGrid if enabled
-                                    const sendgridConfig = await storage.getSendgridConfigByUserId(userId);
-                                    if (sendgridConfig && sendgridConfig.apiKey) {
-                                      emailService = {
-                                        type: 'sendgrid',
-                                        sendEmail: async (params) => {
-                                          const sgMail = require('@sendgrid/mail');
-                                          sgMail.setApiKey(sendgridConfig.apiKey);
-                                          
-                                          const msg = {
-                                            to: params.to,
-                                            from: sendgridConfig.fromEmail,
-                                            subject: params.subject,
-                                            text: params.text,
-                                            html: params.html
-                                          };
-                                          
-                                          await sgMail.send(msg);
-                                          return { success: true, messageId: null };
-                                        },
-                                        fromEmail: sendgridConfig.fromEmail
-                                      };
-                                    }
-                                  }
-                                  
-                                  if (!emailService) {
-                                    throw new Error("No email service configured");
-                                  }
-                                  
-                                  // Create enhanced email content with the meeting details
+                                  // Format the email content
                                   const emailSubject = `Meeting Confirmation: ${schedulingData.subject || 'Scheduled Meeting'}`;
-                                  const emailBody = `
+                                  
+                                  // Create HTML content
+                                  const emailHtml = `
                                     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
                                       <h2 style="color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 10px;">Meeting Confirmation</h2>
                                       
@@ -3041,43 +2977,63 @@ If this is NOT a meeting scheduling request, respond normally and set is_schedul
                                     </div>
                                   `;
                                   
-                                  // Send the email
-                                  const emailSendResult = await emailService.sendEmail({
-                                    to: schedulingData.email,
-                                    subject: emailSubject,
-                                    html: emailBody,
-                                    text: emailBody.replace(/<[^>]*>/g, '') // Strip HTML for text version
-                                  });
+                                  // Create plain text content for email clients that don't support HTML
+                                  const emailText = `
+Meeting Confirmation
+
+Hello,
+
+Your meeting has been scheduled for ${formattedDate}.
+
+Meeting Details:
+- Subject: ${schedulingData.subject || 'Scheduled Meeting'}
+- Date and Time: ${formattedDate}
+- Duration: ${schedulingData.duration_minutes || 30} minutes
+${result.meetingLink ? `- Join Meeting: ${result.meetingLink}` : ''}
+
+This meeting has been added to your calendar. ${result.meetingLink ? 'You can join the meeting by clicking the link above at the scheduled time.' : ''}
+
+Thank you,
+AI Receptionist
+                                  `;
                                   
-                                  // Log the result
-                                  await storage.createEmailLog({
-                                    userId,
-                                    from: emailService.fromEmail,
+                                  // Use our centralized email controller to send the email
+                                  const emailSendResult = await sendEmail({
                                     to: schedulingData.email,
+                                    from: 'support@aireceptionist.com', // Will be overridden by actual service settings
+                                    fromName: 'AI Receptionist',
                                     subject: emailSubject,
-                                    body: emailBody,
-                                    timestamp: new Date(),
-                                    status: emailSendResult.success ? 'sent' : 'failed',
-                                    service: emailService.type,
-                                    messageId: emailSendResult.messageId || null
-                                  });
+                                    html: emailHtml,
+                                    text: emailText
+                                  }, undefined, userId);
                                   
-                                  console.log(`Meeting confirmation email ${emailSendResult.success ? 'sent' : 'failed'} to ${schedulingData.email}`);
+                                  // Log details of the email sending attempt
+                                  console.log(`Meeting confirmation email ${emailSendResult.success ? 'sent' : 'failed'} to ${schedulingData.email} via ${emailSendResult.service || 'unknown service'}`);
+                                  if (!emailSendResult.success && emailSendResult.error) {
+                                    console.error(`Email error details: ${emailSendResult.error}`);
+                                  }
                                   
                                   // Create system activity log
                                   await storage.createSystemActivity({
                                     module: "Email",
                                     event: "Meeting Confirmation Email",
-                                    status: emailSendResult.success ? "success" : "failed",
+                                    status: emailSendResult.success ? "success" : "error",
                                     timestamp: new Date(),
                                     details: { 
                                       email: schedulingData.email,
+                                      service: emailSendResult.service || 'unknown',
                                       meetingTime: formattedDate,
-                                      meetingLink: result.meetingLink || 'No link available'
+                                      meetingLink: result.meetingLink || 'No link available',
+                                      error: emailSendResult.error
                                     }
                                   });
                                   
-                                  replyToUser = `I've scheduled your meeting for ${formattedDate}. A confirmation has been sent to ${schedulingData.email}. Is there anything else you need help with?`;
+                                  // Update the reply to user based on email success
+                                  if (emailSendResult.success) {
+                                    replyToUser = `I've scheduled your meeting for ${formattedDate}. A confirmation has been sent to ${schedulingData.email}. Is there anything else you need help with?`;
+                                  } else {
+                                    replyToUser = `I've scheduled your meeting for ${formattedDate}. However, there was an issue sending the confirmation email. The event has been added to the calendar. Is there anything else you need help with?`;
+                                  }
                                 } catch (error) {
                                   console.error("Error sending meeting confirmation email:", error);
                                   replyToUser = `I've scheduled your meeting for ${formattedDate}. However, there was an issue sending the confirmation email. The event has been added to the calendar. Is there anything else you need help with?`;
