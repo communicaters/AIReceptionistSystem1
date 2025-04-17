@@ -98,12 +98,17 @@ export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage
   };
   
   storage.updateUser = async function(id: number, updates: Partial<User>): Promise<User> {
-    const [result] = await this.db
-      .update(this.schema.users)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(this.schema.users.id, id))
-      .returning();
-    return result;
+    try {
+      const [result] = await db
+        .update(users)
+        .set({ ...updates, updatedAt: new Date() })
+        .where(eq(users.id, id))
+        .returning();
+      return result;
+    } catch (error) {
+      console.error("Error in updateUser:", error);
+      throw error;
+    }
   };
   
   storage.updateUserStatus = async function(id: number, status: string): Promise<User> {
