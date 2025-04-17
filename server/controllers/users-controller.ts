@@ -69,11 +69,22 @@ export const usersController = {
   // Get user by ID (admin only or self)
   async getUserById(req: Request, res: Response) {
     try {
-      const userId = parseInt(req.params.id);
+      let userId: number;
       
-      // Check permissions (admin can access any user, others can only access themselves)
-      if (req.user?.role !== 'admin' && req.user?.id !== userId) {
-        return res.status(403).json({ message: 'Access denied' });
+      // Check if this is a request for the user's own profile via /me/profile
+      if (req.path.includes('/me/profile')) {
+        userId = req.user?.id;
+        if (!userId) {
+          return res.status(401).json({ message: 'Authentication required' });
+        }
+      } else {
+        // If accessing a specific user by ID
+        userId = parseInt(req.params.id);
+        
+        // Check permissions (admin can access any user, others can only access themselves)
+        if (req.user?.role !== 'admin' && req.user?.id !== userId) {
+          return res.status(403).json({ message: 'Access denied' });
+        }
       }
       
       const user = await storage.getUser(userId);

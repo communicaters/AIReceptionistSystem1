@@ -21,6 +21,18 @@ export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage
    * User Methods
    */
   
+  storage.getUser = async function(id: number): Promise<User | undefined> {
+    try {
+      const result = await db.query.users.findFirst({
+        where: eq(users.id, id)
+      });
+      return result || undefined;
+    } catch (error) {
+      console.error("Error in getUser:", error);
+      return undefined;
+    }
+  };
+  
   storage.getUserByUsername = async function(username: string): Promise<User | undefined> {
     try {
       const result = await db.query.users.findFirst({
@@ -294,11 +306,16 @@ export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage
    */
   
   storage.getUserPackagesByUserId = async function(userId: number): Promise<UserPackage[]> {
-    const result = await this.db.query.userPackages.findMany({
-      where: eq(this.schema.userPackages.userId, userId),
-      orderBy: [desc(this.schema.userPackages.assignedAt)]
-    });
-    return result;
+    try {
+      const result = await db.query.userPackages.findMany({
+        where: eq(userPackages.userId, userId),
+        orderBy: [desc(userPackages.assignedAt)]
+      });
+      return result;
+    } catch (error) {
+      console.error("Error in getUserPackagesByUserId:", error);
+      return [];
+    }
   };
   
   storage.getUserPackagesByPackageId = async function(packageId: number): Promise<UserPackage[]> {
@@ -310,18 +327,23 @@ export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage
   };
   
   storage.getActiveUserPackage = async function(userId: number): Promise<UserPackage | undefined> {
-    const now = new Date();
-    const result = await this.db.query.userPackages.findFirst({
-      where: and(
-        eq(this.schema.userPackages.userId, userId),
-        eq(this.schema.userPackages.isActive, true),
-        or(
-          isNull(this.schema.userPackages.expiresAt),
-          gte(this.schema.userPackages.expiresAt as any, now)
+    try {
+      const now = new Date();
+      const result = await db.query.userPackages.findFirst({
+        where: and(
+          eq(userPackages.userId, userId),
+          eq(userPackages.isActive, true),
+          or(
+            isNull(userPackages.expiresAt),
+            gte(userPackages.expiresAt as any, now)
+          )
         )
-      )
-    });
-    return result;
+      });
+      return result;
+    } catch (error) {
+      console.error("Error in getActiveUserPackage:", error);
+      return undefined;
+    }
   };
   
   storage.createUserPackage = async function(userPackage: InsertUserPackage): Promise<UserPackage> {
