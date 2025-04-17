@@ -470,6 +470,19 @@ export const sendEmail = async (
   return response.json();
 };
 
+export const sendReply = async (
+  emailId: number,
+  replyContent: string,
+  subject?: string
+): Promise<{ success: boolean; reply?: any; error?: string }> => {
+  const response = await apiRequest("POST", "/api/email/reply", {
+    emailId,
+    replyContent,
+    subject
+  });
+  return response.json();
+};
+
 // IMAP Sync Emails - Fetches emails from the configured IMAP server
 export const syncEmails = async (): Promise<{ 
   success: boolean; 

@@ -1287,11 +1287,50 @@ const EmailManagement = () => {
   });
 
   // Function to handle sending an email reply
+  // Mutation for sending email replies
+  const sendReplyMutation = useMutation({
+    mutationFn: (params: { 
+      emailId: number;
+      replyContent: string;
+      subject?: string;
+    }) => sendReply(params.emailId, params.replyContent, params.subject),
+    onSuccess: (data) => {
+      if (data.success) {
+        toast({
+          title: "Reply sent successfully",
+          description: "Your reply has been sent and the email marked as replied",
+          variant: "default",
+        });
+        
+        // Refresh email logs to show updated replied status
+        emailLogsQuery.refetch();
+      } else {
+        toast({
+          title: "Failed to send reply",
+          description: data.error || "An error occurred while sending your reply",
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: "Error sending reply",
+        description: "An unexpected error occurred while sending your reply",
+        variant: "destructive",
+      });
+      console.error("Email reply error:", error);
+    }
+  });
+
   const handleSendReply = (to: string, subject: string, body: string, service?: 'sendgrid' | 'smtp' | 'mailgun') => {
-    sendEmailMutation.mutate({
-      email: { to, subject, body },
-      service
+    if (!replyToEmail) return;
+    
+    sendReplyMutation.mutate({
+      emailId: replyToEmail.id,
+      replyContent: body,
+      subject
     });
+    
     setReplyToEmail(null);
   };
 
@@ -1391,9 +1430,9 @@ const EmailManagement = () => {
                     service === 'none' ? undefined : service
                   );
                 }}
-                disabled={sendEmailMutation.isPending}
+                disabled={sendReplyMutation.isPending}
               >
-                {sendEmailMutation.isPending ? (
+                {sendReplyMutation.isPending ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Sending...
