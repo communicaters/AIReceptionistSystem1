@@ -114,8 +114,8 @@ export async function createEvent(
   event: {
     summary: string;
     description?: string;
-    start: { dateTime: string };
-    end: { dateTime: string };
+    start: { dateTime: string; timeZone?: string };
+    end: { dateTime: string; timeZone?: string };
     attendees?: { email: string }[];
     conferenceData?: {
       createRequest: {
@@ -350,6 +350,33 @@ export async function scheduleMeeting(
     try {
       console.log(`Parsing date-time string: "${dateTimeString}"`);
       
+      // Log timezone information for debugging
+      console.log(`Using timezone: ${timezone}`);
+      
+      try {
+        // Try to handle the timezone properly
+        if (timezone && timezone !== 'UTC') {
+          console.log(`Adjusting date for timezone: ${timezone}`);
+          
+          // For IANA timezone format (e.g., 'America/Los_Angeles')
+          const formatter = new Intl.DateTimeFormat('en-US', {
+            timeZone: timezone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+          });
+          
+          // This logs how the date would be represented in the target timezone
+          console.log(`Date format in ${timezone}: ${formatter.format(new Date(dateTimeString))}`);
+        }
+      } catch (tzError: any) {
+        console.error(`Error handling timezone: ${tzError.message || 'Unknown error'}`);
+      }
+      
       // Handle various date formats, first try direct parsing
       startDateTime = new Date(dateTimeString);
       
@@ -424,12 +451,22 @@ export async function scheduleMeeting(
       };
     }
     
-    // Create the event with Google Meet enabled
+    // Apply timezone information to the event if provided
+    const timeZone = timezone !== 'UTC' ? timezone : undefined;
+    console.log(`Using timeZone ${timeZone || 'UTC'} for calendar event`);
+    
+    // Create the event with Google Meet enabled and timezone information
     const event = await createEvent(userId, {
       summary: subject,
       description,
-      start: { dateTime: startDateTime.toISOString() },
-      end: { dateTime: endDateTime.toISOString() },
+      start: { 
+        dateTime: startDateTime.toISOString(),
+        timeZone: timeZone
+      },
+      end: { 
+        dateTime: endDateTime.toISOString(),
+        timeZone: timeZone
+      },
       attendees: [{ email: attendeeEmail }],
       // Add conferenceData to request a Google Meet link
       conferenceData: {

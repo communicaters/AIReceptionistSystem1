@@ -3728,10 +3728,12 @@ AI Receptionist
             summary: meeting.subject,
             description: meeting.description || '',
             start: { 
-              dateTime: new Date(meeting.startTime).toISOString() 
+              dateTime: new Date(meeting.startTime).toISOString(),
+              timeZone: meeting.timezone || 'UTC'
             },
             end: { 
-              dateTime: new Date(meeting.endTime).toISOString() 
+              dateTime: new Date(meeting.endTime).toISOString(),
+              timeZone: meeting.timezone || 'UTC'
             },
             attendees: attendeesArray.map(email => ({ email }))
           };
