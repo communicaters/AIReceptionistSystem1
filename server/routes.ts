@@ -2780,8 +2780,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     let enhancedSystemPrompt = systemPrompt;
                     if (messageHasScheduleKeywords) {
                       enhancedSystemPrompt += `\n\nThis appears to be a meeting scheduling request. If the user wants to schedule a meeting:
-1. Extract the requested date and time (convert to ISO format when possible)
-2. Identify the attendee email address
+1. Extract the requested date and time (interpret timezone abbreviations like PST, EST, etc.)
+2. Identify the attendee email address 
 3. Determine the meeting subject/purpose
 4. Respond in JSON format with these properties: 
    {
@@ -2789,16 +2789,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
      "date_time": "YYYY-MM-DD HH:MM:SS", 
      "email": "user@example.com",
      "subject": "Meeting subject",
-     "duration_minutes": 30
+     "duration_minutes": 30,
+     "timezone": "America/Los_Angeles" 
    }
 
-For example, if the user says "Schedule a meeting for tomorrow at 2pm with john@example.com", respond with:
+For example, if the user says "Schedule a meeting for tomorrow at 2pm PST with john@example.com", respond with:
 {
   "is_scheduling_request": true,
   "date_time": "2025-04-18 14:00:00",
   "email": "john@example.com",
   "subject": "Follow-up Meeting",
-  "duration_minutes": 30
+  "duration_minutes": 30,
+  "timezone": "America/Los_Angeles"
 }
 
 If this is NOT a meeting scheduling request, respond normally and set is_scheduling_request to false.`;
