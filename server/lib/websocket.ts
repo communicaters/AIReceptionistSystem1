@@ -21,24 +21,53 @@ const CLIENT_TIMEOUT = HEARTBEAT_INTERVAL * 3;
 
 // Setup WebSocket server handlers
 export function setupWebsocketHandlers(wss: WebSocketServer) {
-  // Heartbeat check interval
+  // Heartbeat check interval with enhanced reliability
   setInterval(() => {
     const now = Date.now();
     
-    // Check each client's last ping time
-    connectedClients.forEach((client, clientId) => {
-      // If client hasn't sent a ping in the timeout period, terminate connection
-      if (now - client.lastPing > CLIENT_TIMEOUT) {
-        console.log(`Client ${clientId} timed out (no ping for ${CLIENT_TIMEOUT}ms). Terminating connection.`);
-        
-        try {
-          client.ws.terminate();
+    try {
+      // Check each client's last ping time
+      connectedClients.forEach((client, clientId) => {
+        // Check if WebSocket is still open before evaluating timeout
+        if (client.ws.readyState !== WebSocket.OPEN) {
+          console.log(`Client ${clientId} connection no longer open (state: ${client.ws.readyState}). Cleaning up.`);
           connectedClients.delete(clientId);
-        } catch (err) {
-          console.error(`Error terminating client connection:`, err);
+          return;
         }
-      }
-    });
+        
+        // If client hasn't sent a ping in the timeout period, terminate connection
+        if (now - client.lastPing > CLIENT_TIMEOUT) {
+          console.log(`Client ${clientId} timed out (no ping for ${CLIENT_TIMEOUT}ms). Terminating connection.`);
+          
+          try {
+            // Send a close frame first for graceful termination
+            client.ws.close(1000, 'Connection timeout');
+            // Then force terminate after a small delay if still connected
+            setTimeout(() => {
+              if (client.ws.readyState !== WebSocket.CLOSED) {
+                client.ws.terminate();
+              }
+              connectedClients.delete(clientId);
+            }, 1000);
+          } catch (err) {
+            console.error(`Error terminating client connection:`, err);
+            // Ensure we always clean up the map even if termination fails
+            connectedClients.delete(clientId);
+          }
+        } else {
+          // For active connections, send a ping to verify connection is still alive
+          if (client.ws.readyState === WebSocket.OPEN) {
+            try {
+              client.ws.ping();
+            } catch (pingErr) {
+              console.warn(`Error sending ping to client ${clientId}:`, pingErr);
+            }
+          }
+        }
+      });
+    } catch (intervalError) {
+      console.error('Error in WebSocket heartbeat interval:', intervalError);
+    }
   }, HEARTBEAT_INTERVAL);
 
   // Handle connection errors at the server level

@@ -2870,21 +2870,33 @@ If this is NOT a meeting scheduling request, respond normally and set is_schedul
                             
                             // Success message to user with meeting link if available
                             if (result.meetingLink) {
-                              // Send a first message with meeting details
+                              // Prepare meeting confirmation messages
+                              // First message with general confirmation
                               const initialMessage = `I've scheduled your meeting for ${formattedDate}.`;
                               
-                              // Follow up with the meeting link in a separate message
-                              const linkMessage = `Here's your meeting link: ${result.meetingLink}\n\nYou can click this link at the scheduled time to join the meeting.`;
+                              // Second message with detailed meeting information including link
+                              const linkMessage = `📅 Meeting Details:\n\n• 📌 Subject: ${schedulingData.subject || 'Scheduled Meeting'}\n• 🕒 Time: ${formattedDate}\n• ⏱️ Duration: ${schedulingData.duration_minutes || 30} minutes\n\n🔗 Join here: ${result.meetingLink}\n\nYou can click this link at the scheduled time to join the meeting.`;
                               
-                              // Set the reply for this message
+                              // Enhanced success logging
+                              console.log(`Meeting scheduled successfully via WhatsApp for ${phoneNumber}`);
+                              console.log(`Meeting link: ${result.meetingLink}`);
+                              console.log(`Meeting time: ${formattedDate}`);
+                              
+                              // Set the initial reply for this message
                               replyToUser = initialMessage;
                               
-                              // Store the meeting link to send as a follow-up message
+                              // Store the meeting link to send as a follow-up message with enhanced error handling
                               setTimeout(async () => {
                                 try {
+                                  console.log(`Preparing to send meeting link to ${phoneNumber} as followup message`);
+                                  
                                   // Get the WhatsApp service
                                   const zenderService = getZenderService(userId);
-                                  await zenderService.initialize();
+                                  const initResult = await zenderService.initialize();
+                                  
+                                  if (!initResult) {
+                                    throw new Error("Failed to initialize Zender service for meeting link message");
+                                  }
                                   
                                   // Create a log entry for the follow-up message
                                   const linkLogEntry = await storage.createWhatsappLog({
@@ -2895,6 +2907,8 @@ If this is NOT a meeting scheduling request, respond normally and set is_schedul
                                     timestamp: new Date(),
                                     status: 'pending'
                                   });
+                                  
+                                  console.log(`Created WhatsApp log entry for meeting link message: ${linkLogEntry.id}`);
                                   
                                   // Send the meeting link via Zender
                                   const linkSendResult = await zenderService.sendMessage({
