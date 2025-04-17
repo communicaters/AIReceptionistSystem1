@@ -1,293 +1,523 @@
-import { MemStorage } from "./storage";
-import {
-  Package, InsertPackage,
-  PackageFeature, InsertPackageFeature,
-  UserPackage, InsertUserPackage,
+import { eq, and, gte, lt, desc, sql, asc, count, ne, isNull, not, inArray, or } from 'drizzle-orm';
+import { storage as baseStorage } from './storage';
+import { DatabaseStorage } from './database-storage';
+import { 
+  User, InsertUser, Package, InsertPackage, 
+  PackageFeature, InsertPackageFeature, 
+  UserPackage, InsertUserPackage, 
   FeatureUsageLog, InsertFeatureUsageLog,
   LoginActivity, InsertLoginActivity,
-  AdminReportsCache, InsertAdminReportsCache
-} from "@shared/schema";
+  ReportCache, InsertReportCache
+} from '@shared/schema';
+import { compare } from './lib/encryption';
 
-// Package methods for MemStorage class
-export const packageMethods = {
-  async getPackage(this: MemStorage, id: number): Promise<Package | undefined> {
-    return this.packages.get(id);
-  },
-
-  async getPackageByName(this: MemStorage, name: string): Promise<Package | undefined> {
-    return Array.from(this.packages.values()).find(
-      (pkg) => pkg.name === name,
-    );
-  },
-
-  async getAllPackages(this: MemStorage): Promise<Package[]> {
-    return Array.from(this.packages.values());
-  },
-
-  async getActivePackages(this: MemStorage): Promise<Package[]> {
-    return Array.from(this.packages.values()).filter(
-      (pkg) => pkg.isActive === true,
-    );
-  },
-
-  async createPackage(this: MemStorage, pkg: InsertPackage): Promise<Package> {
-    const id = this.currentIds.packages++;
+// Implement user management methods for DatabaseStorage
+export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage) {
+  /**
+   * User Methods
+   */
+  
+  storage.getUserByUsername = async function(username: string): Promise<User | undefined> {
+    const result = await this.db.query.users.findFirst({
+      where: eq(this.schema.users.username, username)
+    });
+    return result;
+  };
+  
+  storage.getUserByEmail = async function(email: string): Promise<User | undefined> {
+    const result = await this.db.query.users.findFirst({
+      where: eq(this.schema.users.email, email)
+    });
+    return result;
+  };
+  
+  storage.getUserByVerificationToken = async function(token: string): Promise<User | undefined> {
+    const result = await this.db.query.users.findFirst({
+      where: eq(this.schema.users.verificationToken, token)
+    });
+    return result;
+  };
+  
+  storage.getUserByResetToken = async function(token: string): Promise<User | undefined> {
     const now = new Date();
-    const newPackage: Package = { 
-      ...pkg, 
-      id,
-      createdAt: now,
-      updatedAt: now,
-    };
-    this.packages.set(id, newPackage);
-    return newPackage;
-  },
-
-  async updatePackage(this: MemStorage, id: number, pkg: Partial<InsertPackage>): Promise<Package | undefined> {
-    const existingPackage = this.packages.get(id);
-    if (!existingPackage) return undefined;
-
-    const updatedPackage: Package = { 
-      ...existingPackage, 
-      ...pkg,
-      updatedAt: new Date(),
-    };
-    this.packages.set(id, updatedPackage);
-    return updatedPackage;
-  },
-
-  async deletePackage(this: MemStorage, id: number): Promise<boolean> {
-    return this.packages.delete(id);
-  },
-};
-
-// Package Feature methods for MemStorage class
-export const packageFeatureMethods = {
-  async getPackageFeature(this: MemStorage, id: number): Promise<PackageFeature | undefined> {
-    return this.packageFeatures.get(id);
-  },
-
-  async getPackageFeaturesByPackageId(this: MemStorage, packageId: number): Promise<PackageFeature[]> {
-    return Array.from(this.packageFeatures.values()).filter(
-      (feature) => feature.packageId === packageId,
-    );
-  },
-
-  async getPackageFeatureByKey(this: MemStorage, packageId: number, featureKey: string): Promise<PackageFeature | undefined> {
-    return Array.from(this.packageFeatures.values()).find(
-      (feature) => feature.packageId === packageId && feature.featureKey === featureKey,
-    );
-  },
-
-  async createPackageFeature(this: MemStorage, feature: InsertPackageFeature): Promise<PackageFeature> {
-    const id = this.currentIds.packageFeatures++;
-    const newFeature: PackageFeature = { ...feature, id };
-    this.packageFeatures.set(id, newFeature);
-    return newFeature;
-  },
-
-  async updatePackageFeature(this: MemStorage, id: number, feature: Partial<InsertPackageFeature>): Promise<PackageFeature | undefined> {
-    const existingFeature = this.packageFeatures.get(id);
-    if (!existingFeature) return undefined;
-
-    const updatedFeature: PackageFeature = { ...existingFeature, ...feature };
-    this.packageFeatures.set(id, updatedFeature);
-    return updatedFeature;
-  },
-
-  async deletePackageFeature(this: MemStorage, id: number): Promise<boolean> {
-    return this.packageFeatures.delete(id);
-  },
-};
-
-// User Package methods for MemStorage class
-export const userPackageMethods = {
-  async getUserPackage(this: MemStorage, id: number): Promise<UserPackage | undefined> {
-    return this.userPackages.get(id);
-  },
-
-  async getUserPackagesByUserId(this: MemStorage, userId: number): Promise<UserPackage[]> {
-    return Array.from(this.userPackages.values()).filter(
-      (userPackage) => userPackage.userId === userId,
-    );
-  },
-
-  async getActiveUserPackage(this: MemStorage, userId: number): Promise<UserPackage | undefined> {
-    const now = new Date();
-    return Array.from(this.userPackages.values()).find(
-      (userPackage) => 
-        userPackage.userId === userId && 
-        userPackage.isActive === true &&
-        (!userPackage.expiresAt || userPackage.expiresAt > now)
-    );
-  },
-
-  async createUserPackage(this: MemStorage, userPackage: InsertUserPackage): Promise<UserPackage> {
-    const id = this.currentIds.userPackages++;
-    const now = new Date();
-    const newUserPackage: UserPackage = { 
-      ...userPackage, 
-      id,
-      assignedAt: now,
-    };
-    this.userPackages.set(id, newUserPackage);
-    return newUserPackage;
-  },
-
-  async updateUserPackage(this: MemStorage, id: number, userPackage: Partial<InsertUserPackage>): Promise<UserPackage | undefined> {
-    const existingUserPackage = this.userPackages.get(id);
-    if (!existingUserPackage) return undefined;
-
-    const updatedUserPackage: UserPackage = { ...existingUserPackage, ...userPackage };
-    this.userPackages.set(id, updatedUserPackage);
-    return updatedUserPackage;
-  },
-
-  async deactivateUserPackage(this: MemStorage, id: number): Promise<UserPackage | undefined> {
-    const existingUserPackage = this.userPackages.get(id);
-    if (!existingUserPackage) return undefined;
-
-    const updatedUserPackage: UserPackage = { ...existingUserPackage, isActive: false };
-    this.userPackages.set(id, updatedUserPackage);
-    return updatedUserPackage;
-  },
-
-  async deleteUserPackage(this: MemStorage, id: number): Promise<boolean> {
-    return this.userPackages.delete(id);
-  },
-};
-
-// Feature Usage Log methods for MemStorage class
-export const featureUsageLogMethods = {
-  async getFeatureUsageLog(this: MemStorage, id: number): Promise<FeatureUsageLog | undefined> {
-    return this.featureUsageLogs.get(id);
-  },
-
-  async getFeatureUsageLogsByUserId(this: MemStorage, userId: number): Promise<FeatureUsageLog[]> {
-    return Array.from(this.featureUsageLogs.values()).filter(
-      (log) => log.userId === userId,
-    );
-  },
-
-  async getFeatureUsageLogsByFeatureKey(this: MemStorage, userId: number, featureKey: string): Promise<FeatureUsageLog[]> {
-    return Array.from(this.featureUsageLogs.values()).filter(
-      (log) => log.userId === userId && log.featureKey === featureKey,
-    );
-  },
-
-  async getFeatureUsageSummary(this: MemStorage, userId: number, timeframe?: string): Promise<any> {
-    const logs = Array.from(this.featureUsageLogs.values()).filter(
-      (log) => log.userId === userId
-    );
-
-    // Apply timeframe filter if provided
-    let filteredLogs = logs;
-    if (timeframe) {
-      const now = new Date();
-      let startDate = new Date();
-
-      switch (timeframe) {
-        case 'day':
-          startDate.setDate(now.getDate() - 1);
-          break;
-        case 'week':
-          startDate.setDate(now.getDate() - 7);
-          break;
-        case 'month':
-          startDate.setMonth(now.getMonth() - 1);
-          break;
-        case 'year':
-          startDate.setFullYear(now.getFullYear() - 1);
-          break;
-        default:
-          // No filter
-          break;
-      }
-
-      filteredLogs = logs.filter(log => log.usedAt >= startDate);
-    }
-
-    // Group by feature key and sum usage
-    const summaryMap = new Map<string, number>();
+    const result = await this.db.query.users.findFirst({
+      where: and(
+        eq(this.schema.users.resetToken, token),
+        gte(this.schema.users.resetTokenExpiry as any, now)
+      )
+    });
+    return result;
+  };
+  
+  storage.getAllUsers = async function(): Promise<User[]> {
+    const result = await this.db.query.users.findMany({
+      orderBy: [asc(this.schema.users.id)]
+    });
+    return result;
+  };
+  
+  storage.createUser = async function(user: InsertUser): Promise<User> {
+    const [result] = await this.db.insert(this.schema.users).values(user).returning();
+    return result;
+  };
+  
+  storage.updateUser = async function(id: number, updates: Partial<User>): Promise<User> {
+    const [result] = await this.db
+      .update(this.schema.users)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(this.schema.users.id, id))
+      .returning();
+    return result;
+  };
+  
+  storage.updateUserStatus = async function(id: number, status: string): Promise<User> {
+    const [result] = await this.db
+      .update(this.schema.users)
+      .set({ status, updatedAt: new Date() })
+      .where(eq(this.schema.users.id, id))
+      .returning();
+    return result;
+  };
+  
+  storage.updateUserLastLogin = async function(id: number): Promise<User> {
+    const [result] = await this.db
+      .update(this.schema.users)
+      .set({ lastLogin: new Date(), updatedAt: new Date() })
+      .where(eq(this.schema.users.id, id))
+      .returning();
+    return result;
+  };
+  
+  storage.verifyUserEmail = async function(id: number): Promise<User> {
+    const [result] = await this.db
+      .update(this.schema.users)
+      .set({ 
+        emailVerified: true, 
+        status: 'active', 
+        verificationToken: null, 
+        updatedAt: new Date() 
+      })
+      .where(eq(this.schema.users.id, id))
+      .returning();
+    return result;
+  };
+  
+  storage.verifyPassword = async function(id: number, password: string): Promise<boolean> {
+    const user = await this.db.query.users.findFirst({
+      where: eq(this.schema.users.id, id)
+    });
     
-    for (const log of filteredLogs) {
-      const currentTotal = summaryMap.get(log.featureKey) || 0;
-      summaryMap.set(log.featureKey, currentTotal + log.usageCount);
+    if (!user) return false;
+    
+    return await compare(password, user.password);
+  };
+  
+  storage.setUserResetToken = async function(id: number, token: string, expiry: Date): Promise<User> {
+    const [result] = await this.db
+      .update(this.schema.users)
+      .set({ 
+        resetToken: token, 
+        resetTokenExpiry: expiry, 
+        updatedAt: new Date() 
+      })
+      .where(eq(this.schema.users.id, id))
+      .returning();
+    return result;
+  };
+  
+  storage.clearUserResetToken = async function(id: number): Promise<User> {
+    const [result] = await this.db
+      .update(this.schema.users)
+      .set({ 
+        resetToken: null, 
+        resetTokenExpiry: null, 
+        updatedAt: new Date() 
+      })
+      .where(eq(this.schema.users.id, id))
+      .returning();
+    return result;
+  };
+  
+  storage.updateUserPassword = async function(id: number, password: string): Promise<User> {
+    const [result] = await this.db
+      .update(this.schema.users)
+      .set({ 
+        password, 
+        updatedAt: new Date() 
+      })
+      .where(eq(this.schema.users.id, id))
+      .returning();
+    return result;
+  };
+  
+  storage.deleteUser = async function(id: number): Promise<boolean> {
+    // First delete all user-related data
+    await this.db.delete(this.schema.featureUsageLogs).where(eq(this.schema.featureUsageLogs.userId, id));
+    await this.db.delete(this.schema.loginActivity).where(eq(this.schema.loginActivity.userId, id));
+    await this.db.delete(this.schema.userPackages).where(eq(this.schema.userPackages.userId, id));
+    
+    // Then delete the user
+    const result = await this.db.delete(this.schema.users).where(eq(this.schema.users.id, id));
+    return result.rowCount > 0;
+  };
+  
+  /**
+   * Package Methods
+   */
+  
+  storage.getAllPackages = async function(): Promise<Package[]> {
+    const result = await this.db.query.packages.findMany({
+      orderBy: [asc(this.schema.packages.id)]
+    });
+    return result;
+  };
+  
+  storage.getActivePackages = async function(): Promise<Package[]> {
+    const result = await this.db.query.packages.findMany({
+      where: eq(this.schema.packages.isActive, true),
+      orderBy: [asc(this.schema.packages.id)]
+    });
+    return result;
+  };
+  
+  storage.getPackage = async function(id: number): Promise<Package | undefined> {
+    const result = await this.db.query.packages.findFirst({
+      where: eq(this.schema.packages.id, id)
+    });
+    return result;
+  };
+  
+  storage.getPackageByName = async function(name: string): Promise<Package | undefined> {
+    const result = await this.db.query.packages.findFirst({
+      where: eq(this.schema.packages.name, name)
+    });
+    return result;
+  };
+  
+  storage.createPackage = async function(pkg: InsertPackage): Promise<Package> {
+    const [result] = await this.db.insert(this.schema.packages).values(pkg).returning();
+    return result;
+  };
+  
+  storage.updatePackage = async function(id: number, updates: Partial<Package>): Promise<Package> {
+    const [result] = await this.db
+      .update(this.schema.packages)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(this.schema.packages.id, id))
+      .returning();
+    return result;
+  };
+  
+  storage.deletePackage = async function(id: number): Promise<boolean> {
+    // First delete all package features
+    await this.db.delete(this.schema.packageFeatures).where(eq(this.schema.packageFeatures.packageId, id));
+    
+    // Then delete the package
+    const result = await this.db.delete(this.schema.packages).where(eq(this.schema.packages.id, id));
+    return result.rowCount > 0;
+  };
+  
+  /**
+   * Package Feature Methods
+   */
+  
+  storage.getPackageFeature = async function(id: number): Promise<PackageFeature | undefined> {
+    const result = await this.db.query.packageFeatures.findFirst({
+      where: eq(this.schema.packageFeatures.id, id)
+    });
+    return result;
+  };
+  
+  storage.getPackageFeatureByKey = async function(packageId: number, featureKey: string): Promise<PackageFeature | undefined> {
+    const result = await this.db.query.packageFeatures.findFirst({
+      where: and(
+        eq(this.schema.packageFeatures.packageId, packageId),
+        eq(this.schema.packageFeatures.featureKey, featureKey)
+      )
+    });
+    return result;
+  };
+  
+  storage.getPackageFeaturesByPackageId = async function(packageId: number): Promise<PackageFeature[]> {
+    const result = await this.db.query.packageFeatures.findMany({
+      where: eq(this.schema.packageFeatures.packageId, packageId),
+      orderBy: [asc(this.schema.packageFeatures.id)]
+    });
+    return result;
+  };
+  
+  storage.createPackageFeature = async function(feature: InsertPackageFeature): Promise<PackageFeature> {
+    const [result] = await this.db.insert(this.schema.packageFeatures).values(feature).returning();
+    return result;
+  };
+  
+  storage.updatePackageFeature = async function(id: number, updates: Partial<PackageFeature>): Promise<PackageFeature> {
+    const [result] = await this.db
+      .update(this.schema.packageFeatures)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(this.schema.packageFeatures.id, id))
+      .returning();
+    return result;
+  };
+  
+  storage.deletePackageFeature = async function(id: number): Promise<boolean> {
+    const result = await this.db.delete(this.schema.packageFeatures).where(eq(this.schema.packageFeatures.id, id));
+    return result.rowCount > 0;
+  };
+  
+  /**
+   * User Package Methods
+   */
+  
+  storage.getUserPackagesByUserId = async function(userId: number): Promise<UserPackage[]> {
+    const result = await this.db.query.userPackages.findMany({
+      where: eq(this.schema.userPackages.userId, userId),
+      orderBy: [desc(this.schema.userPackages.assignedAt)]
+    });
+    return result;
+  };
+  
+  storage.getUserPackagesByPackageId = async function(packageId: number): Promise<UserPackage[]> {
+    const result = await this.db.query.userPackages.findMany({
+      where: eq(this.schema.userPackages.packageId, packageId),
+      orderBy: [asc(this.schema.userPackages.userId)]
+    });
+    return result;
+  };
+  
+  storage.getActiveUserPackage = async function(userId: number): Promise<UserPackage | undefined> {
+    const now = new Date();
+    const result = await this.db.query.userPackages.findFirst({
+      where: and(
+        eq(this.schema.userPackages.userId, userId),
+        eq(this.schema.userPackages.isActive, true),
+        or(
+          isNull(this.schema.userPackages.expiresAt),
+          gte(this.schema.userPackages.expiresAt as any, now)
+        )
+      )
+    });
+    return result;
+  };
+  
+  storage.createUserPackage = async function(userPackage: InsertUserPackage): Promise<UserPackage> {
+    const [result] = await this.db.insert(this.schema.userPackages).values(userPackage).returning();
+    return result;
+  };
+  
+  storage.deactivateUserPackage = async function(id: number): Promise<UserPackage> {
+    const [result] = await this.db
+      .update(this.schema.userPackages)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(eq(this.schema.userPackages.id, id))
+      .returning();
+    return result;
+  };
+  
+  /**
+   * Feature Usage Methods
+   */
+  
+  storage.logFeatureUsage = async function(data: InsertFeatureUsageLog): Promise<FeatureUsageLog> {
+    const [result] = await this.db.insert(this.schema.featureUsageLogs).values(data).returning();
+    return result;
+  };
+  
+  storage.getFeatureUsageLogsByUserId = async function(userId: number, limit: number = 100): Promise<FeatureUsageLog[]> {
+    const result = await this.db.query.featureUsageLogs.findMany({
+      where: eq(this.schema.featureUsageLogs.userId, userId),
+      orderBy: [desc(this.schema.featureUsageLogs.usedAt as any)],
+      limit
+    });
+    return result;
+  };
+  
+  storage.getFeatureUsageLogsByUserIdAndTimeframe = async function(userId: number, timeframe: string): Promise<FeatureUsageLog[]> {
+    const startDate = new Date();
+    
+    switch (timeframe) {
+      case 'day':
+        startDate.setDate(startDate.getDate() - 1);
+        break;
+      case 'week':
+        startDate.setDate(startDate.getDate() - 7);
+        break;
+      case 'month':
+        startDate.setMonth(startDate.getMonth() - 1);
+        break;
+      case 'year':
+        startDate.setFullYear(startDate.getFullYear() - 1);
+        break;
+      default:
+        startDate.setDate(startDate.getDate() - 30); // Default to 30 days
     }
+    
+    const result = await this.db.query.featureUsageLogs.findMany({
+      where: and(
+        eq(this.schema.featureUsageLogs.userId, userId),
+        gte(this.schema.featureUsageLogs.usedAt as any, startDate)
+      ),
+      orderBy: [desc(this.schema.featureUsageLogs.usedAt as any)]
+    });
+    
+    return result;
+  };
+  
+  storage.getFeatureUsageSummary = async function(userId: number, timeframe: string = 'month'): Promise<any> {
+    const startDate = new Date();
+    
+    switch (timeframe) {
+      case 'day':
+        startDate.setDate(startDate.getDate() - 1);
+        break;
+      case 'week':
+        startDate.setDate(startDate.getDate() - 7);
+        break;
+      case 'month':
+        startDate.setMonth(startDate.getMonth() - 1);
+        break;
+      case 'year':
+        startDate.setFullYear(startDate.getFullYear() - 1);
+        break;
+      default:
+        startDate.setDate(startDate.getDate() - 30); // Default to 30 days
+    }
+    
+    // Query to get sum of usage count grouped by feature
+    const result = await this.db.select({
+      featureKey: this.schema.featureUsageLogs.featureKey,
+      totalUsage: sql<number>`sum(${this.schema.featureUsageLogs.usageCount})`,
+    })
+    .from(this.schema.featureUsageLogs)
+    .where(and(
+      eq(this.schema.featureUsageLogs.userId, userId),
+      gte(this.schema.featureUsageLogs.usedAt as any, startDate)
+    ))
+    .groupBy(this.schema.featureUsageLogs.featureKey);
+    
+    return result;
+  };
+  
+  storage.getFeatureUsageSummaryByTimeframe = async function(timeframe: string): Promise<any> {
+    const startDate = new Date();
+    
+    switch (timeframe) {
+      case '7days':
+        startDate.setDate(startDate.getDate() - 7);
+        break;
+      case '30days':
+        startDate.setDate(startDate.getDate() - 30);
+        break;
+      case '90days':
+        startDate.setDate(startDate.getDate() - 90);
+        break;
+      case '12months':
+        startDate.setMonth(startDate.getMonth() - 12);
+        break;
+      default:
+        startDate.setDate(startDate.getDate() - 30); // Default to 30 days
+    }
+    
+    // Query to get sum of usage count grouped by user and feature
+    const result = await this.db.select({
+      userId: this.schema.featureUsageLogs.userId,
+      featureKey: this.schema.featureUsageLogs.featureKey,
+      totalUsage: sql<number>`sum(${this.schema.featureUsageLogs.usageCount})`,
+    })
+    .from(this.schema.featureUsageLogs)
+    .where(gte(this.schema.featureUsageLogs.usedAt as any, startDate))
+    .groupBy(this.schema.featureUsageLogs.userId, this.schema.featureUsageLogs.featureKey);
+    
+    return result;
+  };
+  
+  /**
+   * Login Activity Methods
+   */
+  
+  storage.createLoginActivity = async function(activity: InsertLoginActivity): Promise<LoginActivity> {
+    const [result] = await this.db.insert(this.schema.loginActivity).values(activity).returning();
+    return result;
+  };
+  
+  storage.getLoginActivitiesByUserId = async function(userId: number, limit: number = 10): Promise<LoginActivity[]> {
+    const result = await this.db.query.loginActivity.findMany({
+      where: eq(this.schema.loginActivity.userId, userId),
+      orderBy: [desc(this.schema.loginActivity.loginTime as any)],
+      limit
+    });
+    return result;
+  };
+  
+  storage.getLoginActivitySince = async function(date: Date, limit: number = 100): Promise<LoginActivity[]> {
+    const result = await this.db.query.loginActivity.findMany({
+      where: gte(this.schema.loginActivity.loginTime as any, date),
+      orderBy: [desc(this.schema.loginActivity.loginTime as any)],
+      limit
+    });
+    return result;
+  };
+  
+  /**
+   * System Activity Methods
+   */
+  
+  storage.createSystemActivity = async function(activity: any): Promise<any> {
+    const [result] = await this.db.insert(this.schema.systemActivity).values(activity).returning();
+    return result;
+  };
+  
+  storage.getRecentSystemActivity = async function(limit: number = 10): Promise<any[]> {
+    const result = await this.db.query.systemActivity.findMany({
+      orderBy: [desc(this.schema.systemActivity.timestamp as any)],
+      limit
+    });
+    return result;
+  };
+  
+  storage.getSystemActivitySince = async function(date: Date, limit: number = 100): Promise<any[]> {
+    const result = await this.db.query.systemActivity.findMany({
+      where: gte(this.schema.systemActivity.timestamp as any, date),
+      orderBy: [desc(this.schema.systemActivity.timestamp as any)],
+      limit
+    });
+    return result;
+  };
+  
+  /**
+   * Report Cache Methods
+   */
+  
+  storage.createReportCache = async function(data: InsertReportCache): Promise<ReportCache> {
+    // Delete any existing cache for this report type
+    await this.db.delete(this.schema.reportCache)
+      .where(eq(this.schema.reportCache.reportType, data.reportType));
+    
+    // Create new cache entry
+    const [result] = await this.db.insert(this.schema.reportCache).values(data).returning();
+    return result;
+  };
+  
+  storage.getReportCacheByType = async function(reportType: string): Promise<ReportCache | undefined> {
+    const result = await this.db.query.reportCache.findFirst({
+      where: eq(this.schema.reportCache.reportType, reportType)
+    });
+    return result;
+  };
+  
+  /**
+   * Module Status Methods
+   */
+  
+  storage.getAllModuleStatuses = async function(): Promise<any[]> {
+    const result = await this.db.query.moduleStatus.findMany({
+      orderBy: [asc(this.schema.moduleStatus.name)]
+    });
+    return result;
+  };
+  
+  return storage;
+}
 
-    // Convert to array of objects
-    return Array.from(summaryMap.entries()).map(([featureKey, totalUsage]) => ({
-      featureKey,
-      totalUsage,
-    }));
-  },
-
-  async createFeatureUsageLog(this: MemStorage, log: InsertFeatureUsageLog): Promise<FeatureUsageLog> {
-    const id = this.currentIds.featureUsageLogs++;
-    const now = new Date();
-    const newLog: FeatureUsageLog = { 
-      ...log, 
-      id,
-      usedAt: now,
-    };
-    this.featureUsageLogs.set(id, newLog);
-    return newLog;
-  },
-};
-
-// Login Activity methods for MemStorage class
-export const loginActivityMethods = {
-  async getLoginActivity(this: MemStorage, id: number): Promise<LoginActivity | undefined> {
-    return this.loginActivities.get(id);
-  },
-
-  async getLoginActivitiesByUserId(this: MemStorage, userId: number, limit?: number): Promise<LoginActivity[]> {
-    const activities = Array.from(this.loginActivities.values())
-      .filter(activity => activity.userId === userId)
-      .sort((a, b) => b.loginTime.getTime() - a.loginTime.getTime());
-
-    return limit ? activities.slice(0, limit) : activities;
-  },
-
-  async createLoginActivity(this: MemStorage, activity: InsertLoginActivity): Promise<LoginActivity> {
-    const id = this.currentIds.loginActivities++;
-    const now = new Date();
-    const newActivity: LoginActivity = { 
-      ...activity, 
-      id,
-      loginTime: now,
-    };
-    this.loginActivities.set(id, newActivity);
-    return newActivity;
-  },
-};
-
-// Report Cache methods for MemStorage class
-export const reportCacheMethods = {
-  async getReportCache(this: MemStorage, id: number): Promise<AdminReportsCache | undefined> {
-    return this.reportCaches.get(id);
-  },
-
-  async getReportCacheByType(this: MemStorage, reportType: string): Promise<AdminReportsCache | undefined> {
-    const now = new Date();
-    return Array.from(this.reportCaches.values()).find(
-      (cache) => cache.reportType === reportType && cache.expiresAt > now
-    );
-  },
-
-  async createReportCache(this: MemStorage, report: InsertAdminReportsCache): Promise<AdminReportsCache> {
-    const id = this.currentIds.reportCaches++;
-    const now = new Date();
-    const newReport: AdminReportsCache = { 
-      ...report, 
-      id,
-      generatedAt: now,
-    };
-    this.reportCaches.set(id, newReport);
-    return newReport;
-  },
-
-  async deleteReportCache(this: MemStorage, id: number): Promise<boolean> {
-    return this.reportCaches.delete(id);
-  },
-};
+// Apply the extensions to the base storage
+extendDatabaseStorageWithUserManagement(baseStorage as DatabaseStorage);

@@ -1,48 +1,94 @@
-import { Request, Response, NextFunction } from "express";
-import { storage } from "../storage";
+import { Request, Response, NextFunction } from 'express';
+import { storage } from '../storage';
+import { verifyToken } from '../lib/jwt';
+
+// Extending Express Request type to include user
+declare global {
+  namespace Express {
+    interface Request {
+      user?: any;
+    }
+  }
+}
 
 /**
- * Basic authentication middleware
- * 
- * This is a simple implementation that can be replaced with a more robust solution
- * in a production environment.
+ * Authentication middleware
+ * Validates JWT token from Authorization header or session
  */
-export async function authenticate(req: Request, res: Response, next: NextFunction) {
+export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    // For demonstration purposes, use a fixed user ID
-    // In a real application, this would come from session, JWT, etc.
-    const userId = 1;
-    
-    if (userId) {
-      const user = await storage.getUser(userId);
+    // Check session first
+    if (req.session && req.session.userId) {
+      const user = await storage.getUser(req.session.userId);
       if (user) {
-        // Attach user to request
         req.user = user;
-        
-        // Add an isAuthenticated method
-        req.isAuthenticated = () => true;
-        
         return next();
       }
     }
     
-    // Default to not authenticated
-    req.isAuthenticated = () => false;
+    // Check Authorization header
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+    
+    const token = authHeader.split(' ')[1];
+    const decoded = verifyToken(token);
+    
+    if (!decoded || !decoded.userId) {
+      return res.status(401).json({ message: 'Invalid token' });
+    }
+    
+    // Get user from storage
+    const user = await storage.getUser(decoded.userId);
+    if (!user) {
+      return res.status(401).json({ message: 'User not found' });
+    }
+    
+    // Check if user account is active
+    if (user.status !== 'active') {
+      return res.status(403).json({ message: 'Account is not active' });
+    }
+    
+    // Set user on request object
+    req.user = user;
     next();
   } catch (error) {
-    console.error("Authentication error:", error);
-    req.isAuthenticated = () => false;
-    next();
+    console.error('Authentication error:', error);
+    return res.status(401).json({ message: 'Authentication failed' });
   }
-}
+};
 
 /**
- * Middleware to require authentication
+ * Admin role middleware
+ * Requires the authenticated user to have admin role
  */
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
-  if (req.isAuthenticated && req.isAuthenticated()) {
-    return next();
+export const requireAdmin = (req: Request, res: Response, next: NextFunction) => {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Authentication required' });
   }
   
-  res.status(401).json({ error: "Authentication required" });
-}
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ message: 'Admin privileges required' });
+  }
+  
+  next();
+};
+
+/**
+ * Role-based middleware factory
+ * Creates middleware that requires the authenticated user to have one of the specified roles
+ */
+export const requireRole = (allowedRoles: string[]) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+    
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ message: 'Insufficient permissions' });
+    }
+    
+    next();
+  };
+};
