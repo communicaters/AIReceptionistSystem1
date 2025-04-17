@@ -12,17 +12,30 @@ export function initGoogleCalendar() {
 // Create a new OAuth2 client with the given credentials
 export function createOAuth2Client(clientId: string, clientSecret: string) {
   const redirectUri = `${process.env.HOST_URL || 'http://localhost:5000'}/api/calendar/auth/callback`;
+  console.log(`Creating OAuth client with clientId: ${clientId.substring(0, 10)}... and redirectUri: ${redirectUri}`);
   return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
 }
 
 // Get a new access token using the refresh token
 export async function getAccessToken(userId: number) {
   try {
+    console.log(`Getting access token for userId: ${userId}`);
+    
     // Get user's calendar config
     const config = await storage.getCalendarConfigByUserId(userId);
     
-    if (!config || !config.googleClientId || !config.googleClientSecret || !config.googleRefreshToken) {
-      throw new Error('Google Calendar not properly configured');
+    if (!config) {
+      console.error('No calendar configuration found for user', userId);
+      throw new Error('Google Calendar configuration not found');
+    }
+    
+    if (!config.googleClientId || !config.googleClientSecret || !config.googleRefreshToken) {
+      console.error('Incomplete Google Calendar credentials', {
+        hasClientId: !!config.googleClientId,
+        hasClientSecret: !!config.googleClientSecret,
+        hasRefreshToken: !!config.googleRefreshToken
+      });
+      throw new Error('Google Calendar not properly configured - missing credentials');
     }
     
     // Create OAuth client
@@ -30,15 +43,26 @@ export async function getAccessToken(userId: number) {
     
     // Set refresh token
     oauth2Client.setCredentials({
-      refresh_token: config.googleRefreshToken
+      refresh_token: config.googleRefreshToken,
+      // Add required scopes for conference data
+      scope: [
+        'https://www.googleapis.com/auth/calendar',
+        'https://www.googleapis.com/auth/calendar.events'
+      ]
     });
     
+    console.log('Requesting access token from Google API');
+    
     // Request new access token
-    const { token } = await oauth2Client.getAccessToken();
+    const tokenResponse = await oauth2Client.getAccessToken();
+    const token = tokenResponse.token;
     
     if (!token) {
+      console.error('Google API returned empty token');
       throw new Error('Failed to get access token');
     }
+    
+    console.log('Successfully obtained Google access token');
     
     return { 
       token,
@@ -46,6 +70,18 @@ export async function getAccessToken(userId: number) {
     };
   } catch (error) {
     console.error('Error getting Google access token:', error);
+    // Create detailed log with more information about what went wrong
+    await storage.createSystemActivity({
+      module: 'Google Calendar',
+      event: 'Authentication Error',
+      status: 'error',
+      timestamp: new Date(),
+      details: { 
+        userId,
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      }
+    }).catch(err => console.error('Failed to log calendar auth error:', err));
+    
     throw error;
   }
 }
@@ -125,6 +161,21 @@ export async function createEvent(
     return response.data;
   } catch (error) {
     console.error('Error creating calendar event:', error);
+    
+    // Log detailed error information
+    await storage.createSystemActivity({
+      module: 'Google Calendar',
+      event: 'Event Creation Error',
+      status: 'error',
+      timestamp: new Date(),
+      details: { 
+        userId,
+        eventSummary: event.summary,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        eventData: JSON.stringify(event)
+      }
+    }).catch(err => console.error('Failed to log calendar event creation error:', err));
+    
     throw error;
   }
 }
