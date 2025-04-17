@@ -18,10 +18,11 @@ import {
   calendarConfig, CalendarConfig, InsertCalendarConfig,
   productData, ProductData, InsertProductData,
   inventoryStatus, InventoryStatus, InsertInventoryStatus,
+  emailLogs, EmailLog, InsertEmailLog,
+  emailReplies, EmailReply, InsertEmailReply,
   trainingData, TrainingData, InsertTrainingData,
   intentMap, IntentMap, InsertIntentMap,
   callLogs, CallLog, InsertCallLog,
-  emailLogs, EmailLog, InsertEmailLog,
   chatLogs, ChatLog, InsertChatLog,
   whatsappLogs, WhatsappLog, InsertWhatsappLog,
   meetingLogs, MeetingLog, InsertMeetingLog,
@@ -552,6 +553,68 @@ export class DatabaseStorage implements IStorage {
 
   async createEmailLog(log: InsertEmailLog): Promise<EmailLog> {
     const result = await db.insert(emailLogs).values(log).returning();
+    return result[0];
+  }
+  
+  async updateEmailLogIsReplied(id: number, isReplied: boolean, inReplyTo?: string): Promise<EmailLog | undefined> {
+    const updateData: any = { isReplied };
+    if (inReplyTo) {
+      updateData.inReplyTo = inReplyTo;
+    }
+    
+    const result = await db.update(emailLogs)
+      .set(updateData)
+      .where(eq(emailLogs.id, id))
+      .returning();
+    
+    return result[0];
+  }
+  
+  async getUnrepliedEmails(userId: number): Promise<EmailLog[]> {
+    return await db.select().from(emailLogs)
+      .where(
+        and(
+          eq(emailLogs.userId, userId),
+          or(
+            eq(emailLogs.isReplied, false),
+            isNull(emailLogs.isReplied)
+          )
+        )
+      )
+      .orderBy(desc(emailLogs.timestamp))
+      .limit(100);
+  }
+  
+  // Email Replies
+  async createEmailReply(reply: InsertEmailReply): Promise<EmailReply> {
+    const result = await db.insert(emailReplies).values(reply).returning();
+    return result[0];
+  }
+  
+  async getEmailReplyByOriginalEmailId(originalEmailId: number): Promise<EmailReply | undefined> {
+    const result = await db.select().from(emailReplies)
+      .where(eq(emailReplies.originalEmailId, originalEmailId))
+      .limit(1);
+    
+    return result[0];
+  }
+  
+  async updateEmailReplyStatus(id: number, status: string, messageId?: string, error?: string): Promise<EmailReply | undefined> {
+    const updateData: any = { status };
+    
+    if (messageId) {
+      updateData.messageId = messageId;
+    }
+    
+    if (error) {
+      updateData.error = error;
+    }
+    
+    const result = await db.update(emailReplies)
+      .set(updateData)
+      .where(eq(emailReplies.id, id))
+      .returning();
+    
     return result[0];
   }
 

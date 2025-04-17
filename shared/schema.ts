@@ -892,6 +892,9 @@ export type InsertCallLog = z.infer<typeof insertCallLogSchema>;
 export type EmailLog = typeof emailLogs.$inferSelect;
 export type InsertEmailLog = z.infer<typeof insertEmailLogSchema>;
 
+export type EmailReply = typeof emailReplies.$inferSelect;
+export type InsertEmailReply = z.infer<typeof insertEmailReplySchema>;
+
 export type ChatLog = typeof chatLogs.$inferSelect;
 export type InsertChatLog = z.infer<typeof insertChatLogSchema>;
 
