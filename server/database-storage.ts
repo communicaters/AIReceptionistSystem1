@@ -39,7 +39,10 @@ import {
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { pool } from './db';
-import { userManagement } from './user-management';
+import { UserManagement } from './user-management';
+
+// Create a singleton instance of UserManagement
+const userManagement = new UserManagement();
 
 const PostgresSessionStore = connectPg(session);
 

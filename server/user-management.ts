@@ -15,6 +15,49 @@ export class UserManagement {
     console.log('User management methods initialized');
   }
 
+  // Basic User Management Methods
+  async getUser(id: number): Promise<User | undefined> {
+    try {
+      const result = await db.select().from(users).where(eq(users.id, id));
+      return result[0];
+    } catch (error) {
+      console.error("Error in getUser:", error);
+      return undefined;
+    }
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    try {
+      const result = await db.select().from(users).where(eq(users.username, username));
+      return result[0];
+    } catch (error) {
+      console.error("Error in getUserByUsername:", error);
+      return undefined;
+    }
+  }
+
+  async createUser(user: InsertUser): Promise<User> {
+    try {
+      const result = await db.insert(users).values(user).returning();
+      if (result.length === 0) {
+        throw new Error("Failed to create user");
+      }
+      return result[0];
+    } catch (error) {
+      console.error("Error in createUser:", error);
+      throw error;
+    }
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    try {
+      return await db.select().from(users);
+    } catch (error) {
+      console.error("Error in getAllUsers:", error);
+      return [];
+    }
+  }
+
   // Extended User Management Methods
   async getUserByEmail(email: string): Promise<User | undefined> {
     try {
