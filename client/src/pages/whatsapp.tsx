@@ -133,50 +133,95 @@ const WhatsApp = () => {
   // Derive whatsappLogs from the response and update pagination state
   const whatsappLogs = whatsappLogsResponse?.logs || [];
   
-  // Update pagination when response changes
+  // Update pagination when response changes - carefully to avoid infinite updates
   useEffect(() => {
     if (whatsappLogsResponse?.pagination) {
-      setActivePagination(prev => ({
-        ...prev,
-        total: whatsappLogsResponse.pagination.total,
-        hasMore: whatsappLogsResponse.pagination.hasMore
-      }));
+      // Store current values for comparison to avoid unnecessary updates
+      const newTotal = whatsappLogsResponse.pagination.total;
+      const newHasMore = whatsappLogsResponse.pagination.hasMore;
+      
+      if (selectedNumber) {
+        // Only update if values actually changed
+        if (conversationPagination.total !== newTotal || conversationPagination.hasMore !== newHasMore) {
+          setConversationPagination(prev => ({
+            ...prev,
+            total: newTotal,
+            hasMore: newHasMore
+          }));
+        }
+      } else {
+        // Only update if values actually changed
+        if (allMessagesPagination.total !== newTotal || allMessagesPagination.hasMore !== newHasMore) {
+          setAllMessagesPagination(prev => ({
+            ...prev,
+            total: newTotal,
+            hasMore: newHasMore
+          }));
+        }
+      }
     }
-  }, [whatsappLogsResponse, setActivePagination]);
+  }, [whatsappLogsResponse, selectedNumber, conversationPagination.total, conversationPagination.hasMore, 
+      allMessagesPagination.total, allMessagesPagination.hasMore]);
   
   // Update messages state when logs or selected number changes
   useEffect(() => {
+    // Skip if logs are empty (initial state) 
+    if (!whatsappLogs.length) return;
+
+    // Log every time this effect runs to debug
+    console.log("WhatsApp chat component mounted/updated for phone number:", selectedNumber);
+    
     if (selectedNumber) {
       // Individual conversation mode
       const filtered = filterMessagesByPhoneNumber(whatsappLogs, selectedNumber);
       
-      setConversationMessages(prev => {
-        // If we're loading more (offset > 0), append new messages to existing ones
-        if (conversationPagination.offset > 0) {
-          // Create a combined list, avoiding duplicates by ID
-          const existingIds = new Set(prev.map(msg => msg.id));
-          const newMessages = filtered.filter(msg => !existingIds.has(msg.id));
-          return [...prev, ...newMessages];
-        }
-        // Otherwise, replace with new messages (for initial load or refresh)
-        return filtered;
-      });
+      // Skip update if no changes (avoids infinite loop)
+      if (filtered.length === 0 && conversationMessages.length === 0) return;
+      
+      // Check if we need an update by comparing current and new message IDs
+      const currentIds = new Set(conversationMessages.map(msg => msg.id));
+      const newMessageIds = filtered.filter(msg => !currentIds.has(msg.id)).map(msg => msg.id);
+      
+      // Only update state if we have new messages or if this is initial load
+      if (newMessageIds.length > 0 || conversationMessages.length === 0) {
+        setConversationMessages(prev => {
+          // If we're loading more (offset > 0), append new messages to existing ones
+          if (conversationPagination.offset > 0) {
+            // Create a combined list, avoiding duplicates by ID
+            const existingIds = new Set(prev.map(msg => msg.id));
+            const newMessages = filtered.filter(msg => !existingIds.has(msg.id));
+            return [...prev, ...newMessages];
+          }
+          // Otherwise, replace with new messages (for initial load or refresh)
+          return filtered;
+        });
+      }
     } else {
       // "View All" mode
-      // Only update the list when we're specifically in "View All" mode
-      setAllMessages(prev => {
-        // If we're loading more (offset > 0), append new messages to existing ones
-        if (allMessagesPagination.offset > 0) {
-          // Create a combined list, avoiding duplicates by ID
-          const existingIds = new Set(prev.map(msg => msg.id));
-          const newMessages = whatsappLogs.filter(msg => !existingIds.has(msg.id));
-          return [...prev, ...newMessages];
-        }
-        // Otherwise, replace with new messages (for initial load or refresh)
-        return whatsappLogs;
-      });
+      // Skip update if no changes (avoids infinite loop)
+      if (whatsappLogs.length === 0 && allMessages.length === 0) return;
+      
+      // Check if we need an update by comparing current and new message IDs
+      const currentIds = new Set(allMessages.map(msg => msg.id));
+      const newMessageIds = whatsappLogs.filter(msg => !currentIds.has(msg.id)).map(msg => msg.id);
+      
+      // Only update state if we have new messages or if this is initial load
+      if (newMessageIds.length > 0 || allMessages.length === 0) {
+        setAllMessages(prev => {
+          // If we're loading more (offset > 0), append new messages to existing ones
+          if (allMessagesPagination.offset > 0) {
+            // Create a combined list, avoiding duplicates by ID
+            const existingIds = new Set(prev.map(msg => msg.id));
+            const newMessages = whatsappLogs.filter(msg => !existingIds.has(msg.id));
+            return [...prev, ...newMessages];
+          }
+          // Otherwise, replace with new messages (for initial load or refresh)
+          return whatsappLogs;
+        });
+      }
     }
-  }, [whatsappLogs, selectedNumber, conversationPagination.offset, allMessagesPagination.offset]);
+  }, [whatsappLogs, selectedNumber, conversationPagination.offset, allMessagesPagination.offset, 
+      conversationMessages, allMessages]);
   
   // When we switch views, reset the conversation messages and pagination
   useEffect(() => {
