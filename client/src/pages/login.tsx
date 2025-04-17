@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/components/providers/auth-provider";
 
 // Login form schema
 const formSchema = z.object({
@@ -24,6 +24,7 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { login } = useAuth();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -47,22 +48,14 @@ export default function Login() {
       const response = await fetch("/api/auth/login", requestOptions);
       const data = await response.json();
 
-      if (response.ok && data.token) {
-        // Save the token to localStorage
-        localStorage.setItem("authToken", data.token);
-        
-        // Store user info
-        if (data.user) {
-          localStorage.setItem("userInfo", JSON.stringify(data.user));
-        }
-        
+      if (response.ok && data.token && data.user) {
         toast({
           title: "Login successful",
           description: "You have been logged in successfully",
         });
         
-        // Redirect to dashboard
-        setLocation("/");
+        // Use the auth context to handle login and redirection
+        login(data.token, data.user);
       } else {
         toast({
           title: "Login failed",

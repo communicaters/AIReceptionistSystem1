@@ -19,29 +19,19 @@ import OAuthCallback from "@/pages/oauth-callback";
 import { ConnectionStatus } from "@/components/ui/connection-status";
 import { WebSocketProvider } from "@/components/providers/websocket-provider";
 import { CallProvider } from "@/components/providers/call-provider";
+import { AuthProvider, useAuth } from "@/components/providers/auth-provider";
+
+import { ProtectedRoute } from "@/components/protected-route";
+
+function AppWithAuth() {
+  return (
+    <AuthProvider>
+      <App />
+    </AuthProvider>
+  );
+}
 
 function App() {
-  const [location, setLocation] = useLocation();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-  // Check authentication status on initial load and when location changes
-  useEffect(() => {
-    // Check if auth token exists in localStorage
-    const token = localStorage.getItem('authToken');
-    setIsAuthenticated(!!token);
-
-    // Redirect to login if not authenticated and not already on a public route
-    if (!token && !isPublicRoute(location)) {
-      setLocation('/login');
-    }
-  }, [location, setLocation]);
-
-  // Define public routes that don't require authentication
-  const isPublicRoute = (route: string) => {
-    const publicRoutes = ['/login', '/register', '/reset-request', '/reset-password', '/verify-email'];
-    return publicRoutes.some(r => route.startsWith(r));
-  };
-
   return (
     <WebSocketProvider>
       <CallProvider>
@@ -53,77 +43,79 @@ function App() {
           
           {/* Protected routes - require authentication */}
           <Route path="/">
-            {() => isAuthenticated ? (
+            <ProtectedRoute>
               <DashboardLayout>
                 <Dashboard />
               </DashboardLayout>
-            ) : null}
+            </ProtectedRoute>
           </Route>
           <Route path="/voice-call">
-            {() => isAuthenticated ? (
+            <ProtectedRoute>
               <DashboardLayout>
                 <VoiceCall />
               </DashboardLayout>
-            ) : null}
+            </ProtectedRoute>
           </Route>
           <Route path="/email-management">
-            {() => isAuthenticated ? (
+            <ProtectedRoute>
               <DashboardLayout>
                 <EmailManagement />
               </DashboardLayout>
-            ) : null}
+            </ProtectedRoute>
           </Route>
           <Route path="/live-chat">
-            {() => isAuthenticated ? (
+            <ProtectedRoute>
               <DashboardLayout>
                 <LiveChat />
               </DashboardLayout>
-            ) : null}
+            </ProtectedRoute>
           </Route>
           <Route path="/whatsapp">
-            {() => isAuthenticated ? (
+            <ProtectedRoute>
               <DashboardLayout>
                 <WhatsApp />
               </DashboardLayout>
-            ) : null}
+            </ProtectedRoute>
           </Route>
           <Route path="/calendar">
-            {() => isAuthenticated ? (
+            <ProtectedRoute>
               <DashboardLayout>
                 <Calendar />
               </DashboardLayout>
-            ) : null}
+            </ProtectedRoute>
           </Route>
           <Route path="/products">
-            {() => isAuthenticated ? (
+            <ProtectedRoute>
               <DashboardLayout>
                 <Products />
               </DashboardLayout>
-            ) : null}
+            </ProtectedRoute>
           </Route>
           <Route path="/ai-training">
-            {() => isAuthenticated ? (
+            <ProtectedRoute>
               <DashboardLayout>
                 <AITraining />
               </DashboardLayout>
-            ) : null}
+            </ProtectedRoute>
           </Route>
           <Route path="/ai-training/initialize">
-            {() => isAuthenticated ? <AddInitialTrainingData /> : null}
+            <ProtectedRoute>
+              <AddInitialTrainingData />
+            </ProtectedRoute>
           </Route>
           <Route path="/speech-engines">
-            {() => isAuthenticated ? (
+            <ProtectedRoute>
               <DashboardLayout>
                 <SpeechEngines />
               </DashboardLayout>
-            ) : null}
+            </ProtectedRoute>
           </Route>
           <Route path="/settings">
-            {() => isAuthenticated ? (
+            <ProtectedRoute>
               <DashboardLayout>
                 <Settings />
               </DashboardLayout>
-            ) : null}
+            </ProtectedRoute>
           </Route>
           <Route path="/oauth-callback" component={OAuthCallback} />
           <Route component={NotFound} />
