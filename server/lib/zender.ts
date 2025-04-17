@@ -445,7 +445,8 @@ export class ZenderService {
         
         if (webhookData) {
           // Extract data from the webhook format
-          sender = webhookData.wid || webhookData.phone || '';
+          // Prioritize phone field over wid for consistent sender identification
+          sender = webhookData.phone || webhookData.wid || '';
           message = webhookData.message || '';
           mediaUrl = webhookData.attachment || null;
           messageId = webhookData.id?.toString() || null;
@@ -470,6 +471,7 @@ export class ZenderService {
       } 
       // Try nested data object (Format 3)
       else if (data.data && (data.data.from || data.data.phone || data.data.wid)) {
+        // Prioritize phone over wid for consistent sender identification
         sender = data.data.from || data.data.phone || data.data.wid;
         message = data.data.message || '';
         mediaUrl = data.data.media_url || data.data.attachment || null;
