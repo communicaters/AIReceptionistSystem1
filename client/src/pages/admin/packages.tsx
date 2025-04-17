@@ -69,7 +69,6 @@ import { useToast } from "@/hooks/use-toast";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import DashboardLayout from "@/components/layout/dashboard-layout";
 import { apiRequest } from "@/lib/queryClient";
 
 // Define package types
@@ -298,7 +297,7 @@ export default function PackagesManagement() {
   });
   
   return (
-    <DashboardLayout>
+    <>
       <div className="flex flex-col gap-6 p-4 md:p-6">
         <div className="flex items-center justify-between">
           <div>
@@ -435,7 +434,7 @@ export default function PackagesManagement() {
           )}
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
+    </>
   );
 }
 

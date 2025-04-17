@@ -173,7 +173,7 @@ export default function ReportsManagement() {
   };
   
   return (
-    <DashboardLayout>
+    <>
       <div className="flex flex-col gap-6 p-4 md:p-6">
         <div className="flex items-center justify-between">
           <div>
@@ -570,7 +570,7 @@ export default function ReportsManagement() {
           </TabsContent>
         </Tabs>
       </div>
-    </DashboardLayout>
+    </>
   );
 }
 
