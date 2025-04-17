@@ -384,17 +384,27 @@ export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage
   };
   
   storage.updatePackageFeature = async function(id: number, updates: Partial<PackageFeature>): Promise<PackageFeature> {
-    const [result] = await this.db
-      .update(this.schema.packageFeatures)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(this.schema.packageFeatures.id, id))
-      .returning();
-    return result;
+    try {
+      const [result] = await db
+        .update(packageFeatures)
+        .set({ ...updates, updatedAt: new Date() })
+        .where(eq(packageFeatures.id, id))
+        .returning();
+      return result;
+    } catch (error) {
+      console.error("Error in updatePackageFeature:", error);
+      throw error;
+    }
   };
   
   storage.deletePackageFeature = async function(id: number): Promise<boolean> {
-    const result = await this.db.delete(this.schema.packageFeatures).where(eq(this.schema.packageFeatures.id, id));
-    return result.rowCount > 0;
+    try {
+      const result = await db.delete(packageFeatures).where(eq(packageFeatures.id, id));
+      return result.rowCount ? result.rowCount > 0 : false;
+    } catch (error) {
+      console.error("Error in deletePackageFeature:", error);
+      throw error;
+    }
   };
   
   /**
@@ -415,11 +425,16 @@ export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage
   };
   
   storage.getUserPackagesByPackageId = async function(packageId: number): Promise<UserPackage[]> {
-    const result = await this.db.query.userPackages.findMany({
-      where: eq(this.schema.userPackages.packageId, packageId),
-      orderBy: [asc(this.schema.userPackages.userId)]
-    });
-    return result;
+    try {
+      const result = await db.query.userPackages.findMany({
+        where: eq(userPackages.packageId, packageId),
+        orderBy: [asc(userPackages.userId)]
+      });
+      return result;
+    } catch (error) {
+      console.error("Error in getUserPackagesByPackageId:", error);
+      return [];
+    }
   };
   
   storage.getActiveUserPackage = async function(userId: number): Promise<UserPackage | undefined> {
@@ -443,17 +458,27 @@ export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage
   };
   
   storage.createUserPackage = async function(userPackage: InsertUserPackage): Promise<UserPackage> {
-    const [result] = await this.db.insert(this.schema.userPackages).values(userPackage).returning();
-    return result;
+    try {
+      const [result] = await db.insert(userPackages).values(userPackage).returning();
+      return result;
+    } catch (error) {
+      console.error("Error in createUserPackage:", error);
+      throw error;
+    }
   };
   
   storage.deactivateUserPackage = async function(id: number): Promise<UserPackage> {
-    const [result] = await this.db
-      .update(this.schema.userPackages)
-      .set({ isActive: false, updatedAt: new Date() })
-      .where(eq(this.schema.userPackages.id, id))
-      .returning();
-    return result;
+    try {
+      const [result] = await db
+        .update(userPackages)
+        .set({ isActive: false, updatedAt: new Date() })
+        .where(eq(userPackages.id, id))
+        .returning();
+      return result;
+    } catch (error) {
+      console.error("Error in deactivateUserPackage:", error);
+      throw error;
+    }
   };
   
   /**
@@ -620,25 +645,40 @@ export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage
    */
   
   storage.createSystemActivity = async function(activity: any): Promise<any> {
-    const [result] = await this.db.insert(this.schema.systemActivity).values(activity).returning();
-    return result;
+    try {
+      const [result] = await db.insert(systemActivity).values(activity).returning();
+      return result;
+    } catch (error) {
+      console.error("Error in createSystemActivity:", error);
+      throw error;
+    }
   };
   
   storage.getRecentSystemActivity = async function(limit: number = 10): Promise<any[]> {
-    const result = await this.db.query.systemActivity.findMany({
-      orderBy: [desc(this.schema.systemActivity.timestamp as any)],
-      limit
-    });
-    return result;
+    try {
+      const result = await db.query.systemActivity.findMany({
+        orderBy: [desc(systemActivity.timestamp as any)],
+        limit
+      });
+      return result;
+    } catch (error) {
+      console.error("Error in getRecentSystemActivity:", error);
+      return [];
+    }
   };
   
   storage.getSystemActivitySince = async function(date: Date, limit: number = 100): Promise<any[]> {
-    const result = await this.db.query.systemActivity.findMany({
-      where: gte(this.schema.systemActivity.timestamp as any, date),
-      orderBy: [desc(this.schema.systemActivity.timestamp as any)],
-      limit
-    });
-    return result;
+    try {
+      const result = await db.query.systemActivity.findMany({
+        where: gte(systemActivity.timestamp as any, date),
+        orderBy: [desc(systemActivity.timestamp as any)],
+        limit
+      });
+      return result;
+    } catch (error) {
+      console.error("Error in getSystemActivitySince:", error);
+      return [];
+    }
   };
   
   /**
