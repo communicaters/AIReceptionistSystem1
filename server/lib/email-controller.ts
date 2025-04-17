@@ -26,49 +26,169 @@ export async function initEmailServices(userId: number = 1) {
 }
 
 // Function to send an email using the preferred or specified service
-export async function sendEmail(params: EmailParams, service?: EmailService, userId: number = 1): Promise<boolean> {
+export async function sendEmail(params: EmailParams, service?: EmailService, userId: number = 1): Promise<{success: boolean, service?: string, error?: string}> {
+  // Log the attempt for debugging
+  console.log(`Attempting to send email to ${params.to} with subject "${params.subject}" via ${service || 'preferred'} service`);
+  
+  // Validate critical parameters
+  if (!params.to || !params.from || !params.subject) {
+    const missingFields = [];
+    if (!params.to) missingFields.push('to');
+    if (!params.from) missingFields.push('from');
+    if (!params.subject) missingFields.push('subject');
+    
+    const errorMessage = `Missing required email fields: ${missingFields.join(', ')}`;
+    console.error(errorMessage);
+    
+    // Log the error
+    await storage.createSystemActivity({
+      module: 'Email',
+      event: 'EmailValidationError',
+      status: 'error',
+      timestamp: new Date(),
+      details: { error: errorMessage, params }
+    }).catch(err => console.error('Failed to log email validation error:', err));
+    
+    return { success: false, error: errorMessage };
+  }
+  
   // Determine which service to use if not specified
   if (!service) {
     service = await determinePreferredEmailService(userId);
+    console.log(`Using preferred email service: ${service}`);
   }
   
+  // Track which services we've tried
+  const attemptedServices = new Set<EmailService>();
+  
+  // Try the specified/preferred service first
   try {
+    let success = false;
+    attemptedServices.add(service);
+    
     switch (service) {
       case 'sendgrid':
-        return await sendgridService.sendEmail(params);
+        success = await sendgridService.sendEmail(params);
+        break;
       
       case 'smtp':
-        return await smtpService.sendEmail(params, userId);
+        success = await smtpService.sendEmail(params, userId);
+        break;
       
       case 'mailgun':
-        return await mailgunService.sendEmail(params, userId);
+        success = await mailgunService.sendEmail(params, userId);
+        break;
       
       default:
         throw new Error(`Unknown email service: ${service}`);
     }
+    
+    if (success) {
+      console.log(`Email sent successfully via ${service} to ${params.to}`);
+      
+      // Log successful email
+      await storage.createSystemActivity({
+        module: 'Email',
+        event: 'EmailSent',
+        status: 'success',
+        timestamp: new Date(),
+        details: { 
+          service, 
+          to: params.to, 
+          subject: params.subject,
+          from: params.from
+        }
+      }).catch(err => console.error('Failed to log email success:', err));
+      
+      return { success: true, service };
+    } else {
+      // If the service returned false but didn't throw
+      console.warn(`Email service ${service} returned false but didn't throw an error`);
+      throw new Error(`${service} returned failure without specific error`);
+    }
   } catch (error) {
     console.error(`Error sending email via ${service}:`, error);
     
-    // Try fallback services if the primary one fails
-    if (service !== 'sendgrid') {
+    // Log the error
+    await storage.createSystemActivity({
+      module: 'Email',
+      event: 'EmailError',
+      status: 'error',
+      timestamp: new Date(),
+      details: { 
+        service, 
+        error: error instanceof Error ? error.message : String(error),
+        to: params.to
+      }
+    }).catch(err => console.error('Failed to log email error:', err));
+    
+    // Try fallback services
+    const fallbackServices: EmailService[] = ['sendgrid', 'smtp', 'mailgun']
+      .filter(s => !attemptedServices.has(s as EmailService)) as EmailService[];
+    
+    for (const fallbackService of fallbackServices) {
       try {
-        // Try SendGrid as fallback
-        return await sendgridService.sendEmail(params);
+        console.log(`Trying fallback email service: ${fallbackService}`);
+        attemptedServices.add(fallbackService);
+        
+        let success = false;
+        switch (fallbackService) {
+          case 'sendgrid':
+            success = await sendgridService.sendEmail(params);
+            break;
+            
+          case 'smtp':
+            success = await smtpService.sendEmail(params, userId);
+            break;
+            
+          case 'mailgun':
+            success = await mailgunService.sendEmail(params, userId);
+            break;
+        }
+        
+        if (success) {
+          console.log(`Email sent successfully with fallback service ${fallbackService}`);
+          
+          // Log successful fallback
+          await storage.createSystemActivity({
+            module: 'Email',
+            event: 'EmailFallbackSuccess',
+            status: 'success',
+            timestamp: new Date(),
+            details: { 
+              originalService: service,
+              fallbackService,
+              to: params.to 
+            }
+          }).catch(err => console.error('Failed to log email fallback success:', err));
+          
+          return { success: true, service: fallbackService };
+        }
       } catch (fallbackError) {
-        console.error("Fallback to SendGrid failed:", fallbackError);
+        console.error(`Fallback to ${fallbackService} failed:`, fallbackError);
       }
     }
     
-    if (service !== 'smtp') {
-      try {
-        // Try SMTP as fallback
-        return await smtpService.sendEmail(params, userId);
-      } catch (fallbackError) {
-        console.error("Fallback to SMTP failed:", fallbackError);
-      }
-    }
+    // All services failed
+    console.error(`All email services failed for recipient ${params.to}`);
     
-    return false;
+    // Log complete failure
+    await storage.createSystemActivity({
+      module: 'Email',
+      event: 'AllEmailServicesFailed',
+      status: 'error',
+      timestamp: new Date(),
+      details: { 
+        to: params.to,
+        subject: params.subject,
+        attemptedServices: Array.from(attemptedServices)
+      }
+    }).catch(err => console.error('Failed to log email complete failure:', err));
+    
+    return { 
+      success: false, 
+      error: `Failed to send email using all available services: ${Array.from(attemptedServices).join(', ')}` 
+    };
   }
 }
 
