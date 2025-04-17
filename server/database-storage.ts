@@ -1,6 +1,6 @@
 import { IStorage } from './storage';
 import { db } from './db';
-import { eq, desc, and, asc, sql, count } from 'drizzle-orm';
+import { eq, desc, and, asc, sql, count, gte, lt, isNull, not, lte, or, ilike } from 'drizzle-orm';
 import { 
   users, User, InsertUser,
   sipConfig, SipConfig, InsertSipConfig,
@@ -27,7 +27,14 @@ import {
   meetingLogs, MeetingLog, InsertMeetingLog,
   moduleStatus, ModuleStatus, InsertModuleStatus,
   systemActivity, SystemActivity, InsertSystemActivity,
-  voiceSettings, VoiceSettings, InsertVoiceSettings
+  voiceSettings, VoiceSettings, InsertVoiceSettings,
+  // User management imports
+  packages, Package, InsertPackage,
+  packageFeatures, PackageFeature, InsertPackageFeature,
+  userPackages, UserPackage, InsertUserPackage,
+  featureUsageLogs, FeatureUsageLog, InsertFeatureUsageLog,
+  loginActivity, LoginActivity, InsertLoginActivity,
+  adminReportsCache, AdminReportsCache, InsertAdminReportsCache
 } from "@shared/schema";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
