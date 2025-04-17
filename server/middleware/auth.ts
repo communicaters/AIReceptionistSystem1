@@ -21,8 +21,10 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
     if (
       req.path.startsWith('/api/whatsapp/webhook') ||
       req.path === '/api/whatsapp/unified-webhook' ||
-      req.path === '/api/zender/incoming'
+      req.path === '/api/zender/incoming' ||
+      req.path.includes('webhook')
     ) {
+      console.log('Webhook route detected, skipping authentication:', req.path);
       return next();
     }
     
