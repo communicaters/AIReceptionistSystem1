@@ -10,6 +10,7 @@ import {
   verifySmtpConnection,
   sendTestEmail,
   sendEmail,
+  sendReply,
   processIncomingEmail,
   getEmailTemplates,
   getEmailTemplate,
