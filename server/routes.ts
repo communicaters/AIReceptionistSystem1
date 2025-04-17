@@ -38,6 +38,170 @@ function apiResponse(res: Response, data: any, status = 200) {
   return res.status(status).json(data);
 }
 
+// Helper function to send email using SendGrid
+async function sendEmailWithSendGrid(
+  userId: number,
+  to: string,
+  subject: string,
+  textContent: string,
+  fromEmail: string,
+  fromName: string,
+  headers: Record<string, string> = {},
+  htmlContent?: string
+): Promise<{ success: boolean; error: string; messageId: string | null }> {
+  try {
+    // Import SendGrid service
+    const { getSendgridClient } = await import('./lib/sendgrid');
+    
+    // Get the SendGrid client
+    const client = await getSendgridClient();
+    
+    // Create message object
+    const message: any = {
+      to,
+      from: { email: fromEmail, name: fromName },
+      subject,
+      text: textContent,
+      headers
+    };
+    
+    // Add HTML content if provided
+    if (htmlContent) {
+      message.html = htmlContent;
+    }
+    
+    // Send the email
+    const response = await client.send(message);
+    
+    // Extract message ID if available
+    const messageId = response && response[0] && response[0].headers ? 
+      response[0].headers['x-message-id'] || null : null;
+    
+    console.log(`SendGrid email sent successfully to ${to}`);
+    
+    return {
+      success: true,
+      error: '',
+      messageId
+    };
+  } catch (error) {
+    console.error("Error sending email with SendGrid:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error sending email with SendGrid',
+      messageId: null
+    };
+  }
+}
+
+// Helper function to send email using SMTP
+async function sendEmailWithSMTP(
+  userId: number,
+  to: string,
+  subject: string,
+  textContent: string,
+  fromEmail: string,
+  headers: Record<string, string> = {},
+  htmlContent?: string
+): Promise<{ success: boolean; error: string; messageId: string | null }> {
+  try {
+    // Import SMTP service
+    const { getSmtpTransport } = await import('./lib/smtp');
+    
+    // Get the SMTP transport
+    const transport = await getSmtpTransport(userId);
+    
+    // Create message object
+    const message: any = {
+      to,
+      from: fromEmail,
+      subject,
+      text: textContent,
+      headers
+    };
+    
+    // Add HTML content if provided
+    if (htmlContent) {
+      message.html = htmlContent;
+    }
+    
+    // Send the email
+    const info = await transport.sendMail(message);
+    
+    console.log(`SMTP email sent successfully to ${to}`);
+    
+    return {
+      success: true,
+      error: '',
+      messageId: info.messageId || null
+    };
+  } catch (error) {
+    console.error("Error sending email with SMTP:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error sending email with SMTP',
+      messageId: null
+    };
+  }
+}
+
+// Helper function to send email using Mailgun
+async function sendEmailWithMailgun(
+  userId: number,
+  to: string,
+  subject: string,
+  textContent: string,
+  fromEmail: string,
+  fromName: string,
+  headers: Record<string, string> = {},
+  htmlContent?: string
+): Promise<{ success: boolean; error: string; messageId: string | null }> {
+  try {
+    // Import Mailgun service
+    const { getMailgunClient } = await import('./lib/mailgun');
+    
+    // Get the Mailgun client and domain
+    const { client, domain } = await getMailgunClient(userId);
+    
+    // Create message object with headers
+    const mailgunHeaders: Record<string, string> = {};
+    Object.keys(headers).forEach(key => {
+      mailgunHeaders['h:' + key] = headers[key];
+    });
+    
+    const message = {
+      to,
+      from: `${fromName} <${fromEmail}>`,
+      subject,
+      text: textContent,
+      ...mailgunHeaders
+    };
+    
+    // Add HTML content if provided
+    if (htmlContent) {
+      message['html'] = htmlContent;
+    }
+    
+    // Send the email
+    const response = await client.messages.create(domain, message);
+    
+    console.log(`Mailgun email sent successfully to ${to}`);
+    
+    return {
+      success: true,
+      error: '',
+      messageId: response.id || null
+    };
+  } catch (error) {
+    console.error("Error sending email with Mailgun:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error sending email with Mailgun',
+      messageId: null
+    };
+  }
+}
+
 // Handle Google OAuth callback with authorization code
 async function handleGoogleOAuthCallback(req: Request, res: Response) {
   const { code, state, error } = req.query;
@@ -830,6 +994,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ? originalEmail.subject 
         : `Re: ${originalEmail.subject}`);
 
+      // Import the formatter to extract clean response text
+      const { extractCleanResponseText, formatEmailBodyAsHtml } = require('./lib/email-formatter');
+      
+      // Extract only the actual response text from any JSON structure
+      const cleanReplyContent = extractCleanResponseText(replyContent);
+      
+      // Create HTML version
+      const htmlReplyContent = formatEmailBodyAsHtml(cleanReplyContent);
+      
       // Send the email using the selected service
       let sendResult = { success: false, error: 'Unknown error', messageId: null };
       
@@ -838,29 +1011,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId,
           originalEmail.from, // 'to' should be the 'from' of the original email
           replySubject,
-          replyContent,
+          cleanReplyContent,
           fromEmail,
           fromName,
-          headers
+          headers,
+          htmlReplyContent // Add HTML content
         );
       } else if (emailService === 'smtp') {
         sendResult = await sendEmailWithSMTP(
           userId,
           originalEmail.from, // 'to' should be the 'from' of the original email
           replySubject,
-          replyContent,
+          cleanReplyContent,
           fromEmail,
-          headers
+          headers,
+          htmlReplyContent // Add HTML content
         );
       } else if (emailService === 'mailgun') {
         sendResult = await sendEmailWithMailgun(
           userId,
           originalEmail.from, // 'to' should be the 'from' of the original email
           replySubject,
-          replyContent,
+          cleanReplyContent,
           fromEmail,
           fromName,
-          headers
+          headers,
+          htmlReplyContent // Add HTML content
         );
       }
 
