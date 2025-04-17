@@ -2853,11 +2853,81 @@ If this is NOT a meeting scheduling request, respond normally and set is_schedul
                           });
                           
                           if (result.success) {
-                            // Success message to user - handle both with and without email addresses
-                            if (schedulingData.email) {
-                              replyToUser = `I've scheduled your meeting for ${new Date(schedulingData.date_time).toLocaleString()}. A confirmation has been sent to ${schedulingData.email}. Is there anything else you need help with?`;
+                            // Format date for better readability
+                            const formattedDate = new Date(schedulingData.date_time).toLocaleString('en-US', {
+                              weekday: 'long',
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric',
+                              hour: 'numeric',
+                              minute: 'numeric',
+                              hour12: true
+                            });
+                            
+                            // Success message to user with meeting link if available
+                            if (result.meetingLink) {
+                              // Send a first message with meeting details
+                              const initialMessage = `I've scheduled your meeting for ${formattedDate}.`;
+                              
+                              // Follow up with the meeting link in a separate message
+                              const linkMessage = `Here's your meeting link: ${result.meetingLink}\n\nYou can click this link at the scheduled time to join the meeting.`;
+                              
+                              // Set the reply for this message
+                              replyToUser = initialMessage;
+                              
+                              // Store the meeting link to send as a follow-up message
+                              setTimeout(async () => {
+                                try {
+                                  // Get the WhatsApp service
+                                  const zenderService = getZenderService(userId);
+                                  await zenderService.initialize();
+                                  
+                                  // Create a log entry for the follow-up message
+                                  const linkLogEntry = await storage.createWhatsappLog({
+                                    userId,
+                                    phoneNumber,
+                                    message: linkMessage,
+                                    direction: "outbound",
+                                    timestamp: new Date(),
+                                    status: 'pending'
+                                  });
+                                  
+                                  // Send the meeting link via Zender
+                                  const linkSendResult = await zenderService.sendMessage({
+                                    recipient: phoneNumber,
+                                    message: linkMessage,
+                                    type: 'text'
+                                  });
+                                  
+                                  if (linkSendResult.success) {
+                                    console.log(`Meeting link sent successfully via Zender to ${phoneNumber}`);
+                                    await storage.updateWhatsappLog(linkLogEntry.id, { 
+                                      status: 'sent',
+                                      externalId: linkSendResult.messageId
+                                    });
+                                    
+                                    // Log the successful sending of meeting link
+                                    await storage.createSystemActivity({
+                                      module: "WhatsApp",
+                                      event: "Meeting Link Sent",
+                                      status: "success",
+                                      timestamp: new Date(),
+                                      details: { phoneNumber, meetingLink: result.meetingLink }
+                                    });
+                                  } else {
+                                    console.error(`Failed to send meeting link via Zender: ${linkSendResult.error}`);
+                                  }
+                                } catch (error) {
+                                  console.error("Error sending meeting link message:", error);
+                                }
+                              }, 1000); // Send the link 1 second after the confirmation
                             } else {
-                              replyToUser = `I've scheduled your meeting for ${new Date(schedulingData.date_time).toLocaleString()}. The event has been added to the calendar. Is there anything else you need help with?`;
+                              // No meeting link available
+                              if (schedulingData.email) {
+                                replyToUser = `I've scheduled your meeting for ${formattedDate}. A confirmation has been sent to ${schedulingData.email}. Is there anything else you need help with?`;
+                              } else {
+                                replyToUser = `I've scheduled your meeting for ${formattedDate}. The event has been added to the calendar. Is there anything else you need help with?`;
+                              }
                             }
                           } else {
                             // Send error message

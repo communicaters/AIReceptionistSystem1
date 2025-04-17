@@ -308,7 +308,21 @@ export async function scheduleMeeting(
       attendees: [{ email: attendeeEmail }]
     });
     
-    // Log the meeting in our system
+    // Extract meeting link from event data
+    let meetingLink = '';
+    if (event.hangoutLink) {
+      meetingLink = event.hangoutLink;
+      console.log(`Google Meet link extracted: ${meetingLink}`);
+    } else if (event.conferenceData && event.conferenceData.entryPoints) {
+      // Try to extract from conference data
+      const videoEntry = event.conferenceData.entryPoints.find(entry => entry.entryPointType === 'video');
+      if (videoEntry && videoEntry.uri) {
+        meetingLink = videoEntry.uri;
+        console.log(`Conference link extracted from entryPoints: ${meetingLink}`);
+      }
+    }
+    
+    // Log the meeting in our system with meeting link
     const meetingLog = await storage.createMeetingLog({
       userId,
       subject,
@@ -317,15 +331,17 @@ export async function scheduleMeeting(
       endTime: endDateTime,
       attendees: [attendeeEmail],
       googleEventId: event.id,
-      status: 'scheduled'
+      status: 'scheduled',
+      meetingLink: meetingLink || null
     });
     
-    console.log(`Successfully scheduled meeting: ${event.id}`);
+    console.log(`Successfully scheduled meeting: ${event.id}${meetingLink ? ' with meeting link' : ''}`);
     
     return {
       success: true,
       message: `Meeting scheduled successfully for ${startDateTime.toLocaleString()}`,
-      eventId: event.id || undefined
+      eventId: event.id || undefined,
+      meetingLink: meetingLink || undefined
     };
   } catch (error: any) {
     console.error('Error scheduling meeting:', error);
