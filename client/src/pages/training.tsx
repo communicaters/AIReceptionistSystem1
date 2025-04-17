@@ -232,7 +232,7 @@ const TrainingPage = () => {
   });
 
   return (
-    <DashboardLayout>
+    <>
       <div className="flex flex-col gap-6">
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold tracking-tight">AI Training & Intent Management</h1>
@@ -478,7 +478,7 @@ const TrainingPage = () => {
           )}
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
+    </>
   );
 };
 
