@@ -89,12 +89,25 @@ export async function createEvent(
     const config = await storage.getCalendarConfigByUserId(userId);
     const calendarId = config?.googleCalendarId || 'primary';
     
+    console.log("Sending Google Calendar request:", JSON.stringify(event, null, 2));
+    
+    // Request conferenceData to force Google Meet creation
     const response = await calendar.events.insert({
       auth: oauth2Client,
       calendarId,
-      requestBody: event,
+      requestBody: {
+        ...event,
+        conferenceData: {
+          createRequest: {
+            requestId: `meeting-${Date.now()}`
+          }
+        }
+      },
+      conferenceDataVersion: 1,
       sendUpdates: 'all', // Send email updates to attendees
     });
+    
+    console.log("Google Calendar response:", JSON.stringify(response.data, null, 2));
     
     return response.data;
   } catch (error) {
@@ -236,7 +249,7 @@ export async function scheduleMeeting(
     dateTimeString: string,
     duration?: number // in minutes
   }
-): Promise<{ success: boolean; message: string; eventId?: string; error?: string }> {
+): Promise<{ success: boolean; message: string; eventId?: string; error?: string; meetingLink?: string }> {
   try {
     console.log(`Attempting to schedule meeting with options:`, options);
     

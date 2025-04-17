@@ -44,8 +44,10 @@ router.post('/test-meeting-scheduling', async (req, res) => {
       return apiResponse(res, meetingResult, 400);
     }
     
-    // If meeting was scheduled successfully and has a link
-    if (meetingResult.meetingLink) {
+    // If meeting was scheduled successfully
+    if (meetingResult.success) {
+      // Get meeting link if available
+      const meetingLink = meetingResult.meetingLink;
       // Initialize Zender service
       const zenderService = getZenderService(userId);
       await zenderService.initialize();
@@ -79,7 +81,7 @@ router.post('/test-meeting-scheduling', async (req, res) => {
       // Wait 1 second and send the meeting link
       setTimeout(async () => {
         try {
-          const linkMessage = `Here's your meeting link: ${meetingResult.meetingLink}\n\nYou can click this link at the scheduled time to join the meeting.`;
+          const linkMessage = `Here's your meeting link: ${meetingLink || "No link available"}\n\nYou can click this link at the scheduled time to join the meeting.`;
           
           const linkMessageLog = await storage.createWhatsappLog({
             userId,
@@ -115,7 +117,7 @@ router.post('/test-meeting-scheduling', async (req, res) => {
       result: meetingResult
     });
     
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error in test-meeting-scheduling:", error);
     return apiResponse(res, { 
       error: error.message || "Unknown error occurred",
@@ -167,7 +169,7 @@ router.post('/test-history', async (req, res) => {
       }))
     });
     
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error in test-history:", error);
     return apiResponse(res, { 
       error: error.message || "Unknown error occurred",
