@@ -763,30 +763,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Import the IMAP functions
       const { syncEmails, verifyImapConnection } = await import('./lib/imap');
       
-      // First verify the connection
-      const isConnected = await verifyImapConnection(userId);
+      // First verify the connection with enhanced verification
+      const connectionStatus = await verifyImapConnection(userId);
       
-      if (!isConnected) {
+      if (!connectionStatus.connected) {
         return apiResponse(res, { 
           success: false, 
-          message: "Cannot connect to IMAP server. Please check your email configuration." 
+          message: connectionStatus.message || "Cannot connect to IMAP server. Please check your email configuration." 
         }, 400);
       }
       
-      // Perform the sync
-      const emailCount = await syncEmails(userId);
+      // Perform the sync with enhanced options
+      const options = {
+        unreadOnly: true,  // Default to fetching only unread emails
+        folder: "INBOX",   // Default folder
+        limit: 50          // Increased limit for better results
+      };
       
+      // Get any override options from request
+      if (req.body.unreadOnly !== undefined) options.unreadOnly = !!req.body.unreadOnly;
+      if (req.body.folder) options.folder = req.body.folder;
+      if (req.body.limit) options.limit = Math.min(100, parseInt(req.body.limit.toString()));
+      
+      console.log(`Starting email sync with options:`, options);
+      
+      // Perform the sync with progress tracking
+      await storage.createSystemActivity({
+        module: "Email",
+        event: "EmailSync",
+        status: "in_progress",
+        timestamp: new Date(),
+        details: { userId, options }
+      });
+      
+      const emailCount = await syncEmails(userId, options);
+      
+      // Log completion
       await storage.createSystemActivity({
         module: "Email",
         event: "EmailSync",
         status: "completed",
         timestamp: new Date(),
-        details: { userId, count: emailCount }
+        details: { userId, count: emailCount, options }
       });
       
       apiResponse(res, { 
         success: true, 
-        message: `Synced ${emailCount} new emails`, 
+        message: emailCount > 0 
+          ? `Successfully synced ${emailCount} new emails` 
+          : "Sync completed. No new emails found.", 
         count: emailCount 
       });
     } catch (error) {
@@ -797,7 +822,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         event: "EmailSync",
         status: "failed",
         timestamp: new Date(),
-        details: { error: (error as Error).message }
+        details: { userId: 1, error: (error as Error).message }
       });
       
       apiResponse(res, { 
@@ -807,7 +832,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Verify IMAP connection
+  // Verify IMAP connection with enhanced diagnostics
   app.get("/api/email/imap-status", async (req, res) => {
     try {
       const userId = 1; // For demo, use fixed user ID
@@ -815,20 +840,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Import the IMAP verification function
       const { verifyImapConnection } = await import('./lib/imap');
       
-      // Check connection
-      const isConnected = await verifyImapConnection(userId);
+      // Check connection with enhanced status information
+      const connectionStatus = await verifyImapConnection(userId);
       
       apiResponse(res, { 
         success: true, 
-        connected: isConnected,
-        message: isConnected ? "Successfully connected to IMAP server" : "Not connected to IMAP server"
+        connected: connectionStatus.connected,
+        message: connectionStatus.message || (connectionStatus.connected 
+          ? "Successfully connected to IMAP server" 
+          : "Failed to connect to IMAP server"),
+        folderList: connectionStatus.folderList || []
       });
     } catch (error) {
       console.error("Error checking IMAP connection:", error);
       apiResponse(res, { 
         success: false, 
         connected: false,
-        message: `Failed to check IMAP connection: ${(error as Error).message}` 
+        message: `Failed to check IMAP connection: ${(error as Error).message}`,
+        folderList: []
       }, 500);
     }
   });
