@@ -638,7 +638,7 @@ export const emailReplies = pgTable("email_replies", {
   replyStatus: text("reply_status").notNull().default('pending'),
   messageId: text("message_id"),
   inReplyTo: text("in_reply_to"),
-  references: text("references"),
+  referenceIds: text("reference_ids"),
   errorMessage: text("error_message"),
   sentAt: timestamp("sent_at"),
 });

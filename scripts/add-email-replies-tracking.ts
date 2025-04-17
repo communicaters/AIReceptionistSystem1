@@ -34,7 +34,7 @@ async function main() {
         reply_status TEXT NOT NULL DEFAULT 'pending',
         message_id TEXT,
         in_reply_to TEXT,
-        references TEXT,
+        reference_ids TEXT,
         error_message TEXT,
         sent_at TIMESTAMP
       )

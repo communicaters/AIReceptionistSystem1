@@ -19,6 +19,7 @@ import {
   intentMap, IntentMap, InsertIntentMap,
   callLogs, CallLog, InsertCallLog,
   emailLogs, EmailLog, InsertEmailLog,
+  emailReplies, InsertEmailReply,
   chatLogs, ChatLog, InsertChatLog,
   whatsappLogs, WhatsappLog, InsertWhatsappLog,
   meetingLogs, MeetingLog, InsertMeetingLog,
@@ -221,6 +222,13 @@ export interface IStorage {
   getEmailLogByMessageId(messageId: string): Promise<EmailLog | undefined>;
   getEmailLogsByFromAndSubject(userId: number, from: string, subject: string): Promise<EmailLog[]>;
   createEmailLog(log: InsertEmailLog): Promise<EmailLog>;
+  updateEmailLogIsReplied(id: number, isReplied: boolean, inReplyTo?: string): Promise<EmailLog | undefined>;
+  getUnrepliedEmails(userId: number): Promise<EmailLog[]>;
+  
+  // Email Replies
+  createEmailReply(reply: InsertEmailReply): Promise<any>;
+  getEmailReplyByOriginalEmailId(originalEmailId: number): Promise<any | undefined>;
+  updateEmailReplyStatus(id: number, status: string, messageId?: string, error?: string): Promise<any | undefined>;
 
   // Chat Logs
   getChatLog(id: number): Promise<ChatLog | undefined>;
