@@ -1,7 +1,8 @@
-import IMAP from 'imap';
+import * as ImapSimple from 'imap-simple';
 import { simpleParser, type ParsedMail } from 'mailparser';
 import { storage } from '../database-storage';
 import { type InsertEmailLog } from '@shared/schema';
+import * as IMAP from 'imap';
 
 interface EmailMessage {
   from: string;
@@ -11,82 +12,143 @@ interface EmailMessage {
   html?: string;
   timestamp: Date;
   messageId: string;
+  uid?: number;
 }
 
 /**
- * Initialize IMAP client for a specific user
+ * Get IMAP configuration for a specific user
+ * This function handles auto-detection and fallbacks for IMAP settings
  */
-export async function initImapClient(userId: number): Promise<IMAP | null> {
+export async function getImapConfig(userId: number): Promise<ImapSimple.ImapSimpleOptions | null> {
   try {
-    // Get SMTP configuration (IMAP uses similar settings)
+    console.log(`Getting IMAP configuration for user ${userId}`);
+    
+    // Get SMTP configuration (IMAP settings may be derived from this)
     const smtpConfig = await storage.getSmtpConfigByUserId(userId);
     
-    if (!smtpConfig || !smtpConfig.isActive) {
-      console.log(`IMAP client not initialized for user ${userId}: No active SMTP configuration`);
+    if (!smtpConfig) {
+      console.log(`No SMTP configuration found for user ${userId}`);
       return null;
     }
     
-    // Determine IMAP host with better fallback strategy
-    let host = smtpConfig.imapHost;
-    if (!host) {
-      // Try to derive IMAP host from SMTP host with different patterns
+    if (!smtpConfig.isActive) {
+      console.log(`SMTP configuration for user ${userId} is inactive`);
+      return null;
+    }
+    
+    // Prepare IMAP configuration with smart detection
+    let imapHost = smtpConfig.imapHost;
+    let imapPort = smtpConfig.imapPort;
+    let imapTls = smtpConfig.imapSecure;
+    
+    // Auto-detection for IMAP settings if not specified
+    if (!imapHost) {
       const smtpHost = smtpConfig.host;
-      if (smtpHost.startsWith('smtp.')) {
-        host = smtpHost.replace('smtp.', 'imap.');
-      } else if (smtpHost.includes('mail.')) {
-        // For generic mail servers, host might be the same
-        host = smtpHost;
+      
+      // Try various common IMAP server patterns
+      const hostPatterns = [
+        { test: /^smtp\.(.+)$/, replace: 'imap.$1' },     // smtp.example.com -> imap.example.com
+        { test: /^mail\.(.+)$/, replace: 'mail.$1' },     // mail.example.com -> mail.example.com (unchanged)
+        { test: /^(.+)$/, replace: 'imap.$1' }            // example.com -> imap.example.com
+      ];
+      
+      // Find first matching pattern or use fallback
+      const matchedPattern = hostPatterns.find(pattern => pattern.test.test(smtpHost));
+      if (matchedPattern) {
+        imapHost = smtpHost.replace(matchedPattern.test, matchedPattern.replace);
       } else {
-        // Try adding "imap." prefix as a last resort
-        host = `imap.${smtpHost.split('.').slice(1).join('.')}`;
+        // Default fallback
+        imapHost = `imap.${smtpHost}`;
       }
       
-      console.log(`IMAP host not explicitly set, derived ${host} from SMTP host ${smtpHost}`);
+      console.log(`IMAP host auto-detected: ${imapHost} (derived from ${smtpHost})`);
     }
     
-    // Common IMAP port defaults for different security protocols
-    const port = smtpConfig.imapPort || 993; // Default to 993 for secure
-    const tls = smtpConfig.imapSecure ?? true; // Default to true if not specified
-    
-    console.log(`Initializing IMAP client with host=${host}, port=${port}, user=${smtpConfig.username}, tls=${tls ? 'enabled' : 'disabled'}`);
-    
-    // For mail.18plus.io, use specific connection settings that are known to work
-    if (smtpConfig.host === 'mail.18plus.io') {
-      console.log('Detected mail.18plus.io server, using optimized IMAP settings');
-      host = 'mail.18plus.io';
-      // Note: Some mail servers may need a specific port like 143 with STARTTLS instead of 993 with TLS
+    // Common port defaults if not specified
+    if (!imapPort) {
+      imapPort = 993; // Default secure IMAP port
+      console.log(`Using default secure IMAP port: ${imapPort}`);
     }
     
-    // Create IMAP client with enhanced debug information
-    const imapClient = new IMAP({
-      user: smtpConfig.username,
-      password: smtpConfig.password,
-      host: host,
-      port: port,
-      tls: tls,
-      debug: console.log, // Enable debug logging for connection issues
-      autotls: 'always', // Try STARTTLS if available
-      tlsOptions: { 
-        rejectUnauthorized: false, // For development only
-        enableTrace: true // Enable TLS trace for debugging
+    // TLS is recommended for security but can be explicitly disabled
+    if (imapTls === undefined) {
+      imapTls = true; // Default to secure connection
+      console.log(`Using default secure TLS setting: ${imapTls}`);
+    }
+    
+    // Special case handling for known providers
+    if (smtpConfig.host.includes('gmail.com')) {
+      console.log('Gmail detected, using known good Gmail IMAP settings');
+      imapHost = 'imap.gmail.com';
+      imapPort = 993;
+      imapTls = true;
+    } else if (smtpConfig.host.includes('outlook.com') || smtpConfig.host.includes('hotmail.com')) {
+      console.log('Outlook/Hotmail detected, using known good Outlook IMAP settings');
+      imapHost = 'outlook.office365.com';
+      imapPort = 993;
+      imapTls = true;
+    } else if (smtpConfig.host.includes('yahoo.com')) {
+      console.log('Yahoo detected, using known good Yahoo IMAP settings');
+      imapHost = 'imap.mail.yahoo.com';
+      imapPort = 993;
+      imapTls = true;
+    } else if (smtpConfig.host.includes('aol.com')) {
+      console.log('AOL detected, using known good AOL IMAP settings');
+      imapHost = 'imap.aol.com';
+      imapPort = 993;
+      imapTls = true;
+    } else if (smtpConfig.host.includes('mail.18plus.io')) {
+      console.log('18plus.io mail detected, using known good settings');
+      imapHost = 'mail.18plus.io';
+      imapPort = 993;
+      imapTls = true;
+    }
+    
+    // Create configuration for imap-simple
+    const config: ImapSimple.ImapSimpleOptions = {
+      imap: {
+        user: smtpConfig.username,
+        password: smtpConfig.password,
+        host: imapHost,
+        port: imapPort,
+        tls: imapTls,
+        authTimeout: 10000, // 10 seconds timeout for auth
+        tlsOptions: { 
+          rejectUnauthorized: false, // For development - allows self-signed certs
+        }
+      },
+      onmail: function() {
+        console.log('New mail event received');
+      },
+      onupdate: function(seqno, info) {
+        console.log(`Message update: seqno=${seqno}, flags=${info.flags.join(',')}`);
+      }
+    };
+    
+    // Log the configuration we'll use
+    console.log(`IMAP configuration prepared: ${imapHost}:${imapPort} (TLS: ${imapTls})`);
+    
+    // Track the configuration attempt
+    await storage.createSystemActivity({
+      module: "Email",
+      event: "IMAP Configuration Prepared",
+      status: "Completed",
+      timestamp: new Date(),
+      details: { 
+        userId, 
+        host: imapHost, 
+        port: imapPort, 
+        tls: imapTls,
+        username: smtpConfig.username
       }
     });
     
-    // Log initialization
-    await storage.createSystemActivity({
-      module: "Email",
-      event: "IMAP Client Initialized",
-      status: "Completed",
-      timestamp: new Date(),
-      details: { userId, host, port, tls, username: smtpConfig.username }
-    });
-    
-    return imapClient;
+    return config;
   } catch (error) {
-    console.error(`Error initializing IMAP client for user ${userId}:`, error);
+    console.error(`Error preparing IMAP configuration for user ${userId}:`, error);
     await storage.createSystemActivity({
       module: "Email",
-      event: "IMAP Client Initialization",
+      event: "IMAP Configuration Preparation",
       status: "Failed",
       timestamp: new Date(),
       details: { userId, error: (error as Error).message }
@@ -96,241 +158,317 @@ export async function initImapClient(userId: number): Promise<IMAP | null> {
 }
 
 /**
- * Fetch emails from the server
+ * Connect to IMAP server with retry logic
+ */
+export async function connectToImap(userId: number): Promise<ImapSimple.ImapSimple | null> {
+  const MAX_RETRIES = 3;
+  let retryCount = 0;
+  let lastError: Error | null = null;
+  
+  while (retryCount < MAX_RETRIES) {
+    try {
+      console.log(`Connecting to IMAP server for user ${userId}, attempt ${retryCount + 1}/${MAX_RETRIES}`);
+      
+      const config = await getImapConfig(userId);
+      if (!config) {
+        console.log(`No valid IMAP configuration available for user ${userId}`);
+        return null;
+      }
+      
+      // Try connecting with exponential backoff
+      const connection = await ImapSimple.connect(config);
+      console.log(`Successfully connected to IMAP server for user ${userId}`);
+      
+      await storage.createSystemActivity({
+        module: "Email",
+        event: "IMAP Connection",
+        status: "Successful",
+        timestamp: new Date(),
+        details: { userId, attempt: retryCount + 1 }
+      });
+      
+      return connection;
+    } catch (error) {
+      lastError = error as Error;
+      const waitTime = Math.pow(2, retryCount) * 1000; // Exponential backoff: 1s, 2s, 4s
+      
+      console.error(`IMAP connection attempt ${retryCount + 1} failed for user ${userId}:`, error);
+      console.log(`Waiting ${waitTime}ms before retry...`);
+      
+      // Log the failure
+      await storage.createSystemActivity({
+        module: "Email",
+        event: "IMAP Connection Attempt",
+        status: "Failed",
+        timestamp: new Date(),
+        details: { 
+          userId, 
+          attempt: retryCount + 1, 
+          error: (error as Error).message, 
+          willRetry: retryCount < MAX_RETRIES - 1 
+        }
+      });
+      
+      // Wait before retry with exponential backoff
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+      retryCount++;
+    }
+  }
+  
+  // If all retries failed, log the final failure
+  console.error(`All ${MAX_RETRIES} connection attempts failed for user ${userId}`);
+  await storage.createSystemActivity({
+    module: "Email",
+    event: "IMAP Connection",
+    status: "Failed",
+    timestamp: new Date(),
+    details: { 
+      userId, 
+      attempts: MAX_RETRIES, 
+      error: lastError?.message || "Unknown error" 
+    }
+  });
+  
+  return null;
+}
+
+/**
+ * Fetch emails from IMAP server using imap-simple
+ * This new implementation provides better error handling and more reliable results
  */
 export async function fetchEmails(userId: number, folder: string = 'INBOX', limit: number = 20, fetchUnreadOnly: boolean = false): Promise<EmailMessage[]> {
+  console.log(`Fetching ${fetchUnreadOnly ? 'unread' : 'all'} emails for user ${userId} from ${folder}, limit ${limit}`);
+  
   try {
-    const imapClient = await initImapClient(userId);
-    
-    if (!imapClient) {
-      throw new Error('IMAP client not initialized');
+    // Connect to IMAP server with retry logic
+    const connection = await connectToImap(userId);
+    if (!connection) {
+      throw new Error(`Failed to establish IMAP connection for user ${userId}`);
     }
     
-    console.log(`Fetching emails for user ${userId} from folder ${folder}, limit ${limit}, unread only: ${fetchUnreadOnly}`);
+    // Log the successful connection
+    console.log(`Connected to IMAP server for user ${userId}, opening mailbox: ${folder}`);
     
-    return new Promise((resolve, reject) => {
-      const emails: EmailMessage[] = [];
-      let fetchCompleted: boolean = false;
-      let emailsProcessed: number = 0;
+    // Open the mailbox
+    try {
+      await connection.openBox(folder);
+      console.log(`Successfully opened mailbox: ${folder}`);
+    } catch (error) {
+      // Try to handle non-standard folder names or structures
+      console.error(`Error opening mailbox "${folder}":`, error);
       
-      imapClient.once('ready', () => {
-        console.log(`IMAP connection ready for user ${userId}`);
+      // List available mailboxes and try to find a match
+      console.log(`Listing available mailboxes to find a match for "${folder}"...`);
+      const boxes = await connection.getBoxes();
+      console.log('Available mailboxes:', Object.keys(boxes));
+      
+      // Try similar names or default to INBOX
+      const folderAlternatives = [
+        folder.toUpperCase(),
+        folder.toLowerCase(),
+        'INBOX'
+      ];
+      
+      let folderFound = false;
+      for (const altFolder of folderAlternatives) {
+        if (altFolder === folder) continue; // Skip the original folder that failed
         
-        imapClient.openBox(folder, false, (err, box) => {
-          if (err) {
-            console.error(`Error opening mailbox ${folder}:`, err);
-            imapClient.end();
-            return reject(err);
-          }
+        try {
+          console.log(`Trying alternative folder: ${altFolder}`);
+          await connection.openBox(altFolder);
+          console.log(`Successfully opened alternative mailbox: ${altFolder}`);
+          folderFound = true;
+          break;
+        } catch (altError) {
+          console.log(`Alternative folder ${altFolder} also failed:`, altError);
+        }
+      }
+      
+      if (!folderFound) {
+        throw new Error(`Could not open any mailbox including ${folder} and alternatives`);
+      }
+    }
+    
+    // Search criteria for emails
+    let searchCriteria: string[] = [];
+    
+    if (fetchUnreadOnly) {
+      // Different servers might handle the UNSEEN criteria differently
+      searchCriteria = ['UNSEEN'];
+      console.log('Using UNSEEN search criteria for unread emails');
+    } else {
+      // ALL is more reliable than using date ranges
+      searchCriteria = ['ALL'];
+      console.log('Using ALL search criteria');
+    }
+    
+    // Search options
+    const fetchOptions = {
+      bodies: ['HEADER', 'TEXT', ''],  // Fetch headers, text and full message
+      markSeen: false,                  // Don't mark as seen
+      struct: true                      // Get the structure
+    };
+    
+    // Search and fetch emails with timeout protection
+    console.log(`Searching for emails with criteria: ${searchCriteria.join(', ')}`);
+    
+    // Use a promise with timeout to prevent hanging
+    const searchPromise = new Promise<EmailMessage[]>(async (resolve, reject) => {
+      try {
+        // Search for messages
+        const messages = await connection.search(searchCriteria, fetchOptions);
+        console.log(`Search returned ${messages.length} messages`);
+        
+        // Sort messages by date - newest first
+        messages.sort((a, b) => {
+          const headerA = a.parts.find(part => part.which === 'HEADER');
+          const headerB = b.parts.find(part => part.which === 'HEADER');
           
-          console.log(`Mailbox opened: ${folder}, total messages: ${box?.messages?.total || 'unknown'}`);
+          if (!headerA || !headerB) return 0;
           
-          // Search criteria - use UNSEEN for unread only, ALL for all emails
-          const searchCriteria = fetchUnreadOnly ? ['UNSEEN'] : ['ALL'];
+          const dateA = headerA.body.date ? new Date(headerA.body.date[0]).getTime() : 0;
+          const dateB = headerB.body.date ? new Date(headerB.body.date[0]).getTime() : 0;
           
-          console.log(`Searching emails with criteria: ${searchCriteria.join(', ')}`);
-          
-          imapClient.search(searchCriteria, (err, results) => {
-            if (err) {
-              console.error(`Error searching emails:`, err);
-              imapClient.end();
-              return reject(err);
-            }
-            
-            console.log(`Found ${results.length} emails matching criteria`);
-            
-            if (!results.length) {
-              imapClient.end();
-              return resolve([]);
-            }
-            
-            // Sort results by sequence number (newest first) and limit
-            results.sort((a, b) => b - a);
-            const emailsToFetch = results.slice(0, limit);
-            
-            console.log(`Fetching ${emailsToFetch.length} emails (out of ${results.length} found)`);
-            
-            const fetch = imapClient.fetch(emailsToFetch, {
-              bodies: ['HEADER.FIELDS (FROM TO SUBJECT DATE)', 'TEXT', ''],
-              struct: true,
-              markSeen: false // Don't mark as read when fetching
-            });
-            
-            // Time out after 30 seconds to prevent hanging
-            const timeoutId = setTimeout(() => {
-              if (!fetchCompleted) {
-                console.error(`IMAP fetch timed out after 30 seconds`);
-                imapClient.end();
-                resolve(emails); // Return what we have so far
-              }
-            }, 30000);
-            
-            fetch.on('message', (msg, seqno) => {
-              console.log(`Processing message #${seqno}`);
-              
-              const email: Partial<EmailMessage> = {
-                messageId: '',
-                from: '',
-                to: '',
-                subject: '',
-                body: '',
-                timestamp: new Date()
-              };
-              
-              msg.on('body', (stream, info) => {
-                if (info.which === '') {
-                  // Parse entire email
-                  let buffer = '';
-                  stream.on('data', (chunk) => {
-                    buffer += chunk.toString('utf8');
-                  });
-                  
-                  stream.once('end', () => {
-                    // Parse the email content
-                    simpleParser(buffer).then((parsed) => {
-                      // Handle different address formats
-                      if (parsed.from) {
-                        // Type guard for array vs. single object
-                        if (Array.isArray(parsed.from)) {
-                          // It's an array of address objects
-                          email.from = parsed.from.map((addr: any) => addr.address).join(', ');
-                        } else if (typeof parsed.from === 'object') {
-                          // It's a single address object or wrapper
-                          if (typeof parsed.from.text === 'string') {
-                            email.from = parsed.from.text;
-                          } else if (Array.isArray(parsed.from.value)) {
-                            email.from = parsed.from.value.map((addr: any) => addr.address).join(', ');
-                          } else if (parsed.from.value && typeof parsed.from.value === 'object') {
-                            email.from = parsed.from.value.address || '';
-                          } else {
-                            email.from = '';
-                          }
-                        } else {
-                          email.from = '';
-                        }
-                      }
-                      
-                      if (parsed.to) {
-                        // Type guard for array vs. single object
-                        if (Array.isArray(parsed.to)) {
-                          // It's an array of address objects
-                          email.to = parsed.to.map((addr: any) => addr.address).join(', ');
-                        } else if (typeof parsed.to === 'object') {
-                          // It's a single address object or wrapper
-                          if (typeof parsed.to.text === 'string') {
-                            email.to = parsed.to.text;
-                          } else if (Array.isArray(parsed.to.value)) {
-                            email.to = parsed.to.value.map((addr: any) => addr.address).join(', ');
-                          } else if (parsed.to.value && typeof parsed.to.value === 'object') {
-                            email.to = parsed.to.value.address || '';
-                          } else {
-                            email.to = '';
-                          }
-                        } else {
-                          email.to = '';
-                        }
-                      }
-                      
-                      email.subject = parsed.subject || '';
-                      email.body = parsed.text || '';
-                      email.html = parsed.html || undefined;
-                      email.timestamp = parsed.date || new Date();
-                      email.messageId = parsed.messageId || '';
-                      
-                      // Only push emails that have proper data
-                      if (email.from && email.subject) {
-                        emails.push(email as EmailMessage);
-                        console.log(`Email parsed - From: ${email.from}, Subject: ${email.subject}`);
-                      }
-                      
-                      emailsProcessed++;
-                    }).catch(err => {
-                      console.error('Error parsing email:', err);
-                      emailsProcessed++;
-                    });
-                  });
-                }
-              });
-              
-              msg.once('attributes', (attrs) => {
-                // Store flags to check if message is read/unread
-                const flags = attrs.flags || [];
-                console.log(`Message #${seqno} flags: ${flags.join(', ')}`);
-              });
-              
-              msg.once('end', () => {
-                console.log(`Finished processing message #${seqno}`);
-              });
-            });
-            
-            fetch.once('error', (err) => {
-              console.error(`Error during fetch:`, err);
-              clearTimeout(timeoutId);
-              fetchCompleted = true;
-              imapClient.end();
-              reject(err);
-            });
-            
-            fetch.once('end', () => {
-              console.log(`All messages processed, found ${emails.length} valid emails`);
-              clearTimeout(timeoutId);
-              fetchCompleted = true;
-              
-              // If we want to mark messages as seen after reading them
-              if (fetchUnreadOnly) {
-                console.log(`Marking ${emailsToFetch.length} messages as seen`);
-                try {
-                  // This is optional - only if you want to mark messages as read
-                  // imapClient.addFlags(emailsToFetch, ['\\Seen'], (err) => {
-                  //   if (err) console.error(`Error marking messages as seen:`, err);
-                  //   imapClient.end();
-                  //   resolve(emails);
-                  // });
-                  imapClient.end();
-                  resolve(emails);
-                } catch (e) {
-                  console.error(`Error in addFlags:`, e);
-                  imapClient.end();
-                  resolve(emails);
-                }
-              } else {
-                imapClient.end();
-                resolve(emails);
-              }
-            });
-          });
+          return dateB - dateA; // Sort newest first
         });
-      });
-      
-      imapClient.once('error', (err: Error) => {
-        console.error(`IMAP client error:`, err);
-        reject(err);
-      });
-      
-      imapClient.connect();
+        
+        // Limit the number of messages to process
+        const limitedMessages = messages.slice(0, limit);
+        console.log(`Processing ${limitedMessages.length} messages (limited from ${messages.length})`);
+        
+        // Process each message
+        const emails: EmailMessage[] = [];
+        for (const message of limitedMessages) {
+          try {
+            // Get message parts
+            const fullBody = message.parts.find(part => part.which === '');
+            const header = message.parts.find(part => part.which === 'HEADER');
+            
+            if (!fullBody || !header) {
+              console.warn('Message missing required parts, skipping');
+              continue;
+            }
+            
+            // Parse the message using mailparser
+            const parsed = await simpleParser(fullBody.body);
+            
+            // Extract email data with better error handling
+            const email: EmailMessage = {
+              from: '',
+              to: '',
+              subject: '',
+              body: '',
+              timestamp: new Date(),
+              messageId: '',
+              uid: message.attributes.uid
+            };
+            
+            // Process from field
+            if (parsed.from) {
+              if (typeof parsed.from.text === 'string') {
+                email.from = parsed.from.text;
+              } else if (parsed.from.value) {
+                // Handle array or single address
+                if (Array.isArray(parsed.from.value)) {
+                  email.from = parsed.from.value.map(addr => addr.address || '').filter(Boolean).join(', ');
+                } else if (parsed.from.value.address) {
+                  email.from = parsed.from.value.address;
+                }
+              }
+            }
+            
+            // Process to field
+            if (parsed.to) {
+              if (typeof parsed.to.text === 'string') {
+                email.to = parsed.to.text;
+              } else if (parsed.to.value) {
+                // Handle array or single address
+                if (Array.isArray(parsed.to.value)) {
+                  email.to = parsed.to.value.map(addr => addr.address || '').filter(Boolean).join(', ');
+                } else if (parsed.to.value.address) {
+                  email.to = parsed.to.value.address;
+                }
+              }
+            }
+            
+            // Other fields
+            email.subject = parsed.subject || '';
+            email.body = parsed.text || '';
+            email.html = parsed.html || undefined;
+            email.timestamp = parsed.date || new Date();
+            email.messageId = parsed.messageId || `generated-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            
+            // Add to the list if it has minimum required data
+            if (email.from && (email.subject || email.body)) {
+              emails.push(email);
+              console.log(`Parsed email - From: ${email.from}, Subject: ${email.subject || '(no subject)'}`);
+            } else {
+              console.warn(`Skipping email with missing data - From: ${email.from}, Subject: ${email.subject || '(no subject)'}`);
+            }
+          } catch (msgError) {
+            console.error('Error processing individual message:', msgError);
+            // Continue with next message
+          }
+        }
+        
+        // Safely close the connection
+        try {
+          await connection.end();
+          console.log('IMAP connection closed properly');
+        } catch (closeError) {
+          console.warn('Error closing IMAP connection:', closeError);
+        }
+        
+        console.log(`Returning ${emails.length} processed emails`);
+        resolve(emails);
+      } catch (error) {
+        console.error('Error in search and fetch:', error);
+        // Ensure connection is closed even on error
+        try {
+          await connection.end();
+        } catch (closeError) {
+          console.warn('Error closing IMAP connection after error:', closeError);
+        }
+        reject(error);
+      }
     });
+    
+    // Add a timeout to the search promise
+    const timeoutPromise = new Promise<EmailMessage[]>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error('IMAP search and fetch operation timed out after 60 seconds'));
+      }, 60000); // 60 second timeout
+    });
+    
+    // Use Promise.race to implement the timeout
+    return await Promise.race([searchPromise, timeoutPromise]);
   } catch (error) {
-    console.error(`Error fetching emails for user ${userId}:`, error);
+    console.error(`Error in fetchEmails for user ${userId}:`, error);
     await storage.createSystemActivity({
       module: "Email",
       event: "IMAP Fetch Emails",
       status: "Failed",
       timestamp: new Date(),
-      details: { userId, folder, fetchUnreadOnly, error: (error as Error).message }
+      details: { 
+        userId, 
+        folder, 
+        fetchUnreadOnly, 
+        error: (error as Error).message 
+      }
     });
     return [];
   }
 }
 
 /**
- * Store fetched emails in the database
+ * Store fetched emails in the database with improved deduplication
  */
 export async function storeEmails(userId: number, emails: EmailMessage[]): Promise<number> {
   try {
     let storedCount = 0;
     let duplicateCount = 0;
     
-    // Process emails in reverse order (oldest first) to maintain chronological order
+    // Process emails in chronological order (oldest first)
     const sortedEmails = [...emails].sort((a, b) => 
       a.timestamp.getTime() - b.timestamp.getTime()
     );
@@ -339,53 +477,58 @@ export async function storeEmails(userId: number, emails: EmailMessage[]): Promi
     
     for (const email of sortedEmails) {
       // Skip emails without necessary data
-      if (!email.from || !email.subject) {
-        console.log(`Skipping email with missing data - From: ${email.from}, Subject: ${email.subject}`);
+      if (!email.from || (!email.subject && !email.body)) {
+        console.log(`Skipping email with missing data - From: ${email.from}, Subject: ${email.subject || '(no subject)'}`);
         continue;
       }
       
       try {
-        // Check if this email already exists in the database by messageId
+        // Multi-level deduplication strategy
         let isDuplicate = false;
         
+        // 1. Check by messageId (most reliable)
         if (email.messageId) {
           const existingEmail = await storage.getEmailLogByMessageId(email.messageId);
           if (existingEmail) {
-            console.log(`Skipping duplicate email with messageId: ${email.messageId}`);
+            console.log(`Duplicate found by messageId: ${email.messageId}`);
             duplicateCount++;
             isDuplicate = true;
           }
         }
         
-        // If no messageId or not found by messageId, try checking by other fields
-        if (!isDuplicate && !email.messageId) {
-          // Look for similar emails with same from, subject, and close timestamp
+        // 2. Check by sender, subject, and timestamp proximity
+        if (!isDuplicate) {
+          // Get similar emails
           const similarEmails = await storage.getEmailLogsByFromAndSubject(
             userId, 
             email.from, 
-            email.subject
+            email.subject || '(no subject)'
           );
           
-          // Check if any similar email is a potential duplicate (within 5 minutes)
-          const fiveMinutesMs = 5 * 60 * 1000;
-          isDuplicate = similarEmails.some(existingEmail => {
-            const timeDiff = Math.abs(existingEmail.timestamp.getTime() - email.timestamp.getTime());
-            return timeDiff < fiveMinutesMs;
-          });
+          // Time window for considering duplicates (10 minutes)
+          const timeWindowMs = 10 * 60 * 1000;
           
-          if (isDuplicate) {
-            console.log(`Skipping probable duplicate email with from=${email.from}, subject=${email.subject}`);
-            duplicateCount++;
+          for (const existingEmail of similarEmails) {
+            const timeDiff = Math.abs(existingEmail.timestamp.getTime() - email.timestamp.getTime());
+            
+            // Consider it a duplicate if within time window
+            if (timeDiff < timeWindowMs) {
+              console.log(`Probable duplicate found by metadata matching: ${email.subject || '(no subject)'} from ${email.from}`);
+              duplicateCount++;
+              isDuplicate = true;
+              break;
+            }
           }
         }
         
+        // Store if not a duplicate
         if (!isDuplicate) {
           // Create email log entry
           const emailLog: InsertEmailLog = {
             userId,
             from: email.from,
             to: email.to,
-            subject: email.subject,
+            subject: email.subject || '(no subject)',
             body: email.body,
             timestamp: email.timestamp,
             status: "received",
@@ -395,7 +538,7 @@ export async function storeEmails(userId: number, emails: EmailMessage[]): Promi
           
           await storage.createEmailLog(emailLog);
           storedCount++;
-          console.log(`Stored email: ${email.subject} from ${email.from}`);
+          console.log(`Stored email: "${email.subject || '(no subject)'}" from ${email.from}`);
         }
       } catch (emailError) {
         console.error(`Error processing individual email:`, emailError);
@@ -403,20 +546,19 @@ export async function storeEmails(userId: number, emails: EmailMessage[]): Promi
       }
     }
     
-    if (storedCount > 0 || duplicateCount > 0) {
-      await storage.createSystemActivity({
-        module: "Email",
-        event: "IMAP Emails Stored",
-        status: "Completed",
-        timestamp: new Date(),
-        details: { 
-          userId, 
-          stored: storedCount, 
-          duplicates: duplicateCount,
-          total: emails.length
-        }
-      });
-    }
+    // Log the results
+    await storage.createSystemActivity({
+      module: "Email",
+      event: "IMAP Emails Stored",
+      status: "Completed",
+      timestamp: new Date(),
+      details: { 
+        userId, 
+        processed: emails.length,
+        stored: storedCount, 
+        duplicates: duplicateCount
+      }
+    });
     
     console.log(`Email storage complete. Stored: ${storedCount}, Duplicates: ${duplicateCount}, Total processed: ${emails.length}`);
     return storedCount;
@@ -434,39 +576,53 @@ export async function storeEmails(userId: number, emails: EmailMessage[]): Promi
 }
 
 /**
- * Fetch and store emails in one operation
+ * Improved syncEmails function that fetches and stores emails
+ * with better error handling and retry logic
  */
 export async function syncEmails(userId: number, options: { 
   unreadOnly?: boolean, 
   folder?: string, 
-  limit?: number 
+  limit?: number,
+  retryCount?: number
 } = {}): Promise<number> {
   try {
-    const { unreadOnly = false, folder = 'INBOX', limit = 20 } = options;
+    const { 
+      unreadOnly = true,  // Default to unread emails only
+      folder = 'INBOX', 
+      limit = 50,         // Increased limit
+      retryCount = 0      // For tracking retries
+    } = options;
     
-    console.log(`Starting email sync for user ${userId}, unreadOnly=${unreadOnly}, folder=${folder}, limit=${limit}`);
+    console.log(`Starting email sync for user ${userId}, unreadOnly=${unreadOnly}, folder=${folder}, limit=${limit}, retry=${retryCount}`);
     
-    // Log the sync attempt
+    // Log sync attempt
     await storage.createSystemActivity({
       module: "Email",
-      event: "IMAP Sync Emails Started",
+      event: "IMAP Sync Started",
       status: "In Progress",
       timestamp: new Date(),
-      details: { userId, unreadOnly, folder, limit }
+      details: { userId, unreadOnly, folder, limit, retryCount }
     });
     
-    // Fetch emails (either all or unread only)
+    // Fetch emails using the improved implementation
     const emails = await fetchEmails(userId, folder, limit, unreadOnly);
     
+    // Check if we got any emails
     if (emails.length === 0) {
-      console.log(`No emails found for user ${userId} with criteria: unreadOnly=${unreadOnly}, folder=${folder}`);
+      console.log(`No ${unreadOnly ? 'unread' : ''} emails found for user ${userId} in folder ${folder}`);
       
+      // Even with empty result, log as successful completion
       await storage.createSystemActivity({
         module: "Email",
-        event: "IMAP Sync Emails",
-        status: "Completed",
+        event: "IMAP Sync Completed",
+        status: "Success",
         timestamp: new Date(),
-        details: { userId, unreadOnly, folder, count: 0, message: "No emails found matching criteria" }
+        details: { 
+          userId, 
+          folder, 
+          unreadOnly,
+          result: "No emails found"
+        }
       });
       
       return 0;
@@ -474,20 +630,20 @@ export async function syncEmails(userId: number, options: {
     
     console.log(`Found ${emails.length} emails for user ${userId}, storing in database`);
     
-    // Store fetched emails
+    // Store the emails
     const storedCount = await storeEmails(userId, emails);
     
-    // Log successful sync
+    // Log successful completion
     await storage.createSystemActivity({
       module: "Email",
-      event: "IMAP Sync Emails",
-      status: "Completed",
+      event: "IMAP Sync Completed",
+      status: "Success",
       timestamp: new Date(),
       details: { 
         userId, 
-        unreadOnly, 
-        folder, 
-        found: emails.length, 
+        folder,
+        unreadOnly,
+        found: emails.length,
         stored: storedCount
       }
     });
@@ -495,42 +651,144 @@ export async function syncEmails(userId: number, options: {
     return storedCount;
   } catch (error) {
     console.error(`Error syncing emails for user ${userId}:`, error);
+    
+    // Implement retry logic for transient errors
+    const MAX_RETRIES = 2;
+    if (options.retryCount !== undefined && options.retryCount < MAX_RETRIES) {
+      const waitTime = Math.pow(2, options.retryCount || 0) * 1000; // 1s, 2s
+      console.log(`Will retry in ${waitTime}ms (retry ${(options.retryCount || 0) + 1}/${MAX_RETRIES})`);
+      
+      // Log retry attempt
+      await storage.createSystemActivity({
+        module: "Email",
+        event: "IMAP Sync Retry Scheduled",
+        status: "Pending",
+        timestamp: new Date(),
+        details: { 
+          userId, 
+          error: (error as Error).message,
+          retryCount: (options.retryCount || 0) + 1,
+          maxRetries: MAX_RETRIES,
+          waitTime
+        }
+      });
+      
+      // Wait and retry
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+      
+      // Recursive retry with incremented counter
+      return syncEmails(userId, {
+        ...options,
+        retryCount: (options.retryCount || 0) + 1
+      });
+    }
+    
+    // Log failure after all retries
     await storage.createSystemActivity({
       module: "Email",
-      event: "IMAP Sync Emails",
+      event: "IMAP Sync Failed",
       status: "Failed",
       timestamp: new Date(),
-      details: { userId, error: (error as Error).message }
+      details: { 
+        userId, 
+        error: (error as Error).message,
+        retryAttempts: options.retryCount || 0
+      }
     });
+    
     return 0;
   }
 }
 
 /**
- * Verify IMAP connection
+ * Verify IMAP connection with better error reporting
  */
-export async function verifyImapConnection(userId: number): Promise<boolean> {
+export async function verifyImapConnection(userId: number): Promise<{ 
+  connected: boolean; 
+  message?: string;
+  folderList?: string[];
+}> {
   try {
-    const imapClient = await initImapClient(userId);
+    console.log(`Verifying IMAP connection for user ${userId}`);
     
-    if (!imapClient) {
-      return false;
+    // Get IMAP configuration
+    const connection = await connectToImap(userId);
+    
+    if (!connection) {
+      return { 
+        connected: false, 
+        message: "Could not establish IMAP connection. Please check your email server settings." 
+      };
     }
     
-    return new Promise((resolve) => {
-      imapClient.once('ready', () => {
-        imapClient.end();
-        resolve(true);
+    // Try listing mailboxes to verify full access
+    try {
+      const boxes = await connection.getBoxes();
+      const folderList = Object.keys(boxes);
+      
+      // Close the connection
+      await connection.end();
+      
+      console.log(`IMAP connection verified for user ${userId}, found ${folderList.length} mailboxes`);
+      
+      // Log the successful verification
+      await storage.createSystemActivity({
+        module: "Email",
+        event: "IMAP Connection Verified",
+        status: "Success",
+        timestamp: new Date(),
+        details: { 
+          userId, 
+          mailboxes: folderList.length
+        }
       });
       
-      imapClient.once('error', (err: Error) => {
-        resolve(false);
+      return {
+        connected: true,
+        message: `Successfully connected to email server. Found ${folderList.length} mailboxes.`,
+        folderList
+      };
+    } catch (boxError) {
+      console.error(`Error listing mailboxes:`, boxError);
+      
+      // Still return success because we connected, but with warning
+      await connection.end();
+      
+      await storage.createSystemActivity({
+        module: "Email",
+        event: "IMAP Connection Verified",
+        status: "Warning",
+        timestamp: new Date(),
+        details: { 
+          userId, 
+          warning: "Connected but could not list mailboxes",
+          error: (boxError as Error).message
+        }
       });
       
-      imapClient.connect();
-    });
+      return {
+        connected: true,
+        message: "Connected to email server, but could not list mailboxes."
+      };
+    }
   } catch (error) {
     console.error(`Error verifying IMAP connection for user ${userId}:`, error);
-    return false;
+    
+    // Log the verification failure
+    await storage.createSystemActivity({
+      module: "Email",
+      event: "IMAP Connection Verification",
+      status: "Failed",
+      timestamp: new Date(),
+      details: { 
+        userId, 
+        error: (error as Error).message
+      }
+    });
+    
+    return {
+      connected: false,
+      message: `Could not connect to email server: ${(error as Error).message}`
+    };
   }
 }
