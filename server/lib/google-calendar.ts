@@ -101,11 +101,26 @@ export async function createEvent(
       auth: oauth2Client,
       calendarId,
       requestBody: event, // Use event as-is since conferenceData is now part of the interface
-      conferenceDataVersion: 1,
+      conferenceDataVersion: 1, // Must be 1 to enable conference creation
       sendUpdates: 'all', // Send email updates to attendees
     });
     
-    console.log("Google Calendar response:", JSON.stringify(response.data, null, 2));
+    // Log detailed information about conference data for debugging
+    console.log("Google Calendar response with ID:", response.data.id);
+    
+    if (response.data.conferenceData) {
+      console.log("Conference data successfully created");
+      console.log("Conference solution:", response.data.conferenceData.conferenceSolution?.name);
+      console.log("Entry points:", JSON.stringify(response.data.conferenceData.entryPoints, null, 2));
+    } else {
+      console.warn("No conference data returned despite requesting it. Check Google Calendar API permissions.");
+    }
+    
+    if (response.data.hangoutLink) {
+      console.log("Google Meet link available:", response.data.hangoutLink);
+    } else {
+      console.warn("No Google Meet link was generated. This might be due to permission issues.");
+    }
     
     return response.data;
   } catch (error) {
@@ -357,18 +372,43 @@ export async function scheduleMeeting(
       }
     });
     
-    // Extract meeting link from event data
+    // Extract meeting link from event data with improved logging
     let meetingLink = '';
+    console.log("Looking for meeting link in Google Calendar response");
+    
+    // First check hangoutLink which is the most reliable
     if (event.hangoutLink) {
       meetingLink = event.hangoutLink;
-      console.log(`Google Meet link extracted: ${meetingLink}`);
-    } else if (event.conferenceData && event.conferenceData.entryPoints) {
-      // Try to extract from conference data
-      const videoEntry = event.conferenceData.entryPoints.find(entry => entry.entryPointType === 'video');
-      if (videoEntry && videoEntry.uri) {
-        meetingLink = videoEntry.uri;
-        console.log(`Conference link extracted from entryPoints: ${meetingLink}`);
+      console.log(`Google Meet link extracted from hangoutLink: ${meetingLink}`);
+    } 
+    // Check conferenceData as backup method
+    else if (event.conferenceData) {
+      console.log("Conference data found:", JSON.stringify(event.conferenceData, null, 2));
+      
+      if (event.conferenceData.entryPoints && event.conferenceData.entryPoints.length > 0) {
+        // Try to find a video entry point first
+        const videoEntry = event.conferenceData.entryPoints.find(
+          entry => entry.entryPointType === 'video'
+        );
+        
+        if (videoEntry && videoEntry.uri) {
+          meetingLink = videoEntry.uri;
+          console.log(`Conference link extracted from video entryPoint: ${meetingLink}`);
+        } 
+        // If no video entry point, try any available entry point
+        else {
+          const anyEntry = event.conferenceData.entryPoints[0];
+          if (anyEntry && anyEntry.uri) {
+            meetingLink = anyEntry.uri;
+            console.log(`Conference link extracted from entryPoint[0]: ${meetingLink}`);
+          }
+        }
+      } else {
+        console.warn("Conference data exists but no entry points found");
       }
+    } else {
+      console.warn("No conference data or hangout link found in the event response");
+      console.log("Check that Google Calendar API has conferencedata.create permission");
     }
     
     // Log the meeting in our system with meeting link

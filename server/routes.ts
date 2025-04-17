@@ -2998,16 +2998,33 @@ If this is NOT a meeting scheduling request, respond normally and set is_schedul
                                     throw new Error("No email service configured");
                                   }
                                   
-                                  // Create email content with the meeting details
+                                  // Create enhanced email content with the meeting details
                                   const emailSubject = `Meeting Confirmation: ${schedulingData.subject || 'Scheduled Meeting'}`;
                                   const emailBody = `
-                                    <h2>Meeting Confirmation</h2>
-                                    <p>Your meeting has been scheduled for <strong>${formattedDate}</strong>.</p>
-                                    <p><strong>Subject:</strong> ${schedulingData.subject || 'Scheduled Meeting'}</p>
-                                    ${schedulingData.description ? `<p><strong>Description:</strong> ${schedulingData.description}</p>` : ''}
-                                    ${result.meetingLink ? `<p><strong>Meeting Link:</strong> <a href="${result.meetingLink}">${result.meetingLink}</a></p>` : ''}
-                                    <p>This meeting has been added to your calendar.</p>
-                                    <p>Thank you for using our AI Receptionist service.</p>
+                                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+                                      <h2 style="color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 10px;">Meeting Confirmation</h2>
+                                      
+                                      <div style="background-color: #f9f9f9; padding: 15px; border-radius: 4px; margin: 15px 0;">
+                                        <p style="font-size: 16px; margin: 5px 0;">Your meeting has been scheduled for <strong style="color: #3498db;">${formattedDate}</strong>.</p>
+                                      </div>
+                                      
+                                      <h3 style="color: #2c3e50; margin-top: 20px;">Meeting Details:</h3>
+                                      <ul style="list-style-type: none; padding: 0;">
+                                        <li style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Subject:</strong> ${schedulingData.subject || 'Scheduled Meeting'}</li>
+                                        ${schedulingData.description ? `<li style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Description:</strong> ${schedulingData.description}</li>` : ''}
+                                        <li style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Date & Time:</strong> ${formattedDate}</li>
+                                        <li style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Duration:</strong> ${schedulingData.duration_minutes || 30} minutes</li>
+                                        ${result.meetingLink ? `
+                                        <li style="padding: 15px 0;">
+                                          <strong>Join Meeting:</strong><br/>
+                                          <a href="${result.meetingLink}" style="display: inline-block; margin-top: 10px; padding: 10px 20px; background-color: #3498db; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;">Join Google Meet</a>
+                                          <p style="font-size: 12px; color: #777; margin-top: 5px;">Or copy this link: ${result.meetingLink}</p>
+                                        </li>` : ''}
+                                      </ul>
+                                      
+                                      <p style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee; color: #777; font-size: 14px;">This meeting has been added to your calendar.</p>
+                                      <p style="color: #777; font-size: 14px;">Thank you for using our AI Receptionist service.</p>
+                                    </div>
                                   `;
                                   
                                   // Send the email
