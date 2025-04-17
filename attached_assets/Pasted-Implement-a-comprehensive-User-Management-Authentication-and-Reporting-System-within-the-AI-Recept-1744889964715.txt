@@ -1,0 +1,164 @@
+Implement a comprehensive User Management, Authentication, and Reporting System within the AI Receptionist platform. This must include full-featured admin controls, user-level restrictions based on packages, and detailed reporting tools. The system must not disturb any existing data, modules, or application workflows. It must ensure that the app continues to function exactly as before for existing users until new controls are applied.
+
+🧩 Modules to be Controlled (Sidebar Reference):
+Voice Call Handling
+
+Email Management
+
+Live Chat
+
+WhatsApp Business
+
+Calendar & Scheduling
+
+Product & Pricing
+
+AI Core & Training
+
+Speech Engines
+
+✅ Admin Capabilities (Expanded):
+🧑‍💼 User Management
+View all users
+
+Add, edit, or delete users
+
+Assign packages to users
+
+Activate/deactivate users
+
+Manually upgrade or downgrade users
+
+View user login history & activity logs
+
+Reset user passwords or resend invitation links
+
+Suspend users on usage abuse or inactivity
+
+Assign custom permissions if needed (override package limits)
+
+📦 Package & Feature Management
+Create, edit, delete packages
+
+Clone existing packages
+
+Assign modules/features to packages
+
+Add or remove modules from users
+
+View which features are in use and by whom
+
+Set soft & hard usage limits per feature per package
+
+View feature usage summary
+
+📊 Reports Panel
+Filter by user, date, module, or package
+
+Usage statistics for each module (calls made, emails sent, chats handled, etc.)
+
+Meeting scheduling history
+
+WhatsApp conversation logs
+
+Email delivery success/failure reports
+
+Calendar sync success/failure
+
+Agent response time reports
+
+Daily/Weekly/Monthly breakdown
+
+Export reports in PDF or CSV
+
+👤 User Experience (With Authentication):
+🔐 User Authentication
+Sign up / Sign in system
+
+Email + password-based login
+
+Option for Google/Microsoft OAuth (if feasible)
+
+JWT/Session-based authentication (secure)
+
+Password reset system via email
+
+Email verification on signup
+
+Two-Factor Authentication (optional in future)
+
+⚙️ User Dashboard
+View current plan/package
+
+Feature access based on package
+
+Track usage stats (e.g., how many meetings used, remaining credits)
+
+Option to request package upgrade
+
+View meeting history, call logs, email logs (depending on access)
+
+Profile settings + password change
+
+🗄️ Database Tables to Add or Update:
+users
+
+id, name, email, password_hash, role (admin/user), status, created_at, updated_at
+
+packages
+
+id, name, description, price, is_active, created_at
+
+package_features
+
+id, package_id, feature_key, usage_limit, is_enabled
+
+user_packages
+
+id, user_id, package_id, assigned_at, expires_at
+
+feature_usage_logs
+
+id, user_id, feature_key, used_at, usage_count
+
+login_activity
+
+id, user_id, login_time, ip_address, user_agent
+
+admin_reports_cache (optional for performance)
+
+report_type, data, generated_at, filters_applied
+
+⚙️ Frontend Requirements:
+✅ Admin Panel
+
+User Management Section
+
+Packages & Permissions Panel
+
+Assign/Unassign packages
+
+Reports Section with filters and export tools
+
+✅ User Interface
+
+Auth pages (Login, Register, Forgot Password, Reset)
+
+Dashboard view customized per package
+
+Usage breakdown widgets
+
+“Access Denied” pages for unauthorized features
+
+🛡️ Requirements & Constraints
+⚠️ No breaking changes to existing tables or workflows
+
+⚠️ Do not remove or alter existing modules
+
+✔️ Ensure all existing users retain full access unless assigned packages
+
+✔️ Sidebar must render modules dynamically based on permissions
+
+✔️ Easy extension for future modules
+
+✔️ Fully test before deployment
