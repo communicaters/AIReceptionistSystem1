@@ -80,6 +80,11 @@ export async function createEvent(
     start: { dateTime: string };
     end: { dateTime: string };
     attendees?: { email: string }[];
+    conferenceData?: {
+      createRequest: {
+        requestId: string;
+      }
+    }
   }
 ) {
   try {
@@ -95,14 +100,7 @@ export async function createEvent(
     const response = await calendar.events.insert({
       auth: oauth2Client,
       calendarId,
-      requestBody: {
-        ...event,
-        conferenceData: {
-          createRequest: {
-            requestId: `meeting-${Date.now()}`
-          }
-        }
-      },
+      requestBody: event, // Use event as-is since conferenceData is now part of the interface
       conferenceDataVersion: 1,
       sendUpdates: 'all', // Send email updates to attendees
     });
