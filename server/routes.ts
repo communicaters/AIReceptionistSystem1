@@ -2842,40 +2842,63 @@ If this is NOT a meeting scheduling request, respond normally and set is_schedul
                         if (schedulingData.is_scheduling_request === true) {
                           console.log('Detected meeting scheduling request:', schedulingData);
                           
-                          // Import the Google Calendar module
-                          const { scheduleMeeting } = require('./lib/google-calendar');
+                          // Parse the date time string into a proper Date object
+                          const parsedDateTime = new Date(schedulingData.date_time);
+                          console.log('Parsed date time:', parsedDateTime);
                           
-                          // Log the scheduling attempt with detailed information
-                          console.log('Scheduling meeting with the following data:', {
-                            attendeeEmail: schedulingData.email || phoneNumber + '@whatsapp.virtual.user',
+                          // Calculate end time based on duration
+                          const duration = schedulingData.duration_minutes || 30;
+                          const endDateTime = new Date(parsedDateTime.getTime() + (duration * 60 * 1000));
+                          console.log('End date time:', endDateTime);
+                          
+                          // Use timezone if provided
+                          const timezone = schedulingData.timezone || 'UTC';
+                          
+                          // Format meeting data for the API endpoint (same format as used by the manual scheduling form)
+                          const meetingData = {
                             subject: schedulingData.subject || 'Meeting from WhatsApp',
-                            dateTimeString: schedulingData.date_time,
-                            duration: schedulingData.duration_minutes || 30,
-                            timezone: schedulingData.timezone || 'UTC'
+                            description: `Meeting scheduled via WhatsApp chat with ${phoneNumber}. Original message: "${messageText}"`,
+                            startTime: parsedDateTime.toISOString(),
+                            endTime: endDateTime.toISOString(),
+                            attendees: [schedulingData.email || `${phoneNumber}@whatsapp.virtual.user`],
+                            timezone: timezone
+                          };
+                          
+                          console.log('Scheduling meeting with formatted data:', meetingData);
+                          
+                          // Use the same API endpoint that's used by the manual form to ensure consistent handling
+                          const apiEndpoint = '/api/calendar/meetings';
+                          const response = await fetch(`http://localhost:${process.env.PORT || 5000}${apiEndpoint}`, {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(meetingData)
                           });
                           
-                          // Attempt to schedule the meeting with timezone support
-                          const result = await scheduleMeeting(userId, {
-                            attendeeEmail: schedulingData.email || phoneNumber + '@whatsapp.virtual.user',
-                            subject: schedulingData.subject || 'Meeting from WhatsApp',
-                            dateTimeString: schedulingData.date_time,
-                            duration: schedulingData.duration_minutes || 30,
-                            timezone: schedulingData.timezone || 'UTC',
-                            description: `Meeting scheduled via WhatsApp chat with ${phoneNumber}. Original message: "${messageText}"`
-                          });
+                          // Parse response data and format it to match the structure expected by the rest of the code
+                          const responseData = await response.json();
+                          
+                          // Create a result object with the expected properties
+                          const result = {
+                            success: !responseData.error, // Success is true if there's no error
+                            message: responseData.error ? `Error: ${responseData.error}` : 'Meeting scheduled successfully',
+                            meetingLink: responseData.googleEventId ? responseData.meetingLink : undefined,
+                            eventId: responseData.googleEventId
+                          };
                           
                           if (result.success) {
                             // Format date for better readability with timezone
                             const meetingDate = new Date(schedulingData.date_time);
                             
                             // Create formatter with timezone if specified
-                            const formatOptions = {
-                              weekday: 'long',
-                              year: 'numeric',
-                              month: 'long',
-                              day: 'numeric',
-                              hour: 'numeric',
-                              minute: 'numeric',
+                            const formatOptions = { 
+                              weekday: "long",
+                              year: "numeric",
+                              month: "long", 
+                              day: "numeric",
+                              hour: "numeric",
+                              minute: "numeric",
                               hour12: true,
                               timeZone: schedulingData.timezone || 'America/New_York' // Default to Eastern Time
                             };
