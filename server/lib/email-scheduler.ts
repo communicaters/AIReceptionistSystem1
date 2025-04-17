@@ -1,7 +1,7 @@
 import { syncEmails } from './imap';
 import { storage } from '../storage';
 import * as emailController from './email-controller';
-// No need to import OpenAI type here
+import { formatEmailBodyAsHtml, formatEmailBodyAsText } from './email-formatter';
 
 // Email sync job status tracking
 interface SyncJobStatus {
@@ -216,8 +216,7 @@ async function processUnrepliedEmails() {
         // Get sender information based on service
         const { fromEmail, fromName } = await getSenderInfo(userId, service);
         
-        // Format the response as clean HTML
-        const { formatEmailBodyAsHtml, formatEmailBodyAsText } = require('./email-formatter');
+        // Format the response as HTML and text
         const htmlContent = `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
             ${formatEmailBodyAsHtml(response)}

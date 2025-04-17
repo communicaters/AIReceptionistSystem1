@@ -23,34 +23,66 @@ interface EmailResponseJson {
 export function extractCleanResponseText(responseText: string): string {
   if (!responseText) return '';
   
-  // Clean up code blocks if present
-  let cleanedText = responseText;
-  
-  // Remove markdown code blocks (```json ... ```)
-  if (cleanedText.includes('```json')) {
-    cleanedText = cleanedText.replace(/```json\s*([\s\S]*?)\s*```/g, (_, jsonContent) => {
-      return jsonContent.trim();
-    });
+  // First, try to extract JSON from markdown code blocks
+  const jsonBlockMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  if (jsonBlockMatch && jsonBlockMatch[1]) {
+    try {
+      // Clean the JSON string
+      let jsonStr = jsonBlockMatch[1].trim();
+      
+      // Handle common formatting issues
+      if (jsonStr.startsWith('{') && !jsonStr.startsWith('{"')) {
+        // Make sure property names are properly quoted
+        jsonStr = jsonStr.replace(/(\{|\,)\s*(\w+)\s*\:/g, '$1"$2":');
+      }
+      
+      console.log("Trying to parse JSON from code block:", jsonStr);
+      
+      // Try to parse the JSON from the code block
+      const parsedContent = JSON.parse(jsonStr);
+      if (parsedContent && parsedContent.response) {
+        return formatPlainText(parsedContent.response);
+      }
+    } catch (e) {
+      // Failed to parse JSON from code block, will fall back to other methods
+      console.log("Failed to parse JSON from code block:", e);
+    }
   }
   
-  // Remove backticks if present
-  cleanedText = cleanedText.replace(/```/g, '');
-  
+  // Next, try parsing the entire text as JSON after cleaning it
   try {
-    // Try to parse the response as JSON
-    const parsedResponse = JSON.parse(cleanedText) as EmailResponseJson;
+    // Clean the text first
+    let cleanedText = responseText.replace(/```(?:json)?|```/g, '').trim();
     
-    // If successful, extract just the response field
-    if (parsedResponse && typeof parsedResponse.response === 'string') {
-      return parsedResponse.response.trim();
+    // Handle common formatting issues
+    if (cleanedText.startsWith('{') && !cleanedText.startsWith('{"')) {
+      // Make sure property names are properly quoted
+      cleanedText = cleanedText.replace(/(\{|\,)\s*(\w+)\s*\:/g, '$1"$2":');
     }
     
-    // If no response field is found, return the original text with formatting
-    return formatPlainText(responseText);
+    console.log("Trying to parse entire text as JSON:", cleanedText);
+    
+    // Try to parse as JSON
+    const jsonResponse = JSON.parse(cleanedText) as EmailResponseJson;
+    
+    // If successful, extract just the response field
+    if (jsonResponse && typeof jsonResponse.response === 'string') {
+      return jsonResponse.response.trim();
+    }
   } catch (error) {
-    // If parsing fails, the response is likely already plain text
-    return formatPlainText(responseText);
+    console.log("Failed to parse as JSON, treating as plain text:", error);
   }
+  
+  // If all JSON parsing attempts fail, return the formatted plain text
+  // First remove any markdown artifacts
+  let cleanText = responseText
+    .replace(/```(?:json)?|```/g, '') // Remove code block markers
+    .replace(/\*\*(.*?)\*\*/g, '$1')  // Remove bold markers
+    .replace(/\*(.*?)\*/g, '$1')      // Remove italic markers
+    .replace(/__(.*?)__/g, '$1')      // Remove underline markers
+    .trim();
+    
+  return formatPlainText(cleanText);
 }
 
 /**

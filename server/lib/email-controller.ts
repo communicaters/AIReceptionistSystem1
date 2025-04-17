@@ -272,15 +272,27 @@ export async function parseEmailAndGenerateResponse(
       // Clean up the response before parsing
       let cleanedResponse = aiResponse.content;
       
-      // Remove markdown code blocks (```json ... ```)
-      if (cleanedResponse.includes('```json')) {
-        cleanedResponse = cleanedResponse.replace(/```json\s*([\s\S]*?)\s*```/g, (_, jsonContent) => {
-          return jsonContent.trim();
-        });
+      // Try to extract JSON from markdown code blocks
+      const jsonBlockMatch = cleanedResponse.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      if (jsonBlockMatch && jsonBlockMatch[1]) {
+        // Use the content inside the code block
+        cleanedResponse = jsonBlockMatch[1].trim();
+      } else {
+        // If no code block, just clean up the response
+        // Replace backticks
+        cleanedResponse = cleanedResponse.replace(/```(?:json)?|```/g, '');
       }
       
-      // Remove backticks if present
-      cleanedResponse = cleanedResponse.replace(/```/g, '');
+      // Additional cleanup
+      cleanedResponse = cleanedResponse.trim();
+      
+      // Handle common formatting issues
+      if (cleanedResponse.startsWith('{') && !cleanedResponse.startsWith('{"')) {
+        // Make sure property names are properly quoted
+        cleanedResponse = cleanedResponse.replace(/(\{|\,)\s*(\w+)\s*\:/g, '$1"$2":');
+      }
+      
+      console.log("Cleaned JSON response:", cleanedResponse);
       
       // Parse the JSON response from the AI
       const parsedResponse = JSON.parse(cleanedResponse);
