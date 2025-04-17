@@ -401,7 +401,8 @@ export class ZenderService {
           const timestampKey = keys.find(k => k === 'data[timestamp]');
           
           if ((widKey || phoneKey) && messageKey) {
-            sender = widKey ? data[widKey] : data[phoneKey];
+            // Prioritize phoneKey over widKey as phone contains the actual sender number
+            sender = phoneKey ? data[phoneKey] : data[widKey];
             message = data[messageKey];
             
             if (idKey) {
