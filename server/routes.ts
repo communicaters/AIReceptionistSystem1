@@ -3508,6 +3508,8 @@ If this is NOT a meeting scheduling request, respond normally and set is_schedul
       const offset = req.query.offset ? parseInt(req.query.offset as string) : 0;
       const phoneNumber = req.query.phoneNumber as string;
       
+      console.log(`Fetching WhatsApp logs: phoneNumber=${phoneNumber || 'all'}, limit=${limit}, offset=${offset}`);
+      
       let logs;
       if (phoneNumber) {
         logs = await storage.getWhatsappLogsByPhoneNumber(userId, phoneNumber, limit, offset);
@@ -3520,6 +3522,8 @@ If this is NOT a meeting scheduling request, respond normally and set is_schedul
         ? await storage.getWhatsappLogCountByPhoneNumber(userId, phoneNumber)
         : await storage.getWhatsappLogCountByUserId(userId);
         
+      console.log(`WhatsApp logs fetched: ${logs.length} logs, total=${totalCount}, hasMore=${offset + logs.length < totalCount}`);
+      
       apiResponse(res, {
         logs,
         pagination: {

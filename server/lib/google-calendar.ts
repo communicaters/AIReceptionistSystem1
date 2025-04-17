@@ -131,13 +131,27 @@ export async function createEvent(
     const config = await storage.getCalendarConfigByUserId(userId);
     const calendarId = config?.googleCalendarId || 'primary';
     
-    console.log("Sending Google Calendar request:", JSON.stringify(event, null, 2));
+    // Add a unique requestId for conference creation if not provided
+    const requestId = `meeting-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    
+    // Create a complete request body with conferenceData for Meet link
+    const requestBody = {
+      ...event,
+      conferenceData: {
+        createRequest: {
+          requestId: requestId,
+          conferenceSolutionKey: { type: "hangoutsMeet" }
+        }
+      }
+    };
+    
+    console.log("Sending Google Calendar request:", JSON.stringify(requestBody, null, 2));
     
     // Request conferenceData to force Google Meet creation
     const response = await calendar.events.insert({
       auth: oauth2Client,
       calendarId,
-      requestBody: event, // Use event as-is since conferenceData is now part of the interface
+      requestBody: requestBody,
       conferenceDataVersion: 1, // Must be 1 to enable conference creation
       sendUpdates: 'all', // Send email updates to attendees
     });

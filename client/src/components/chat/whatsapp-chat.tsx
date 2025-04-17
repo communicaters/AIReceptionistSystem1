@@ -274,8 +274,18 @@ export function WhatsAppChat({
               className="text-xs flex items-center gap-1"
             >
               <ChevronUp className="h-3 w-3" />
-              See More
+              See More ({pagination.total - (pagination.offset + pagination.limit) > 0 ? 
+                `${Math.min(pagination.limit, pagination.total - (pagination.offset + pagination.limit))} more` : 
+                'earlier messages'})
             </Button>
+          </div>
+        )}
+        
+        {/* Loading indicator while fetching more messages */}
+        {isLoading && pagination && pagination.offset > 0 && (
+          <div className="flex justify-center mb-4">
+            <Spinner size="sm" />
+            <span className="ml-2 text-xs text-gray-500">Loading earlier messages...</span>
           </div>
         )}
         
