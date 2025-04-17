@@ -78,7 +78,82 @@ export function AudioPlayer({
     if (onError) onError(new Error(errorMessage));
   }, [onError]);
   
-  const playAudio = () => {
+  // Initialize audio element
+  useEffect(() => {
+    const audio = new Audio();
+    audioRef.current = audio;
+    
+    // Set up event listeners
+    audio.addEventListener('play', handlePlayEvent);
+    audio.addEventListener('pause', handlePauseEvent);
+    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('error', handleError);
+    
+    // Clean up on unmount
+    return () => {
+      try {
+        audio.pause();
+        audio.src = ''; // Reset source to prevent memory leaks
+        audio.removeEventListener('play', handlePlayEvent);
+        audio.removeEventListener('pause', handlePauseEvent);
+        audio.removeEventListener('ended', handleEnded);
+        audio.removeEventListener('timeupdate', handleTimeUpdate);
+        audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+        audio.removeEventListener('error', handleError);
+      } catch (err) {
+        console.error("Error cleaning up audio element:", err);
+      }
+    };
+  }, [handlePlayEvent, handlePauseEvent, handleEnded, handleTimeUpdate, handleLoadedMetadata, handleError]);
+  
+  // Load new audio when src changes
+  useEffect(() => {
+    if (!src || !audioRef.current) return;
+    
+    try {
+      // Reset state for new audio
+      setIsPlaying(false);
+      setCurrentTime(0);
+      setDuration(0);
+      setError(null);
+      
+      const audio = audioRef.current;
+      audio.src = src;
+      audio.volume = volume / 100;
+      audio.playbackRate = playbackRate;
+      
+      if (autoPlay) {
+        playAudio();
+      }
+    } catch (err) {
+      console.error("Error loading audio:", err);
+      setError("Failed to load audio source");
+    }
+  }, [src, autoPlay, volume, playbackRate]);
+  
+  // Update volume when it changes
+  useEffect(() => {
+    if (!audioRef.current) return;
+    try {
+      audioRef.current.volume = volume / 100;
+    } catch (err) {
+      console.error("Error updating volume:", err);
+    }
+  }, [volume]);
+  
+  // Update playback rate when it changes
+  useEffect(() => {
+    if (!audioRef.current) return;
+    try {
+      audioRef.current.playbackRate = playbackRate;
+    } catch (err) {
+      console.error("Error updating playback rate:", err);
+    }
+  }, [playbackRate]);
+  
+  const playAudio = useCallback(() => {
     if (!audioRef.current || !src) return;
     
     audioRef.current.play().catch(error => {
@@ -86,34 +161,28 @@ export function AudioPlayer({
       setError("Failed to play audio file");
       if (onError) onError(error);
     });
-  };
+  }, [src, onError]);
   
-  const pauseAudio = () => {
+  const pauseAudio = useCallback(() => {
     if (!audioRef.current) return;
     audioRef.current.pause();
-  };
+  }, []);
   
-  const restartAudio = () => {
-    if (!audioRef.current) return;
-    audioRef.current.currentTime = 0;
-    playAudio();
-  };
-  
-  const skipForward = () => {
+  const skipForward = useCallback(() => {
     if (!audioRef.current) return;
     audioRef.current.currentTime = Math.min(audioRef.current.currentTime + 5, duration);
-  };
+  }, [duration]);
   
-  const skipBackward = () => {
+  const skipBackward = useCallback(() => {
     if (!audioRef.current) return;
     audioRef.current.currentTime = Math.max(audioRef.current.currentTime - 5, 0);
-  };
+  }, []);
   
-  const handleSeek = (values: number[]) => {
+  const handleSeek = useCallback((values: number[]) => {
     if (!audioRef.current || values.length === 0) return;
     audioRef.current.currentTime = values[0];
     setCurrentTime(values[0]);
-  };
+  }, []);
   
   // Format time in MM:SS
   const formatTime = (time: number) => {
