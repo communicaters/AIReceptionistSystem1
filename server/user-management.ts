@@ -3,7 +3,8 @@ import { DatabaseStorage } from './database-storage';
 import { 
   User, InsertUser, 
   users, packages, packageFeatures, userPackages, featureUsageLogs, loginActivity, adminReportsCache, systemActivity, moduleStatus,
-  insertPackageSchema, insertPackageFeatureSchema, insertUserPackageSchema, insertFeatureUsageLogSchema, insertLoginActivitySchema, insertAdminReportsCacheSchema
+  insertPackageSchema, insertPackageFeatureSchema, insertUserPackageSchema, insertFeatureUsageLogSchema, insertLoginActivitySchema, insertAdminReportsCacheSchema,
+  AdminReportsCache, InsertAdminReportsCache
 } from '@shared/schema';
 import { compare } from './lib/encryption';
 import { db } from './db';
@@ -710,14 +711,14 @@ export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage
    * Report Cache Methods
    */
   
-  storage.createReportCache = async function(data: InsertReportCache): Promise<ReportCache> {
+  storage.createReportCache = async function(data: InsertAdminReportsCache): Promise<AdminReportsCache> {
     try {
       // Delete any existing cache for this report type
-      await db.delete(reportCache)
-        .where(eq(reportCache.reportType, data.reportType));
+      await db.delete(adminReportsCache)
+        .where(eq(adminReportsCache.reportType, data.reportType));
       
       // Create new cache entry
-      const [result] = await db.insert(reportCache).values(data).returning();
+      const [result] = await db.insert(adminReportsCache).values(data).returning();
       return result;
     } catch (error) {
       console.error("Error in createReportCache:", error);
@@ -725,10 +726,10 @@ export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage
     }
   };
   
-  storage.getReportCacheByType = async function(reportType: string): Promise<ReportCache | undefined> {
+  storage.getReportCacheByType = async function(reportType: string): Promise<AdminReportsCache | undefined> {
     try {
-      const result = await db.query.reportCache.findFirst({
-        where: eq(reportCache.reportType, reportType)
+      const result = await db.query.adminReportsCache.findFirst({
+        where: eq(adminReportsCache.reportType, reportType)
       });
       return result;
     } catch (error) {
