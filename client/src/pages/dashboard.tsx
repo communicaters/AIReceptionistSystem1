@@ -1,4 +1,3 @@
-import DashboardLayout from "@/components/layout/dashboard-layout";
 import SystemStats from "@/components/dashboard/system-stats";
 import SystemStatus from "@/components/dashboard/system-status";
 import ModuleGrid from "@/components/dashboard/module-grid";
@@ -7,7 +6,7 @@ import { WebSocketMonitor } from "@/components/dashboard/websocket-monitor";
 
 const Dashboard = () => {
   return (
-    <DashboardLayout>
+    <>
       {/* System Stats */}
       <SystemStats />
       
@@ -28,7 +27,7 @@ const Dashboard = () => {
       
       {/* Recent Activity */}
       <RecentActivity />
-    </DashboardLayout>
+    </>
   );
 };
 

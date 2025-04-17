@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -30,79 +30,27 @@ export function AudioPlayer({
   const [error, setError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   
-  // Initialize audio element
-  useEffect(() => {
-    const audio = new Audio();
-    audioRef.current = audio;
-    
-    // Set up event listeners
-    audio.addEventListener('play', () => setIsPlaying(true));
-    audio.addEventListener('pause', () => setIsPlaying(false));
-    audio.addEventListener('ended', handleEnded);
-    audio.addEventListener('timeupdate', handleTimeUpdate);
-    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-    audio.addEventListener('error', handleError);
-    
-    // Clean up on unmount
-    return () => {
-      audio.pause();
-      audio.removeEventListener('play', () => setIsPlaying(true));
-      audio.removeEventListener('pause', () => setIsPlaying(false));
-      audio.removeEventListener('ended', handleEnded);
-      audio.removeEventListener('timeupdate', handleTimeUpdate);
-      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.removeEventListener('error', handleError);
-    };
-  }, []);
+  // Create stable callback references to avoid issues with event listeners
+  const handlePlayEvent = useCallback(() => setIsPlaying(true), []);
+  const handlePauseEvent = useCallback(() => setIsPlaying(false), []);
   
-  // Load new audio when src changes
-  useEffect(() => {
-    if (!src || !audioRef.current) return;
-    
-    // Reset state for new audio
-    setIsPlaying(false);
-    setCurrentTime(0);
-    setDuration(0);
-    setError(null);
-    
-    const audio = audioRef.current;
-    audio.src = src;
-    audio.volume = volume / 100;
-    audio.playbackRate = playbackRate;
-    
-    if (autoPlay) {
-      playAudio();
-    }
-  }, [src]);
-  
-  // Update volume and playback rate when they change
-  useEffect(() => {
-    if (!audioRef.current) return;
-    audioRef.current.volume = volume / 100;
-  }, [volume]);
-  
-  useEffect(() => {
-    if (!audioRef.current) return;
-    audioRef.current.playbackRate = playbackRate;
-  }, [playbackRate]);
-  
-  const handleTimeUpdate = () => {
+  const handleTimeUpdate = useCallback(() => {
     if (!audioRef.current) return;
     setCurrentTime(audioRef.current.currentTime);
-  };
+  }, []);
   
-  const handleLoadedMetadata = () => {
+  const handleLoadedMetadata = useCallback(() => {
     if (!audioRef.current) return;
     setDuration(audioRef.current.duration);
-  };
+  }, []);
   
-  const handleEnded = () => {
+  const handleEnded = useCallback(() => {
     setIsPlaying(false);
     setCurrentTime(0);
     if (onEnded) onEnded();
-  };
+  }, [onEnded]);
   
-  const handleError = (e: Event) => {
+  const handleError = useCallback((e: Event) => {
     console.log("Audio player error:", e);
     let errorMessage = "Failed to load audio file";
     
@@ -128,7 +76,7 @@ export function AudioPlayer({
     
     setError(errorMessage);
     if (onError) onError(new Error(errorMessage));
-  };
+  }, [onError]);
   
   const playAudio = () => {
     if (!audioRef.current || !src) return;
