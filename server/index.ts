@@ -3,6 +3,8 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 // Import user management module
 import "./user-management";
+// Import email service initialization
+import { initializeEmailService } from "./email-service";
 
 const app = express();
 app.use(express.json());
@@ -39,6 +41,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Initialize email service
+  initializeEmailService();
+  
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
