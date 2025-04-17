@@ -725,8 +725,9 @@ export class ZenderService {
         `Product: ${p.name}\nDescription: ${p.description || 'N/A'}\nPrice: $${(p.priceInCents / 100).toFixed(2)}\nSKU: ${p.sku}`
       ).join('\n\n');
       
-      // Check if this might be a scheduling request by looking for keywords
-      const scheduleKeywords = ['schedule', 'meeting', 'appointment', 'book', 'calendar', 'meet'];
+      // Check if this might be a scheduling request by looking for specific scheduling intent keywords
+      // More specific to avoid false positives
+      const scheduleKeywords = ['schedule a meeting', 'book a meeting', 'arrange a call', 'set up a meeting', 'book an appointment'];
       const messageHasScheduleKeywords = scheduleKeywords.some(
         keyword => incomingMessage.toLowerCase().includes(keyword.toLowerCase())
       );
@@ -801,7 +802,9 @@ If this is NOT a meeting scheduling request, respond normally and set is_schedul
           messages: messages,
           max_tokens: 300,
           temperature: 0.7,
-          response_format: messageHasScheduleKeywords ? { type: "json_object" } : undefined
+          // Only use JSON format if we have strong indicators of a scheduling request
+          response_format: messageHasScheduleKeywords && incomingMessage.toLowerCase().includes('arrange') ? 
+            { type: "json_object" } : undefined
         })
       });
       
@@ -819,7 +822,14 @@ If this is NOT a meeting scheduling request, respond normally and set is_schedul
       if (messageHasScheduleKeywords) {
         try {
           // Try to parse the response as JSON
-          const schedulingData = JSON.parse(aiReplyText);
+          let schedulingData;
+          try {
+            schedulingData = JSON.parse(aiReplyText);
+          } catch (jsonError) {
+            // If we can't parse as JSON, it's likely a regular text response
+            console.log('Response is not in JSON format, treating as regular text');
+            schedulingData = { is_scheduling_request: false };
+          }
           
           if (schedulingData.is_scheduling_request === true) {
             console.log('Detected meeting scheduling request:', schedulingData);
