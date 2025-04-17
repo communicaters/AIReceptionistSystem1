@@ -295,8 +295,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Register authentication routes (these don't require auth)
   app.use("/api/auth", authRouter);
   
-  // Apply authentication middleware to all other routes
-  app.use(authenticate);
+  // Exempt other public resources from authentication
+  // such as the chat widget, front-end assets, etc.
+  
+  // Apply authentication middleware to all other API routes
+  app.use("/api", authenticate);
 
   // Register AI routes
   app.use("/api/ai", aiRouter);
