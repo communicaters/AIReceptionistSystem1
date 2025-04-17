@@ -85,11 +85,19 @@ class WebSocketService {
 
   private getWebSocketUrl(): string {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
+    
+    // If we're in localhost or .replit domain, use relative path
     // If we have a sessionId, append it to the URL so the server can maintain the session
+    let wsUrl = `${protocol}//${host}/ws`;
+    
+    // Add session ID if available
     if (this.sessionId) {
-      return `${protocol}//${window.location.host}/ws?sessionId=${this.sessionId}`;
+      wsUrl += `?sessionId=${encodeURIComponent(this.sessionId)}`;
     }
-    return `${protocol}//${window.location.host}/ws`;
+    
+    console.log(`Building WebSocket URL: ${wsUrl}`);
+    return wsUrl;
   }
 
   public async connect(): Promise<void> {
