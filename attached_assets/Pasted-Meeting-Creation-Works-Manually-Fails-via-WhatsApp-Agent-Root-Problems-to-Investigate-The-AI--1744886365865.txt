@@ -1,0 +1,60 @@
+Meeting Creation Works Manually, ❌ Fails via WhatsApp Agent
+🔍 Root Problems to Investigate:
+The AI Agent’s meeting scheduling code is not triggering or completing the Google Calendar event creation.
+
+Most likely backend is receiving the message from WhatsApp but:
+
+Either it's not triggering the right logic
+
+Or it fails silently during Google API execution
+
+✅ What To Do:
+Enable full debug logging for the meeting creation logic specifically when the request is triggered by WhatsApp agent.
+
+Check:
+
+Is the OAuth token still valid for the user in this context?
+
+Is the calendar API being hit?
+
+Are there errors in response from Google, and are they logged?
+
+2. 🕒 Time Slot & Meeting Time Off by 5 Hours (Still GMT)
+📌 Clear from Screenshot:
+You booked a meeting at 3:30 PM PST, but the time slot marked 10:30 AM Unavailable.
+
+That means the app backend/frontend is using GMT/UTC to mark availability, instead of converting to user’s local time.
+
+✅ What To Fix:
+Detect the user’s timezone from the browser (frontend) or user profile (backend).
+
+Apply the timezone when:
+
+Displaying available time slots
+
+Saving booked meeting time
+
+Sending meeting emails
+
+Sending to Google Calendar (this part is likely correct already — since manual meetings look right)
+
+Update time formatting using libraries:
+
+Frontend: Use Intl.DateTimeFormat() or Luxon or moment-timezone
+
+Backend (if in JS): Use Date.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })
+
+If in PHP/CI: use DateTimeZone & DateTime::setTimezone()
+
+✅ Recommended Prompt to Developer / Agent Debug:
+pgsql
+Copy
+Edit
+1. The time slots on the interface are still showing in GMT instead of user’s local timezone (PST), causing mismatch between available time and actual meeting time. Fix the timezone offset logic in both display and calendar API.
+
+2. AI WhatsApp agent is unable to create meetings in Google Calendar. However, manual meeting creation works perfectly. Enable full logging for the AI-triggered scheduling flow, and send the exact error or failure logs from the calendar integration so we can identify the issue.
+
+3. Confirm that after scheduling, the user gets a meeting confirmation email with correct date/time and Google Meet link.
+
+Send confirmation after resolving both issues.
+Let me know if you want me to help debug the backend code or API response logs — happy to dig deeper if you provide those.
