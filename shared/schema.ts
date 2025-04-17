@@ -864,3 +864,22 @@ export type InsertSystemActivity = z.infer<typeof insertSystemActivitySchema>;
 
 export type VoiceSettings = typeof voiceSettings.$inferSelect;
 export type InsertVoiceSettings = z.infer<typeof insertVoiceSettingsSchema>;
+
+// User Management Type Definitions
+export type Package = typeof packages.$inferSelect;
+export type InsertPackage = z.infer<typeof insertPackageSchema>;
+
+export type PackageFeature = typeof packageFeatures.$inferSelect;
+export type InsertPackageFeature = z.infer<typeof insertPackageFeatureSchema>;
+
+export type UserPackage = typeof userPackages.$inferSelect;
+export type InsertUserPackage = z.infer<typeof insertUserPackageSchema>;
+
+export type FeatureUsageLog = typeof featureUsageLogs.$inferSelect;
+export type InsertFeatureUsageLog = z.infer<typeof insertFeatureUsageLogSchema>;
+
+export type LoginActivity = typeof loginActivity.$inferSelect;
+export type InsertLoginActivity = z.infer<typeof insertLoginActivitySchema>;
+
+export type AdminReportsCache = typeof adminReportsCache.$inferSelect;
+export type InsertAdminReportsCache = z.infer<typeof insertAdminReportsCacheSchema>;

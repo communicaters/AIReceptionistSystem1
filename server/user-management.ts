@@ -1,764 +1,628 @@
-import { eq, and, gte, lt, desc, sql, asc, count, ne, isNull, not, inArray, or } from 'drizzle-orm';
-import { DatabaseStorage } from './database-storage';
-import { 
-  User, InsertUser, 
-  users, packages, packageFeatures, userPackages, featureUsageLogs, loginActivity, adminReportsCache, systemActivity, moduleStatus,
-  insertPackageSchema, insertPackageFeatureSchema, insertUserPackageSchema, insertFeatureUsageLogSchema, insertLoginActivitySchema, insertAdminReportsCacheSchema,
-  AdminReportsCache, InsertAdminReportsCache
-} from '@shared/schema';
-import { compare } from './lib/encryption';
 import { db } from './db';
+import { 
+  users, User, InsertUser,
+  packages, Package, InsertPackage,
+  packageFeatures, PackageFeature, InsertPackageFeature,
+  userPackages, UserPackage, InsertUserPackage,
+  featureUsageLogs, FeatureUsageLog, InsertFeatureUsageLog,
+  loginActivity, LoginActivity, InsertLoginActivity,
+  adminReportsCache, AdminReportsCache, InsertAdminReportsCache
+} from "@shared/schema";
+import { eq, desc, and, asc, gte, lt, isNull, not, lte, or, ilike, sql } from 'drizzle-orm';
 
-// Import storage after we've defined the extension function
-import { storage } from './storage';
+export class UserManagement {
+  constructor() {
+    console.log('User management methods initialized');
+  }
 
-// Implement user management methods for DatabaseStorage
-export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage) {
-  /**
-   * User Methods
-   */
-  
-  storage.getUser = async function(id: number): Promise<User | undefined> {
+  // Extended User Management Methods
+  async getUserByEmail(email: string): Promise<User | undefined> {
     try {
-      const result = await db.query.users.findFirst({
-        where: eq(users.id, id)
-      });
-      return result || undefined;
-    } catch (error) {
-      console.error("Error in getUser:", error);
-      return undefined;
-    }
-  };
-  
-  storage.getUserByUsername = async function(username: string): Promise<User | undefined> {
-    try {
-      const result = await db.query.users.findFirst({
-        where: eq(users.username, username)
-      });
-      return result || undefined;
-    } catch (error) {
-      console.error("Error in getUserByUsername:", error);
-      return undefined;
-    }
-  };
-  
-  storage.getUserByEmail = async function(email: string): Promise<User | undefined> {
-    try {
-      const result = await db.query.users.findFirst({
-        where: eq(users.email, email)
-      });
-      return result || undefined;
+      const result = await db.select().from(users).where(eq(users.email, email));
+      return result[0];
     } catch (error) {
       console.error("Error in getUserByEmail:", error);
       return undefined;
     }
-  };
-  
-  storage.getUserByVerificationToken = async function(token: string): Promise<User | undefined> {
-    const result = await this.db.query.users.findFirst({
-      where: eq(this.schema.users.verificationToken, token)
-    });
-    return result;
-  };
-  
-  storage.getUserByResetToken = async function(token: string): Promise<User | undefined> {
-    const now = new Date();
-    const result = await this.db.query.users.findFirst({
-      where: and(
-        eq(this.schema.users.resetToken, token),
-        gte(this.schema.users.resetTokenExpiry as any, now)
-      )
-    });
-    return result;
-  };
-  
-  storage.getAllUsers = async function(): Promise<User[]> {
+  }
+
+  async updateUser(id: number, user: Partial<InsertUser>): Promise<User | undefined> {
     try {
-      const result = await db.query.users.findMany({
-        orderBy: [asc(users.id)]
-      });
-      return result;
-    } catch (error) {
-      console.error("Error in getAllUsers:", error);
-      return [];
-    }
-  };
-  
-  storage.createUser = async function(user: InsertUser): Promise<User> {
-    try {
-      const [result] = await db.insert(users).values(user).returning();
-      return result;
-    } catch (error) {
-      console.error("Error in createUser:", error);
-      throw error;
-    }
-  };
-  
-  storage.updateUser = async function(id: number, updates: Partial<User>): Promise<User> {
-    try {
-      const [result] = await db
-        .update(users)
-        .set({ ...updates, updatedAt: new Date() })
+      const result = await db.update(users)
+        .set({
+          ...user,
+          updatedAt: new Date()
+        })
         .where(eq(users.id, id))
         .returning();
-      return result;
+      
+      return result[0];
     } catch (error) {
       console.error("Error in updateUser:", error);
-      throw error;
+      return undefined;
     }
-  };
-  
-  storage.updateUserStatus = async function(id: number, status: string): Promise<User> {
+  }
+
+  async updateUserStatus(id: number, status: string): Promise<User | undefined> {
     try {
-      const [result] = await db
-        .update(users)
-        .set({ status, updatedAt: new Date() })
+      const result = await db.update(users)
+        .set({
+          status,
+          updatedAt: new Date()
+        })
         .where(eq(users.id, id))
         .returning();
-      return result;
+      
+      return result[0];
     } catch (error) {
       console.error("Error in updateUserStatus:", error);
-      throw error;
+      return undefined;
     }
-  };
-  
-  storage.updateUserLastLogin = async function(id: number): Promise<User> {
+  }
+
+  async updateUserRole(id: number, role: string): Promise<User | undefined> {
     try {
-      const [result] = await db
-        .update(users)
-        .set({ lastLogin: new Date(), updatedAt: new Date() })
-        .where(eq(users.id, id))
-        .returning();
-      return result;
-    } catch (error) {
-      console.error("Error in updateUserLastLogin:", error);
-      throw error;
-    }
-  };
-  
-  storage.verifyUserEmail = async function(id: number): Promise<User> {
-    try {
-      const [result] = await db
-        .update(users)
-        .set({ 
-          emailVerified: true, 
-          status: 'active', 
-          verificationToken: null, 
-          updatedAt: new Date() 
+      const result = await db.update(users)
+        .set({
+          role,
+          updatedAt: new Date()
         })
         .where(eq(users.id, id))
         .returning();
-      return result;
-    } catch (error) {
-      console.error("Error in verifyUserEmail:", error);
-      throw error;
-    }
-  };
-  
-  storage.verifyPassword = async function(id: number, password: string): Promise<boolean> {
-    try {
-      const user = await db.query.users.findFirst({
-        where: eq(users.id, id)
-      });
       
-      if (!user) return false;
+      return result[0];
+    } catch (error) {
+      console.error("Error in updateUserRole:", error);
+      return undefined;
+    }
+  }
+
+  async updateUserPassword(id: number, password: string): Promise<User | undefined> {
+    try {
+      const result = await db.update(users)
+        .set({
+          password,
+          updatedAt: new Date()
+        })
+        .where(eq(users.id, id))
+        .returning();
       
-      return await compare(password, user.password);
-    } catch (error) {
-      console.error("Error in verifyPassword:", error);
-      return false;
-    }
-  };
-  
-  storage.setUserResetToken = async function(id: number, token: string, expiry: Date): Promise<User> {
-    try {
-      const [result] = await db
-        .update(users)
-        .set({ 
-          resetToken: token, 
-          resetTokenExpiry: expiry, 
-          updatedAt: new Date() 
-        })
-        .where(eq(users.id, id))
-        .returning();
-      return result;
-    } catch (error) {
-      console.error("Error in setUserResetToken:", error);
-      throw error;
-    }
-  };
-  
-  storage.clearUserResetToken = async function(id: number): Promise<User> {
-    try {
-      const [result] = await db
-        .update(users)
-        .set({ 
-          resetToken: null, 
-          resetTokenExpiry: null, 
-          updatedAt: new Date() 
-        })
-        .where(eq(users.id, id))
-        .returning();
-      return result;
-    } catch (error) {
-      console.error("Error in clearUserResetToken:", error);
-      throw error;
-    }
-  };
-  
-  storage.updateUserPassword = async function(id: number, password: string): Promise<User> {
-    try {
-      const [result] = await db
-        .update(users)
-        .set({ 
-          password, 
-          updatedAt: new Date() 
-        })
-        .where(eq(users.id, id))
-        .returning();
-      return result;
+      return result[0];
     } catch (error) {
       console.error("Error in updateUserPassword:", error);
-      throw error;
+      return undefined;
     }
-  };
-  
-  storage.deleteUser = async function(id: number): Promise<boolean> {
+  }
+
+  async updateUserLastLogin(id: number): Promise<User | undefined> {
     try {
-      // First delete all user-related data
-      await db.delete(featureUsageLogs).where(eq(featureUsageLogs.userId, id));
-      await db.delete(loginActivity).where(eq(loginActivity.userId, id));
-      await db.delete(userPackages).where(eq(userPackages.userId, id));
+      const result = await db.update(users)
+        .set({
+          lastLogin: new Date(),
+          updatedAt: new Date()
+        })
+        .where(eq(users.id, id))
+        .returning();
       
-      // Then delete the user
-      const result = await db.delete(users).where(eq(users.id, id));
-      return result.rowCount > 0;
+      return result[0];
+    } catch (error) {
+      console.error("Error in updateUserLastLogin:", error);
+      return undefined;
+    }
+  }
+
+  async verifyUserEmail(id: number): Promise<User | undefined> {
+    try {
+      const result = await db.update(users)
+        .set({
+          emailVerified: true,
+          updatedAt: new Date()
+        })
+        .where(eq(users.id, id))
+        .returning();
+      
+      return result[0];
+    } catch (error) {
+      console.error("Error in verifyUserEmail:", error);
+      return undefined;
+    }
+  }
+
+  async setUserResetToken(id: number, token: string, expiry: Date): Promise<User | undefined> {
+    try {
+      const result = await db.update(users)
+        .set({
+          resetToken: token,
+          resetTokenExpiry: expiry,
+          updatedAt: new Date()
+        })
+        .where(eq(users.id, id))
+        .returning();
+      
+      return result[0];
+    } catch (error) {
+      console.error("Error in setUserResetToken:", error);
+      return undefined;
+    }
+  }
+
+  async getUserByResetToken(token: string): Promise<User | undefined> {
+    try {
+      const now = new Date();
+      const result = await db.select().from(users).where(
+        and(
+          eq(users.resetToken, token),
+          gte(users.resetTokenExpiry, now)
+        )
+      );
+      
+      return result[0];
+    } catch (error) {
+      console.error("Error in getUserByResetToken:", error);
+      return undefined;
+    }
+  }
+
+  async deleteUser(id: number): Promise<boolean> {
+    try {
+      await db.delete(users).where(eq(users.id, id));
+      return true;
     } catch (error) {
       console.error("Error in deleteUser:", error);
-      throw error;
+      return false;
     }
-  };
-  
-  /**
-   * Package Methods
-   */
-  
-  storage.getAllPackages = async function(): Promise<Package[]> {
+  }
+
+  // Packages
+  async getPackage(id: number): Promise<Package | undefined> {
     try {
-      const result = await db.query.packages.findMany({
-        orderBy: [asc(packages.id)]
-      });
-      return result;
-    } catch (error) {
-      console.error("Error in getAllPackages:", error);
-      return [];
-    }
-  };
-  
-  storage.getActivePackages = async function(): Promise<Package[]> {
-    try {
-      const result = await db.query.packages.findMany({
-        where: eq(packages.isActive, true),
-        orderBy: [asc(packages.id)]
-      });
-      return result;
-    } catch (error) {
-      console.error("Error in getActivePackages:", error);
-      return [];
-    }
-  };
-  
-  storage.getPackage = async function(id: number): Promise<any> {
-    try {
-      const result = await db.query.packages.findFirst({
-        where: eq(packages.id, id)
-      });
-      return result;
+      const result = await db.select().from(packages).where(eq(packages.id, id));
+      return result[0];
     } catch (error) {
       console.error("Error in getPackage:", error);
       return undefined;
     }
-  };
-  
-  storage.getPackageByName = async function(name: string): Promise<Package | undefined> {
+  }
+
+  async getPackageByName(name: string): Promise<Package | undefined> {
     try {
-      const result = await db.query.packages.findFirst({
-        where: eq(packages.name, name)
-      });
-      return result;
+      const result = await db.select().from(packages).where(eq(packages.name, name));
+      return result[0];
     } catch (error) {
       console.error("Error in getPackageByName:", error);
       return undefined;
     }
-  };
-  
-  storage.createPackage = async function(pkg: InsertPackage): Promise<Package> {
+  }
+
+  async getAllPackages(): Promise<Package[]> {
     try {
-      const [result] = await db.insert(packages).values(pkg).returning();
-      return result;
+      return await db.select().from(packages).orderBy(asc(packages.name));
+    } catch (error) {
+      console.error("Error in getAllPackages:", error);
+      return [];
+    }
+  }
+
+  async getActivePackages(): Promise<Package[]> {
+    try {
+      return await db.select().from(packages)
+        .where(eq(packages.isActive, true))
+        .orderBy(asc(packages.name));
+    } catch (error) {
+      console.error("Error in getActivePackages:", error);
+      return [];
+    }
+  }
+
+  async createPackage(pkg: InsertPackage): Promise<Package> {
+    try {
+      const now = new Date();
+      const result = await db.insert(packages).values({
+        ...pkg,
+        createdAt: now,
+        updatedAt: now
+      }).returning();
+      
+      return result[0];
     } catch (error) {
       console.error("Error in createPackage:", error);
-      throw error;
+      throw new Error("Failed to create package");
     }
-  };
-  
-  storage.updatePackage = async function(id: number, updates: Partial<Package>): Promise<Package> {
+  }
+
+  async updatePackage(id: number, pkg: Partial<InsertPackage>): Promise<Package | undefined> {
     try {
-      const [result] = await db
-        .update(packages)
-        .set({ ...updates, updatedAt: new Date() })
+      const result = await db.update(packages)
+        .set({
+          ...pkg,
+          updatedAt: new Date()
+        })
         .where(eq(packages.id, id))
         .returning();
-      return result;
+      
+      return result[0];
     } catch (error) {
       console.error("Error in updatePackage:", error);
-      throw error;
+      return undefined;
     }
-  };
-  
-  storage.deletePackage = async function(id: number): Promise<boolean> {
+  }
+
+  async deletePackage(id: number): Promise<boolean> {
     try {
-      // First delete all package features
-      await db.delete(packageFeatures).where(eq(packageFeatures.packageId, id));
-      
-      // Then delete the package
-      const result = await db.delete(packages).where(eq(packages.id, id));
-      return result.rowCount ? result.rowCount > 0 : false;
+      await db.delete(packages).where(eq(packages.id, id));
+      return true;
     } catch (error) {
       console.error("Error in deletePackage:", error);
-      throw error;
+      return false;
     }
-  };
-  
-  /**
-   * Package Feature Methods
-   */
-  
-  storage.getPackageFeature = async function(id: number): Promise<PackageFeature | undefined> {
+  }
+
+  // Package Features
+  async getPackageFeature(id: number): Promise<PackageFeature | undefined> {
     try {
-      const result = await db.query.packageFeatures.findFirst({
-        where: eq(packageFeatures.id, id)
-      });
-      return result;
+      const result = await db.select().from(packageFeatures).where(eq(packageFeatures.id, id));
+      return result[0];
     } catch (error) {
       console.error("Error in getPackageFeature:", error);
       return undefined;
     }
-  };
-  
-  storage.getPackageFeatureByKey = async function(packageId: number, featureKey: string): Promise<PackageFeature | undefined> {
+  }
+
+  async getPackageFeaturesByPackageId(packageId: number): Promise<PackageFeature[]> {
     try {
-      const result = await db.query.packageFeatures.findFirst({
-        where: and(
-          eq(packageFeatures.packageId, packageId),
-          eq(packageFeatures.featureKey, featureKey)
-        )
-      });
-      return result;
-    } catch (error) {
-      console.error("Error in getPackageFeatureByKey:", error);
-      return undefined;
-    }
-  };
-  
-  storage.getPackageFeaturesByPackageId = async function(packageId: number): Promise<any[]> {
-    try {
-      const result = await db.query.packageFeatures.findMany({
-        where: eq(packageFeatures.packageId, packageId),
-        orderBy: [asc(packageFeatures.id)]
-      });
-      return result;
+      return await db.select().from(packageFeatures)
+        .where(eq(packageFeatures.packageId, packageId))
+        .orderBy(asc(packageFeatures.featureKey));
     } catch (error) {
       console.error("Error in getPackageFeaturesByPackageId:", error);
       return [];
     }
-  };
-  
-  storage.createPackageFeature = async function(feature: InsertPackageFeature): Promise<PackageFeature> {
+  }
+
+  async getPackageFeatureByKey(packageId: number, featureKey: string): Promise<PackageFeature | undefined> {
     try {
-      const [result] = await db.insert(packageFeatures).values(feature).returning();
-      return result;
+      const result = await db.select().from(packageFeatures)
+        .where(and(
+          eq(packageFeatures.packageId, packageId),
+          eq(packageFeatures.featureKey, featureKey)
+        ));
+      
+      return result[0];
+    } catch (error) {
+      console.error("Error in getPackageFeatureByKey:", error);
+      return undefined;
+    }
+  }
+
+  async createPackageFeature(feature: InsertPackageFeature): Promise<PackageFeature> {
+    try {
+      const result = await db.insert(packageFeatures).values(feature).returning();
+      return result[0];
     } catch (error) {
       console.error("Error in createPackageFeature:", error);
-      throw error;
+      throw new Error("Failed to create package feature");
     }
-  };
-  
-  storage.updatePackageFeature = async function(id: number, updates: Partial<PackageFeature>): Promise<PackageFeature> {
+  }
+
+  async updatePackageFeature(id: number, feature: Partial<InsertPackageFeature>): Promise<PackageFeature | undefined> {
     try {
-      const [result] = await db
-        .update(packageFeatures)
-        .set({ ...updates, updatedAt: new Date() })
+      const result = await db.update(packageFeatures)
+        .set(feature)
         .where(eq(packageFeatures.id, id))
         .returning();
-      return result;
+      
+      return result[0];
     } catch (error) {
       console.error("Error in updatePackageFeature:", error);
-      throw error;
+      return undefined;
     }
-  };
-  
-  storage.deletePackageFeature = async function(id: number): Promise<boolean> {
+  }
+
+  async deletePackageFeature(id: number): Promise<boolean> {
     try {
-      const result = await db.delete(packageFeatures).where(eq(packageFeatures.id, id));
-      return result.rowCount ? result.rowCount > 0 : false;
+      await db.delete(packageFeatures).where(eq(packageFeatures.id, id));
+      return true;
     } catch (error) {
       console.error("Error in deletePackageFeature:", error);
-      throw error;
+      return false;
     }
-  };
-  
-  /**
-   * User Package Methods
-   */
-  
-  storage.getUserPackagesByUserId = async function(userId: number): Promise<UserPackage[]> {
+  }
+
+  // User Packages
+  async getUserPackage(id: number): Promise<UserPackage | undefined> {
     try {
-      const result = await db.query.userPackages.findMany({
-        where: eq(userPackages.userId, userId),
-        orderBy: [desc(userPackages.assignedAt)]
-      });
-      return result;
+      const result = await db.select().from(userPackages).where(eq(userPackages.id, id));
+      return result[0];
+    } catch (error) {
+      console.error("Error in getUserPackage:", error);
+      return undefined;
+    }
+  }
+
+  async getUserPackagesByUserId(userId: number): Promise<UserPackage[]> {
+    try {
+      return await db.select().from(userPackages)
+        .where(eq(userPackages.userId, userId))
+        .orderBy(desc(userPackages.assignedAt));
     } catch (error) {
       console.error("Error in getUserPackagesByUserId:", error);
       return [];
     }
-  };
-  
-  storage.getUserPackagesByPackageId = async function(packageId: number): Promise<UserPackage[]> {
-    try {
-      const result = await db.query.userPackages.findMany({
-        where: eq(userPackages.packageId, packageId),
-        orderBy: [asc(userPackages.userId)]
-      });
-      return result;
-    } catch (error) {
-      console.error("Error in getUserPackagesByPackageId:", error);
-      return [];
-    }
-  };
-  
-  storage.getActiveUserPackage = async function(userId: number): Promise<UserPackage | undefined> {
+  }
+
+  async getActiveUserPackage(userId: number): Promise<UserPackage | undefined> {
     try {
       const now = new Date();
-      const result = await db.query.userPackages.findFirst({
-        where: and(
+      const result = await db.select().from(userPackages)
+        .where(and(
           eq(userPackages.userId, userId),
           eq(userPackages.isActive, true),
           or(
             isNull(userPackages.expiresAt),
-            gte(userPackages.expiresAt as any, now)
+            gte(userPackages.expiresAt, now)
           )
-        )
-      });
-      return result;
+        ))
+        .orderBy(desc(userPackages.assignedAt))
+        .limit(1);
+      
+      return result[0];
     } catch (error) {
       console.error("Error in getActiveUserPackage:", error);
       return undefined;
     }
-  };
-  
-  storage.createUserPackage = async function(userPackage: InsertUserPackage): Promise<UserPackage> {
+  }
+
+  async createUserPackage(userPackage: InsertUserPackage): Promise<UserPackage> {
     try {
-      const [result] = await db.insert(userPackages).values(userPackage).returning();
-      return result;
+      // Default assignedAt to current date if not provided
+      const now = new Date();
+      const assignedAt = userPackage.assignedAt || now;
+      
+      const result = await db.insert(userPackages).values({
+        ...userPackage,
+        assignedAt
+      }).returning();
+      
+      return result[0];
     } catch (error) {
       console.error("Error in createUserPackage:", error);
-      throw error;
+      throw new Error("Failed to create user package");
     }
-  };
-  
-  storage.deactivateUserPackage = async function(id: number): Promise<UserPackage> {
+  }
+
+  async updateUserPackage(id: number, userPackage: Partial<InsertUserPackage>): Promise<UserPackage | undefined> {
     try {
-      const [result] = await db
-        .update(userPackages)
-        .set({ isActive: false, updatedAt: new Date() })
+      const result = await db.update(userPackages)
+        .set(userPackage)
         .where(eq(userPackages.id, id))
         .returning();
-      return result;
+      
+      return result[0];
+    } catch (error) {
+      console.error("Error in updateUserPackage:", error);
+      return undefined;
+    }
+  }
+
+  async deactivateUserPackage(id: number): Promise<UserPackage | undefined> {
+    try {
+      const result = await db.update(userPackages)
+        .set({ isActive: false })
+        .where(eq(userPackages.id, id))
+        .returning();
+      
+      return result[0];
     } catch (error) {
       console.error("Error in deactivateUserPackage:", error);
-      throw error;
+      return undefined;
     }
-  };
-  
-  /**
-   * Feature Usage Methods
-   */
-  
-  storage.logFeatureUsage = async function(data: InsertFeatureUsageLog): Promise<FeatureUsageLog> {
+  }
+
+  async deleteUserPackage(id: number): Promise<boolean> {
     try {
-      const [result] = await db.insert(featureUsageLogs).values(data).returning();
-      return result;
+      await db.delete(userPackages).where(eq(userPackages.id, id));
+      return true;
     } catch (error) {
-      console.error("Error in logFeatureUsage:", error);
-      throw error;
+      console.error("Error in deleteUserPackage:", error);
+      return false;
     }
-  };
-  
-  storage.getFeatureUsageLogsByUserId = async function(userId: number, limit: number = 100): Promise<FeatureUsageLog[]> {
+  }
+
+  // Feature Usage Logs
+  async getFeatureUsageLog(id: number): Promise<FeatureUsageLog | undefined> {
     try {
-      const result = await db.query.featureUsageLogs.findMany({
-        where: eq(featureUsageLogs.userId, userId),
-        orderBy: [desc(featureUsageLogs.usedAt as any)],
-        limit
-      });
-      return result;
+      const result = await db.select().from(featureUsageLogs).where(eq(featureUsageLogs.id, id));
+      return result[0];
+    } catch (error) {
+      console.error("Error in getFeatureUsageLog:", error);
+      return undefined;
+    }
+  }
+
+  async getFeatureUsageLogsByUserId(userId: number): Promise<FeatureUsageLog[]> {
+    try {
+      return await db.select().from(featureUsageLogs)
+        .where(eq(featureUsageLogs.userId, userId))
+        .orderBy(desc(featureUsageLogs.usedAt));
     } catch (error) {
       console.error("Error in getFeatureUsageLogsByUserId:", error);
       return [];
     }
-  };
-  
-  storage.getFeatureUsageLogsByUserIdAndTimeframe = async function(userId: number, timeframe: string): Promise<FeatureUsageLog[]> {
+  }
+
+  async getFeatureUsageLogsByFeatureKey(userId: number, featureKey: string): Promise<FeatureUsageLog[]> {
     try {
-      const startDate = new Date();
-      
-      switch (timeframe) {
-        case 'day':
-          startDate.setDate(startDate.getDate() - 1);
-          break;
-        case 'week':
-          startDate.setDate(startDate.getDate() - 7);
-          break;
-        case 'month':
-          startDate.setMonth(startDate.getMonth() - 1);
-          break;
-        case 'year':
-          startDate.setFullYear(startDate.getFullYear() - 1);
-          break;
-        default:
-          startDate.setDate(startDate.getDate() - 30); // Default to 30 days
-      }
-      
-      const result = await db.query.featureUsageLogs.findMany({
-        where: and(
+      return await db.select().from(featureUsageLogs)
+        .where(and(
           eq(featureUsageLogs.userId, userId),
-          gte(featureUsageLogs.usedAt as any, startDate)
-        ),
-        orderBy: [desc(featureUsageLogs.usedAt as any)]
-      });
-      
-      return result;
+          eq(featureUsageLogs.featureKey, featureKey)
+        ))
+        .orderBy(desc(featureUsageLogs.usedAt));
     } catch (error) {
-      console.error("Error in getFeatureUsageLogsByUserIdAndTimeframe:", error);
+      console.error("Error in getFeatureUsageLogsByFeatureKey:", error);
       return [];
     }
-  };
-  
-  storage.getFeatureUsageSummary = async function(userId: number, timeframe: string = 'month'): Promise<any> {
+  }
+
+  async getFeatureUsageSummary(userId: number, timeframe?: string): Promise<any> {
     try {
-      const startDate = new Date();
+      let startDate: Date | undefined;
+      const now = new Date();
       
-      switch (timeframe) {
-        case 'day':
+      // Set timeframe filter if provided
+      if (timeframe) {
+        startDate = new Date();
+        if (timeframe === 'day') {
           startDate.setDate(startDate.getDate() - 1);
-          break;
-        case 'week':
+        } else if (timeframe === 'week') {
           startDate.setDate(startDate.getDate() - 7);
-          break;
-        case 'month':
+        } else if (timeframe === 'month') {
           startDate.setMonth(startDate.getMonth() - 1);
-          break;
-        case 'year':
+        } else if (timeframe === 'year') {
           startDate.setFullYear(startDate.getFullYear() - 1);
-          break;
-        default:
-          startDate.setDate(startDate.getDate() - 30); // Default to 30 days
+        }
       }
       
-      // Query to get sum of usage count grouped by feature
-      const result = await db.select({
+      // Build query
+      let query = db.select({
         featureKey: featureUsageLogs.featureKey,
-        totalUsage: sql<number>`sum(${featureUsageLogs.usageCount})`,
+        totalUsage: sql`SUM(${featureUsageLogs.usageCount})`,
       })
-      .from(featureUsageLogs)
-      .where(and(
-        eq(featureUsageLogs.userId, userId),
-        gte(featureUsageLogs.usedAt as any, startDate)
-      ))
-      .groupBy(featureUsageLogs.featureKey);
+        .from(featureUsageLogs)
+        .where(eq(featureUsageLogs.userId, userId));
       
-      return result;
+      // Add timeframe filter if set
+      if (startDate) {
+        query = query.where(gte(featureUsageLogs.usedAt, startDate));
+      }
+      
+      // Group and order results
+      query = query
+        .groupBy(featureUsageLogs.featureKey)
+        .orderBy(desc(sql`SUM(${featureUsageLogs.usageCount})`));
+      
+      const results = await query;
+      
+      return results.map(result => ({
+        featureKey: result.featureKey,
+        totalUsage: Number(result.totalUsage),
+      }));
     } catch (error) {
       console.error("Error in getFeatureUsageSummary:", error);
       return [];
     }
-  };
-  
-  storage.getFeatureUsageSummaryByTimeframe = async function(timeframe: string): Promise<any> {
+  }
+
+  async createFeatureUsageLog(log: InsertFeatureUsageLog): Promise<FeatureUsageLog> {
     try {
-      const startDate = new Date();
+      const result = await db.insert(featureUsageLogs).values({
+        ...log,
+        usedAt: new Date()
+      }).returning();
       
-      switch (timeframe) {
-        case '7days':
-          startDate.setDate(startDate.getDate() - 7);
-          break;
-        case '30days':
-          startDate.setDate(startDate.getDate() - 30);
-          break;
-        case '90days':
-          startDate.setDate(startDate.getDate() - 90);
-          break;
-        case '12months':
-          startDate.setMonth(startDate.getMonth() - 12);
-          break;
-        default:
-          startDate.setDate(startDate.getDate() - 30); // Default to 30 days
+      return result[0];
+    } catch (error) {
+      console.error("Error in createFeatureUsageLog:", error);
+      throw new Error("Failed to create feature usage log");
+    }
+  }
+
+  // Login Activity
+  async getLoginActivity(id: number): Promise<LoginActivity | undefined> {
+    try {
+      const result = await db.select().from(loginActivity).where(eq(loginActivity.id, id));
+      return result[0];
+    } catch (error) {
+      console.error("Error in getLoginActivity:", error);
+      return undefined;
+    }
+  }
+
+  async getLoginActivitiesByUserId(userId: number, limit?: number): Promise<LoginActivity[]> {
+    try {
+      let query = db.select().from(loginActivity)
+        .where(eq(loginActivity.userId, userId))
+        .orderBy(desc(loginActivity.loginTime));
+      
+      if (limit) {
+        query = query.limit(limit);
       }
       
-      // Query to get sum of usage count grouped by user and feature
-      const result = await db.select({
-        userId: featureUsageLogs.userId,
-        featureKey: featureUsageLogs.featureKey,
-        totalUsage: sql<number>`sum(${featureUsageLogs.usageCount})`,
-      })
-      .from(featureUsageLogs)
-      .where(gte(featureUsageLogs.usedAt as any, startDate))
-      .groupBy(featureUsageLogs.userId, featureUsageLogs.featureKey);
-      
-      return result;
-    } catch (error) {
-      console.error("Error in getFeatureUsageSummaryByTimeframe:", error);
-      return [];
-    }
-  };
-  
-  /**
-   * Login Activity Methods
-   */
-  
-  storage.createLoginActivity = async function(activity: InsertLoginActivity): Promise<LoginActivity> {
-    try {
-      const [result] = await db.insert(loginActivity).values(activity).returning();
-      return result;
-    } catch (error) {
-      console.error("Error in createLoginActivity:", error);
-      throw error;
-    }
-  };
-  
-  storage.getLoginActivitiesByUserId = async function(userId: number, limit: number = 10): Promise<LoginActivity[]> {
-    try {
-      const result = await db.query.loginActivity.findMany({
-        where: eq(loginActivity.userId, userId),
-        orderBy: [desc(loginActivity.loginTime as any)],
-        limit
-      });
-      return result;
+      return await query;
     } catch (error) {
       console.error("Error in getLoginActivitiesByUserId:", error);
       return [];
     }
-  };
-  
-  storage.getLoginActivitySince = async function(date: Date, limit: number = 100): Promise<LoginActivity[]> {
+  }
+
+  async createLoginActivity(activity: InsertLoginActivity): Promise<LoginActivity> {
     try {
-      const result = await db.query.loginActivity.findMany({
-        where: gte(loginActivity.loginTime as any, date),
-        orderBy: [desc(loginActivity.loginTime as any)],
-        limit
-      });
-      return result;
-    } catch (error) {
-      console.error("Error in getLoginActivitySince:", error);
-      return [];
-    }
-  };
-  
-  /**
-   * System Activity Methods
-   */
-  
-  storage.createSystemActivity = async function(activity: any): Promise<any> {
-    try {
-      const [result] = await db.insert(systemActivity).values(activity).returning();
-      return result;
-    } catch (error) {
-      console.error("Error in createSystemActivity:", error);
-      throw error;
-    }
-  };
-  
-  storage.getRecentSystemActivity = async function(limit: number = 10): Promise<any[]> {
-    try {
-      const result = await db.query.systemActivity.findMany({
-        orderBy: [desc(systemActivity.timestamp as any)],
-        limit
-      });
-      return result;
-    } catch (error) {
-      console.error("Error in getRecentSystemActivity:", error);
-      return [];
-    }
-  };
-  
-  storage.getSystemActivitySince = async function(date: Date, limit: number = 100): Promise<any[]> {
-    try {
-      const result = await db.query.systemActivity.findMany({
-        where: gte(systemActivity.timestamp as any, date),
-        orderBy: [desc(systemActivity.timestamp as any)],
-        limit
-      });
-      return result;
-    } catch (error) {
-      console.error("Error in getSystemActivitySince:", error);
-      return [];
-    }
-  };
-  
-  /**
-   * Report Cache Methods
-   */
-  
-  storage.createReportCache = async function(data: InsertAdminReportsCache): Promise<AdminReportsCache> {
-    try {
-      // Delete any existing cache for this report type
-      await db.delete(adminReportsCache)
-        .where(eq(adminReportsCache.reportType, data.reportType));
+      const result = await db.insert(loginActivity).values({
+        ...activity,
+        loginTime: new Date()
+      }).returning();
       
-      // Create new cache entry
-      const [result] = await db.insert(adminReportsCache).values(data).returning();
-      return result;
+      return result[0];
     } catch (error) {
-      console.error("Error in createReportCache:", error);
-      throw error;
+      console.error("Error in createLoginActivity:", error);
+      throw new Error("Failed to create login activity");
     }
-  };
-  
-  storage.getReportCacheByType = async function(reportType: string): Promise<AdminReportsCache | undefined> {
+  }
+
+  // Admin Reports Cache
+  async getReportCache(id: number): Promise<AdminReportsCache | undefined> {
     try {
-      const result = await db.query.adminReportsCache.findFirst({
-        where: eq(adminReportsCache.reportType, reportType)
-      });
-      return result;
+      const result = await db.select().from(adminReportsCache).where(eq(adminReportsCache.id, id));
+      return result[0];
+    } catch (error) {
+      console.error("Error in getReportCache:", error);
+      return undefined;
+    }
+  }
+
+  async getReportCacheByType(reportType: string): Promise<AdminReportsCache | undefined> {
+    try {
+      // Get the most recent valid cache for the report type
+      const now = new Date();
+      const result = await db.select().from(adminReportsCache)
+        .where(and(
+          eq(adminReportsCache.reportType, reportType),
+          gte(adminReportsCache.expiresAt, now)
+        ))
+        .orderBy(desc(adminReportsCache.generatedAt))
+        .limit(1);
+      
+      return result[0];
     } catch (error) {
       console.error("Error in getReportCacheByType:", error);
       return undefined;
     }
-  };
-  
-  /**
-   * Module Status Methods
-   */
-  
-  storage.getAllModuleStatuses = async function(): Promise<any[]> {
+  }
+
+  async createReportCache(report: InsertAdminReportsCache): Promise<AdminReportsCache> {
     try {
-      const result = await db.query.moduleStatus.findMany({
-        orderBy: [asc(moduleStatus.name)]
-      });
-      return result;
+      const result = await db.insert(adminReportsCache).values({
+        ...report,
+        generatedAt: new Date()
+      }).returning();
+      
+      return result[0];
     } catch (error) {
-      console.error("Error in getAllModuleStatuses:", error);
-      return [];
+      console.error("Error in createReportCache:", error);
+      throw new Error("Failed to create report cache");
     }
-  };
-  
-  return storage;
+  }
+
+  async deleteReportCache(id: number): Promise<boolean> {
+    try {
+      await db.delete(adminReportsCache).where(eq(adminReportsCache.id, id));
+      return true;
+    } catch (error) {
+      console.error("Error in deleteReportCache:", error);
+      return false;
+    }
+  }
 }
 
-// Extend the storage with user management methods
-extendDatabaseStorageWithUserManagement(storage as DatabaseStorage);
-
-// Initialize the user management module
-console.log('User management methods initialized');
+// Create a singleton instance
+export const userManagement = new UserManagement();
