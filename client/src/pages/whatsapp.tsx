@@ -122,7 +122,10 @@ const WhatsApp = () => {
     refetch: refetchLogs
   } = useQuery({
     queryKey: ["/api/whatsapp/logs", activePagination.offset, selectedNumber],
-    queryFn: () => getWhatsappLogs(selectedNumber, activePagination.limit, activePagination.offset)
+    queryFn: () => getWhatsappLogs(selectedNumber, activePagination.limit, activePagination.offset),
+    staleTime: 0, // Ensure fresh data is fetched each time
+    refetchOnWindowFocus: true, // Refetch when the window is focused
+    refetchOnMount: true // Always refetch when component mounts
   });
   
   // Derive whatsappLogs from the response and update pagination state
