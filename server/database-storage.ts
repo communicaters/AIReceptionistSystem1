@@ -526,6 +526,29 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(emailLogs.timestamp))
       .limit(limit);
   }
+  
+  async getEmailLogByMessageId(messageId: string): Promise<EmailLog | undefined> {
+    if (!messageId) return undefined;
+    
+    const result = await db.select().from(emailLogs)
+      .where(eq(emailLogs.messageId, messageId))
+      .limit(1);
+    
+    return result[0];
+  }
+  
+  async getEmailLogsByFromAndSubject(userId: number, from: string, subject: string): Promise<EmailLog[]> {
+    return await db.select().from(emailLogs)
+      .where(
+        and(
+          eq(emailLogs.userId, userId),
+          eq(emailLogs.from, from),
+          eq(emailLogs.subject, subject)
+        )
+      )
+      .orderBy(desc(emailLogs.timestamp))
+      .limit(10);
+  }
 
   async createEmailLog(log: InsertEmailLog): Promise<EmailLog> {
     const result = await db.insert(emailLogs).values(log).returning();

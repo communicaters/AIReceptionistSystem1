@@ -98,7 +98,7 @@ export async function initImapClient(userId: number): Promise<IMAP | null> {
 /**
  * Fetch emails from the server
  */
-export async function fetchEmails(userId: number, folder: string = 'INBOX', limit: number = 20): Promise<EmailMessage[]> {
+export async function fetchEmails(userId: number, folder: string = 'INBOX', limit: number = 20, fetchUnreadOnly: boolean = false): Promise<EmailMessage[]> {
   try {
     const imapClient = await initImapClient(userId);
     
@@ -106,38 +106,68 @@ export async function fetchEmails(userId: number, folder: string = 'INBOX', limi
       throw new Error('IMAP client not initialized');
     }
     
+    console.log(`Fetching emails for user ${userId} from folder ${folder}, limit ${limit}, unread only: ${fetchUnreadOnly}`);
+    
     return new Promise((resolve, reject) => {
       const emails: EmailMessage[] = [];
+      let fetchCompleted: boolean = false;
+      let emailsProcessed: number = 0;
       
       imapClient.once('ready', () => {
+        console.log(`IMAP connection ready for user ${userId}`);
+        
         imapClient.openBox(folder, false, (err, box) => {
           if (err) {
+            console.error(`Error opening mailbox ${folder}:`, err);
             imapClient.end();
             return reject(err);
           }
           
-          // Search for all emails, limit results
-          // Use 'UNSEEN' instead of 'ALL' to only get unread messages
-          imapClient.search(['ALL'], (err, results) => {
+          console.log(`Mailbox opened: ${folder}, total messages: ${box?.messages?.total || 'unknown'}`);
+          
+          // Search criteria - use UNSEEN for unread only, ALL for all emails
+          const searchCriteria = fetchUnreadOnly ? ['UNSEEN'] : ['ALL'];
+          
+          console.log(`Searching emails with criteria: ${searchCriteria.join(', ')}`);
+          
+          imapClient.search(searchCriteria, (err, results) => {
             if (err) {
+              console.error(`Error searching emails:`, err);
               imapClient.end();
               return reject(err);
             }
+            
+            console.log(`Found ${results.length} emails matching criteria`);
             
             if (!results.length) {
               imapClient.end();
               return resolve([]);
             }
             
-            // Limit the number of emails to fetch
-            const emailsToFetch = results.slice(-limit);
+            // Sort results by sequence number (newest first) and limit
+            results.sort((a, b) => b - a);
+            const emailsToFetch = results.slice(0, limit);
+            
+            console.log(`Fetching ${emailsToFetch.length} emails (out of ${results.length} found)`);
             
             const fetch = imapClient.fetch(emailsToFetch, {
               bodies: ['HEADER.FIELDS (FROM TO SUBJECT DATE)', 'TEXT', ''],
-              struct: true
+              struct: true,
+              markSeen: false // Don't mark as read when fetching
             });
             
-            fetch.on('message', (msg) => {
+            // Time out after 30 seconds to prevent hanging
+            const timeoutId = setTimeout(() => {
+              if (!fetchCompleted) {
+                console.error(`IMAP fetch timed out after 30 seconds`);
+                imapClient.end();
+                resolve(emails); // Return what we have so far
+              }
+            }, 30000);
+            
+            fetch.on('message', (msg, seqno) => {
+              console.log(`Processing message #${seqno}`);
+              
               const email: Partial<EmailMessage> = {
                 messageId: '',
                 from: '',
@@ -206,33 +236,74 @@ export async function fetchEmails(userId: number, folder: string = 'INBOX', limi
                       email.html = parsed.html || undefined;
                       email.timestamp = parsed.date || new Date();
                       email.messageId = parsed.messageId || '';
+                      
+                      // Only push emails that have proper data
+                      if (email.from && email.subject) {
+                        emails.push(email as EmailMessage);
+                        console.log(`Email parsed - From: ${email.from}, Subject: ${email.subject}`);
+                      }
+                      
+                      emailsProcessed++;
                     }).catch(err => {
                       console.error('Error parsing email:', err);
+                      emailsProcessed++;
                     });
                   });
                 }
               });
               
+              msg.once('attributes', (attrs) => {
+                // Store flags to check if message is read/unread
+                const flags = attrs.flags || [];
+                console.log(`Message #${seqno} flags: ${flags.join(', ')}`);
+              });
+              
               msg.once('end', () => {
-                if (email.from && email.subject) {
-                  emails.push(email as EmailMessage);
-                }
+                console.log(`Finished processing message #${seqno}`);
               });
             });
             
             fetch.once('error', (err) => {
+              console.error(`Error during fetch:`, err);
+              clearTimeout(timeoutId);
+              fetchCompleted = true;
+              imapClient.end();
               reject(err);
             });
             
             fetch.once('end', () => {
-              imapClient.end();
-              resolve(emails);
+              console.log(`All messages processed, found ${emails.length} valid emails`);
+              clearTimeout(timeoutId);
+              fetchCompleted = true;
+              
+              // If we want to mark messages as seen after reading them
+              if (fetchUnreadOnly) {
+                console.log(`Marking ${emailsToFetch.length} messages as seen`);
+                try {
+                  // This is optional - only if you want to mark messages as read
+                  // imapClient.addFlags(emailsToFetch, ['\\Seen'], (err) => {
+                  //   if (err) console.error(`Error marking messages as seen:`, err);
+                  //   imapClient.end();
+                  //   resolve(emails);
+                  // });
+                  imapClient.end();
+                  resolve(emails);
+                } catch (e) {
+                  console.error(`Error in addFlags:`, e);
+                  imapClient.end();
+                  resolve(emails);
+                }
+              } else {
+                imapClient.end();
+                resolve(emails);
+              }
             });
           });
         });
       });
       
       imapClient.once('error', (err: Error) => {
+        console.error(`IMAP client error:`, err);
         reject(err);
       });
       
@@ -245,7 +316,7 @@ export async function fetchEmails(userId: number, folder: string = 'INBOX', limi
       event: "IMAP Fetch Emails",
       status: "Failed",
       timestamp: new Date(),
-      details: { userId, error: (error as Error).message }
+      details: { userId, folder, fetchUnreadOnly, error: (error as Error).message }
     });
     return [];
   }
@@ -257,39 +328,97 @@ export async function fetchEmails(userId: number, folder: string = 'INBOX', limi
 export async function storeEmails(userId: number, emails: EmailMessage[]): Promise<number> {
   try {
     let storedCount = 0;
+    let duplicateCount = 0;
     
-    for (const email of emails) {
-      // Check if this email already exists in the database
-      // This assumes you have a method to look up emails by messageId
-      // If you don't have this, you can use a combination of from, subject, and timestamp
+    // Process emails in reverse order (oldest first) to maintain chronological order
+    const sortedEmails = [...emails].sort((a, b) => 
+      a.timestamp.getTime() - b.timestamp.getTime()
+    );
+    
+    console.log(`Storing ${sortedEmails.length} emails for user ${userId} in chronological order`);
+    
+    for (const email of sortedEmails) {
+      // Skip emails without necessary data
+      if (!email.from || !email.subject) {
+        console.log(`Skipping email with missing data - From: ${email.from}, Subject: ${email.subject}`);
+        continue;
+      }
       
-      // Create email log entry
-      const emailLog: InsertEmailLog = {
-        userId,
-        from: email.from,
-        to: email.to,
-        subject: email.subject,
-        body: email.body,
-        timestamp: email.timestamp,
-        status: "received",
-        service: "imap",
-        messageId: email.messageId
-      };
-      
-      await storage.createEmailLog(emailLog);
-      storedCount++;
+      try {
+        // Check if this email already exists in the database by messageId
+        let isDuplicate = false;
+        
+        if (email.messageId) {
+          const existingEmail = await storage.getEmailLogByMessageId(email.messageId);
+          if (existingEmail) {
+            console.log(`Skipping duplicate email with messageId: ${email.messageId}`);
+            duplicateCount++;
+            isDuplicate = true;
+          }
+        }
+        
+        // If no messageId or not found by messageId, try checking by other fields
+        if (!isDuplicate && !email.messageId) {
+          // Look for similar emails with same from, subject, and close timestamp
+          const similarEmails = await storage.getEmailLogsByFromAndSubject(
+            userId, 
+            email.from, 
+            email.subject
+          );
+          
+          // Check if any similar email is a potential duplicate (within 5 minutes)
+          const fiveMinutesMs = 5 * 60 * 1000;
+          isDuplicate = similarEmails.some(existingEmail => {
+            const timeDiff = Math.abs(existingEmail.timestamp.getTime() - email.timestamp.getTime());
+            return timeDiff < fiveMinutesMs;
+          });
+          
+          if (isDuplicate) {
+            console.log(`Skipping probable duplicate email with from=${email.from}, subject=${email.subject}`);
+            duplicateCount++;
+          }
+        }
+        
+        if (!isDuplicate) {
+          // Create email log entry
+          const emailLog: InsertEmailLog = {
+            userId,
+            from: email.from,
+            to: email.to,
+            subject: email.subject,
+            body: email.body,
+            timestamp: email.timestamp,
+            status: "received",
+            service: "imap",
+            messageId: email.messageId
+          };
+          
+          await storage.createEmailLog(emailLog);
+          storedCount++;
+          console.log(`Stored email: ${email.subject} from ${email.from}`);
+        }
+      } catch (emailError) {
+        console.error(`Error processing individual email:`, emailError);
+        // Continue with next email even if one fails
+      }
     }
     
-    if (storedCount > 0) {
+    if (storedCount > 0 || duplicateCount > 0) {
       await storage.createSystemActivity({
         module: "Email",
         event: "IMAP Emails Stored",
         status: "Completed",
         timestamp: new Date(),
-        details: { userId, count: storedCount }
+        details: { 
+          userId, 
+          stored: storedCount, 
+          duplicates: duplicateCount,
+          total: emails.length
+        }
       });
     }
     
+    console.log(`Email storage complete. Stored: ${storedCount}, Duplicates: ${duplicateCount}, Total processed: ${emails.length}`);
     return storedCount;
   } catch (error) {
     console.error(`Error storing emails for user ${userId}:`, error);
@@ -307,13 +436,61 @@ export async function storeEmails(userId: number, emails: EmailMessage[]): Promi
 /**
  * Fetch and store emails in one operation
  */
-export async function syncEmails(userId: number): Promise<number> {
+export async function syncEmails(userId: number, options: { 
+  unreadOnly?: boolean, 
+  folder?: string, 
+  limit?: number 
+} = {}): Promise<number> {
   try {
-    // Fetch emails
-    const emails = await fetchEmails(userId);
+    const { unreadOnly = false, folder = 'INBOX', limit = 20 } = options;
+    
+    console.log(`Starting email sync for user ${userId}, unreadOnly=${unreadOnly}, folder=${folder}, limit=${limit}`);
+    
+    // Log the sync attempt
+    await storage.createSystemActivity({
+      module: "Email",
+      event: "IMAP Sync Emails Started",
+      status: "In Progress",
+      timestamp: new Date(),
+      details: { userId, unreadOnly, folder, limit }
+    });
+    
+    // Fetch emails (either all or unread only)
+    const emails = await fetchEmails(userId, folder, limit, unreadOnly);
+    
+    if (emails.length === 0) {
+      console.log(`No emails found for user ${userId} with criteria: unreadOnly=${unreadOnly}, folder=${folder}`);
+      
+      await storage.createSystemActivity({
+        module: "Email",
+        event: "IMAP Sync Emails",
+        status: "Completed",
+        timestamp: new Date(),
+        details: { userId, unreadOnly, folder, count: 0, message: "No emails found matching criteria" }
+      });
+      
+      return 0;
+    }
+    
+    console.log(`Found ${emails.length} emails for user ${userId}, storing in database`);
     
     // Store fetched emails
     const storedCount = await storeEmails(userId, emails);
+    
+    // Log successful sync
+    await storage.createSystemActivity({
+      module: "Email",
+      event: "IMAP Sync Emails",
+      status: "Completed",
+      timestamp: new Date(),
+      details: { 
+        userId, 
+        unreadOnly, 
+        folder, 
+        found: emails.length, 
+        stored: storedCount
+      }
+    });
     
     return storedCount;
   } catch (error) {
