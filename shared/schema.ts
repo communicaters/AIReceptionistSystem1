@@ -537,6 +537,7 @@ export const meetingLogs = pgTable("meeting_logs", {
   endTime: timestamp("end_time").notNull(),
   googleEventId: text("google_event_id"),
   status: text("status").notNull(),
+  meetingLink: text("meeting_link"),
 });
 
 export const insertMeetingLogSchema = createInsertSchema(meetingLogs).omit({
