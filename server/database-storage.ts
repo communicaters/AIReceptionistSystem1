@@ -522,7 +522,7 @@ export class DatabaseStorage implements IStorage {
       .offset(offset);
   }
 
-  async getWhatsappLogsByPhoneNumber(userId: number, phoneNumber: string, limit: number = 20, offset: number = 0): Promise<WhatsappLog[]> {
+  async getWhatsappLogsByPhoneNumber(userId: number, phoneNumber: string, limit: number = 100, offset: number = 0): Promise<WhatsappLog[]> {
     return await db.select().from(whatsappLogs)
       .where(and(
         eq(whatsappLogs.userId, userId),

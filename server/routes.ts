@@ -2726,13 +2726,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     const previousMessages = await storage.getWhatsappLogsByPhoneNumber(userId, phoneNumber);
                     
                     // Format previous messages for context 
-                    // (limit to last 10 to avoid token limits)
+                    // Get the most recent messages, but preserve conversation flow (30 is enough for good context)
                     const messageHistory = previousMessages
-                      .slice(-10)
+                      .slice(-30) // Get the last 30 messages to maintain deep context
                       .map(msg => ({
                         role: msg.direction === 'inbound' ? 'user' : 'assistant',
                         content: msg.message
                       }));
+                      
+                    console.log(`Using ${messageHistory.length} messages for context history`);
                     
                     // Create a system prompt based on training data
                     const trainingData = await storage.getTrainingDataByCategory(userId, 'whatsapp');
@@ -2835,10 +2837,11 @@ If this is NOT a meeting scheduling request, respond normally and set is_schedul
                           
                           // Attempt to schedule the meeting
                           const result = await scheduleMeeting(userId, {
-                            attendeeEmail: schedulingData.email,
-                            subject: schedulingData.subject || 'Meeting',
+                            attendeeEmail: schedulingData.email || phoneNumber + '@whatsapp.virtual.user',
+                            subject: schedulingData.subject || 'Meeting from WhatsApp',
                             dateTimeString: schedulingData.date_time,
-                            duration: schedulingData.duration_minutes || 30
+                            duration: schedulingData.duration_minutes || 30,
+                            description: `Meeting scheduled via WhatsApp chat with ${phoneNumber}. Original message: "${messageText}"`
                           });
                           
                           if (result.success) {
