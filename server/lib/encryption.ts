@@ -1,27 +1,14 @@
-import crypto from 'crypto';
+import bcrypt from 'bcrypt';
 
 /**
- * Encrypts a password using bcrypt-like algorithm (simple implementation)
- * In production, use a proper library like bcrypt
+ * Encrypts a password using bcrypt
  * 
  * @param password - Plain text password to encrypt
  * @returns Promise resolving to hashed password
  */
 export async function encrypt(password: string): Promise<string> {
-  // Generate a random salt
-  const salt = crypto.randomBytes(16).toString('hex');
-  
-  // Use PBKDF2 for key derivation (simulating bcrypt's work factor)
-  const hash = crypto.pbkdf2Sync(
-    password,
-    salt,
-    10000, // iterations (work factor)
-    64,    // key length
-    'sha512'
-  ).toString('hex');
-  
-  // Format: algorithm$iterations$salt$hash
-  return `pbkdf2$10000$${salt}$${hash}`;
+  const salt = await bcrypt.genSalt(10);
+  return bcrypt.hash(password, salt);
 }
 
 /**
@@ -33,27 +20,39 @@ export async function encrypt(password: string): Promise<string> {
  */
 export async function compare(password: string, hashedPassword: string): Promise<boolean> {
   try {
-    // Parse the stored hash
-    const [algorithm, iterations, salt, storedHash] = hashedPassword.split('$');
-    
-    if (algorithm !== 'pbkdf2' || !iterations || !salt || !storedHash) {
-      return false;
+    // Check if it's a bcrypt hash
+    if (hashedPassword.startsWith('$2b$') || hashedPassword.startsWith('$2a$')) {
+      return bcrypt.compare(password, hashedPassword);
     }
     
-    // Hash the provided password with the same salt and iterations
-    const hash = crypto.pbkdf2Sync(
-      password,
-      salt,
-      parseInt(iterations, 10),
-      64,
-      'sha512'
-    ).toString('hex');
+    // Legacy hash format for older passwords (the pbkdf2 format)
+    // This allows backward compatibility with existing passwords
+    if (hashedPassword.startsWith('pbkdf2$')) {
+      const [algorithm, iterations, salt, storedHash] = hashedPassword.split('$');
+      
+      if (algorithm !== 'pbkdf2' || !iterations || !salt || !storedHash) {
+        return false;
+      }
+      
+      const crypto = require('crypto');
+      // Hash the provided password with the same salt and iterations
+      const hash = crypto.pbkdf2Sync(
+        password,
+        salt,
+        parseInt(iterations, 10),
+        64,
+        'sha512'
+      ).toString('hex');
+      
+      // Compare the hashes
+      return crypto.timingSafeEqual(
+        Buffer.from(hash, 'hex'),
+        Buffer.from(storedHash, 'hex')
+      );
+    }
     
-    // Compare the hashes
-    return crypto.timingSafeEqual(
-      Buffer.from(hash, 'hex'),
-      Buffer.from(storedHash, 'hex')
-    );
+    // Unknown hash format
+    return false;
   } catch (error) {
     console.error('Password comparison error:', error);
     return false;

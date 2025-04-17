@@ -76,10 +76,15 @@ export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage
   };
   
   storage.getAllUsers = async function(): Promise<User[]> {
-    const result = await this.db.query.users.findMany({
-      orderBy: [asc(this.schema.users.id)]
-    });
-    return result;
+    try {
+      const result = await db.query.users.findMany({
+        orderBy: [asc(users.id)]
+      });
+      return result;
+    } catch (error) {
+      console.error("Error in getAllUsers:", error);
+      return [];
+    }
   };
   
   storage.createUser = async function(user: InsertUser): Promise<User> {
