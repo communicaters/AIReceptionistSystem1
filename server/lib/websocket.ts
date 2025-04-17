@@ -466,7 +466,7 @@ async function handleMeetingScheduling(message: string, userId: number, sessionI
       - duration (in minutes, default to 30 if not specified)
       - attendees (array of email addresses, or empty array if none specified)
       - description (string, additional notes or empty string if none)
-      - timezone (string, extract any mentioned timezone like EST, PST, UTC, etc. or "unknown" if not specified)
+      - timezone (string, extract any mentioned timezone using IANA timezone format like "America/New_York", "Europe/London", "Asia/Tokyo", etc. When only abbreviations like EST, PST, UTC are mentioned, convert them to proper IANA format. Use "unknown" if not specified.)
       
       Message: ${message}
     `;
@@ -629,31 +629,37 @@ async function handleMeetingScheduling(message: string, userId: number, sessionI
       }
     });
     
-    // Format meeting details for display
+    // Format meeting details for display with timezone awareness
     const timeString = new Intl.DateTimeFormat('en', { 
       hour: 'numeric', 
       minute: 'numeric',
-      hour12: true
+      hour12: true,
+      timeZone: timezone
     }).format(startTime);
     
     const dateString = new Intl.DateTimeFormat('en', { 
       weekday: 'long',
       month: 'long', 
       day: 'numeric',
-      year: 'numeric'
+      year: 'numeric',
+      timeZone: timezone
     }).format(startTime);
+    
+    console.log(`Formatted meeting time for ${timezone}: ${dateString} at ${timeString}`);
     
     // Success response with details about the meeting
     return {
       success: true,
-      response: `Great! I've scheduled a meeting for "${meeting.subject}" on ${dateString} at ${timeString}. ${googleEventCreated ? 'It has been added to your Google Calendar.' : ''}`,
+      response: `Great! I've scheduled a meeting for "${meeting.subject}" on ${dateString} at ${timeString} (${timezone.replace('_', ' ')}). ${googleEventCreated ? 'It has been added to your Google Calendar.' : ''}`,
       meetingDetails: {
         id: savedMeeting.id,
         subject: meeting.subject,
         date: dateString,
         time: timeString,
         duration: duration,
-        attendees: meeting.attendees
+        attendees: meeting.attendees,
+        timezone: timezone,
+        timezoneDisplay: timezone.replace('_', ' ')
       }
     };
   } catch (error) {
