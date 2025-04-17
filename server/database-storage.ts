@@ -48,22 +48,123 @@ export class DatabaseStorage implements IStorage {
 
   // Users
   async getUser(id: number): Promise<User | undefined> {
-    const result = await db.select().from(users).where(eq(users.id, id));
-    return result[0];
+    try {
+      // Only select columns that definitely exist in the current schema
+      const result = await db
+        .select({
+          id: users.id,
+          username: users.username,
+          password: users.password,
+          fullName: users.fullName,
+          role: users.role,
+          email: users.email,
+        })
+        .from(users)
+        .where(eq(users.id, id));
+      
+      if (result.length === 0) {
+        return undefined;
+      }
+      
+      // Add default values for properties that might not exist in the database yet
+      return {
+        ...result[0],
+        status: 'active',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        emailVerified: false,
+      } as User;
+    } catch (error) {
+      console.error("Error in getUser:", error);
+      return undefined;
+    }
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const result = await db.select().from(users).where(eq(users.username, username));
-    return result[0];
+    try {
+      // Only select columns that definitely exist in the current schema
+      const result = await db
+        .select({
+          id: users.id,
+          username: users.username,
+          password: users.password,
+          fullName: users.fullName,
+          role: users.role,
+          email: users.email,
+        })
+        .from(users)
+        .where(eq(users.username, username));
+      
+      if (result.length === 0) {
+        return undefined;
+      }
+      
+      // Add default values for properties that might not exist in the database yet
+      return {
+        ...result[0],
+        status: 'active',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        emailVerified: false,
+      } as User;
+    } catch (error) {
+      console.error("Error in getUserByUsername:", error);
+      return undefined;
+    }
   }
 
   async createUser(user: InsertUser): Promise<User> {
-    const result = await db.insert(users).values(user).returning();
-    return result[0];
+    // Only include fields that definitely exist in the database
+    const userToInsert = {
+      username: user.username,
+      password: user.password,
+      fullName: user.fullName,
+      role: user.role,
+      email: user.email,
+    };
+    
+    const result = await db.insert(users).values(userToInsert).returning();
+    
+    if (result.length === 0) {
+      throw new Error("Failed to create user");
+    }
+    
+    // Add default values for properties that might not exist in the database yet
+    return {
+      ...result[0],
+      status: 'active',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      emailVerified: false,
+    } as User;
   }
 
   async getAllUsers(): Promise<User[]> {
-    return await db.select().from(users);
+    try {
+      // Only select columns that definitely exist in the current schema
+      const result = await db
+        .select({
+          id: users.id,
+          username: users.username,
+          password: users.password,
+          fullName: users.fullName,
+          role: users.role,
+          email: users.email,
+        })
+        .from(users);
+      
+      // Add default values for properties that might not exist in the database yet
+      return result.map(user => ({
+        ...user,
+        status: 'active',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        emailVerified: false,
+      } as User));
+    } catch (error) {
+      console.error("Error in getAllUsers:", error);
+      return [];
+    }
   }
 
   // SIP Config
