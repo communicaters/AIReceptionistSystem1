@@ -515,7 +515,7 @@ export async function scheduleMeeting(
       console.log("Check that Google Calendar API has conferencedata.create permission");
     }
     
-    // Log the meeting in our system with meeting link
+    // Log the meeting in our system with meeting link and timezone information
     const meetingLog = await storage.createMeetingLog({
       userId,
       subject,
@@ -525,7 +525,8 @@ export async function scheduleMeeting(
       attendees: [attendeeEmail],
       googleEventId: event.id,
       status: 'scheduled',
-      meetingLink: meetingLink || null
+      meetingLink: meetingLink || null,
+      timezone: timezone || 'UTC'
     });
     
     console.log(`Successfully scheduled meeting: ${event.id}${meetingLink ? ' with meeting link' : ''}`);

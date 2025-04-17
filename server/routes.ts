@@ -3729,14 +3729,17 @@ AI Receptionist
             description: meeting.description || '',
             start: { 
               dateTime: new Date(meeting.startTime).toISOString(),
-              timeZone: meeting.timezone || 'UTC'
+              timeZone: meeting.timezone || 'America/New_York' // Default to Eastern Time if not specified
             },
             end: { 
               dateTime: new Date(meeting.endTime).toISOString(),
-              timeZone: meeting.timezone || 'UTC'
+              timeZone: meeting.timezone || 'America/New_York' // Default to Eastern Time if not specified
             },
             attendees: attendeesArray.map(email => ({ email }))
           };
+          
+          console.log(`Creating calendar event with timezone: ${meeting.timezone || 'America/New_York'}`);
+          
           
           // Create event in Google Calendar
           console.log("Creating Google Calendar event:", event);
