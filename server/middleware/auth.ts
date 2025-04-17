@@ -17,6 +17,15 @@ declare global {
  */
 export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    // Skip authentication for webhook endpoints
+    if (
+      req.path.startsWith('/api/whatsapp/webhook') ||
+      req.path === '/api/whatsapp/unified-webhook' ||
+      req.path === '/api/zender/incoming'
+    ) {
+      return next();
+    }
+    
     // Check session first
     if (req.session && req.session.userId) {
       const user = await storage.getUser(req.session.userId);

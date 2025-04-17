@@ -299,7 +299,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // such as the chat widget, front-end assets, etc.
   
   // Apply authentication middleware to all other API routes
-  app.use("/api", authenticate);
+  // Authentication middleware for API routes, excluding webhooks
+  app.use("/api", (req, res, next) => {
+    // Skip authentication for webhook endpoints
+    if (
+      req.path.startsWith('/whatsapp/webhook') ||
+      req.path === '/whatsapp/unified-webhook' ||
+      req.path === '/zender/incoming'
+    ) {
+      return next();
+    }
+    
+    // Apply authentication for all other API routes
+    return authenticate(req, res, next);
+  });
 
   // Register AI routes
   app.use("/api/ai", aiRouter);
