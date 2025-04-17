@@ -1,13 +1,9 @@
 import { eq, and, gte, lt, desc, sql, asc, count, ne, isNull, not, inArray, or } from 'drizzle-orm';
 import { DatabaseStorage } from './database-storage';
 import { 
-  User, InsertUser, Package, InsertPackage, 
-  PackageFeature, InsertPackageFeature, 
-  UserPackage, InsertUserPackage, 
-  FeatureUsageLog, InsertFeatureUsageLog,
-  LoginActivity, InsertLoginActivity,
-  ReportCache, InsertReportCache,
-  users, packages, packageFeatures, userPackages, featureUsageLogs, loginActivity, reportCache, systemActivity, moduleStatus
+  User, InsertUser, 
+  users, packages, packageFeatures, userPackages, featureUsageLogs, loginActivity, reportCache, systemActivity, moduleStatus,
+  insertPackageSchema, insertPackageFeatureSchema, insertUserPackageSchema, insertFeatureUsageLogSchema, insertLoginActivitySchema, insertReportCacheSchema
 } from '@shared/schema';
 import { compare } from './lib/encryption';
 import { db } from './db';
@@ -112,12 +108,17 @@ export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage
   };
   
   storage.updateUserStatus = async function(id: number, status: string): Promise<User> {
-    const [result] = await this.db
-      .update(this.schema.users)
-      .set({ status, updatedAt: new Date() })
-      .where(eq(this.schema.users.id, id))
-      .returning();
-    return result;
+    try {
+      const [result] = await db
+        .update(users)
+        .set({ status, updatedAt: new Date() })
+        .where(eq(users.id, id))
+        .returning();
+      return result;
+    } catch (error) {
+      console.error("Error in updateUserStatus:", error);
+      throw error;
+    }
   };
   
   storage.updateUserLastLogin = async function(id: number): Promise<User> {
@@ -135,65 +136,90 @@ export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage
   };
   
   storage.verifyUserEmail = async function(id: number): Promise<User> {
-    const [result] = await this.db
-      .update(this.schema.users)
-      .set({ 
-        emailVerified: true, 
-        status: 'active', 
-        verificationToken: null, 
-        updatedAt: new Date() 
-      })
-      .where(eq(this.schema.users.id, id))
-      .returning();
-    return result;
+    try {
+      const [result] = await db
+        .update(users)
+        .set({ 
+          emailVerified: true, 
+          status: 'active', 
+          verificationToken: null, 
+          updatedAt: new Date() 
+        })
+        .where(eq(users.id, id))
+        .returning();
+      return result;
+    } catch (error) {
+      console.error("Error in verifyUserEmail:", error);
+      throw error;
+    }
   };
   
   storage.verifyPassword = async function(id: number, password: string): Promise<boolean> {
-    const user = await this.db.query.users.findFirst({
-      where: eq(this.schema.users.id, id)
-    });
-    
-    if (!user) return false;
-    
-    return await compare(password, user.password);
+    try {
+      const user = await db.query.users.findFirst({
+        where: eq(users.id, id)
+      });
+      
+      if (!user) return false;
+      
+      return await compare(password, user.password);
+    } catch (error) {
+      console.error("Error in verifyPassword:", error);
+      return false;
+    }
   };
   
   storage.setUserResetToken = async function(id: number, token: string, expiry: Date): Promise<User> {
-    const [result] = await this.db
-      .update(this.schema.users)
-      .set({ 
-        resetToken: token, 
-        resetTokenExpiry: expiry, 
-        updatedAt: new Date() 
-      })
-      .where(eq(this.schema.users.id, id))
-      .returning();
-    return result;
+    try {
+      const [result] = await db
+        .update(users)
+        .set({ 
+          resetToken: token, 
+          resetTokenExpiry: expiry, 
+          updatedAt: new Date() 
+        })
+        .where(eq(users.id, id))
+        .returning();
+      return result;
+    } catch (error) {
+      console.error("Error in setUserResetToken:", error);
+      throw error;
+    }
   };
   
   storage.clearUserResetToken = async function(id: number): Promise<User> {
-    const [result] = await this.db
-      .update(this.schema.users)
-      .set({ 
-        resetToken: null, 
-        resetTokenExpiry: null, 
-        updatedAt: new Date() 
-      })
-      .where(eq(this.schema.users.id, id))
-      .returning();
-    return result;
+    try {
+      const [result] = await db
+        .update(users)
+        .set({ 
+          resetToken: null, 
+          resetTokenExpiry: null, 
+          updatedAt: new Date() 
+        })
+        .where(eq(users.id, id))
+        .returning();
+      return result;
+    } catch (error) {
+      console.error("Error in clearUserResetToken:", error);
+      throw error;
+    }
   };
   
   storage.updateUserPassword = async function(id: number, password: string): Promise<User> {
-    const [result] = await this.db
-      .update(this.schema.users)
-      .set({ 
-        password, 
-        updatedAt: new Date() 
-      })
-      .where(eq(this.schema.users.id, id))
-      .returning();
-    return result;
+    try {
+      const [result] = await db
+        .update(users)
+        .set({ 
+          password, 
+          updatedAt: new Date() 
+        })
+        .where(eq(users.id, id))
+        .returning();
+      return result;
+    } catch (error) {
+      console.error("Error in updateUserPassword:", error);
+      throw error;
+    }
   };
   
   storage.deleteUser = async function(id: number): Promise<boolean> {
