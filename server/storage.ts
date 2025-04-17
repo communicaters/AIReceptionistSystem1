@@ -19,7 +19,7 @@ import {
   intentMap, IntentMap, InsertIntentMap,
   callLogs, CallLog, InsertCallLog,
   emailLogs, EmailLog, InsertEmailLog,
-  emailReplies, InsertEmailReply,
+  emailReplies, EmailReply, InsertEmailReply,
   chatLogs, ChatLog, InsertChatLog,
   whatsappLogs, WhatsappLog, InsertWhatsappLog,
   meetingLogs, MeetingLog, InsertMeetingLog,
@@ -292,6 +292,7 @@ export class MemStorage implements IStorage {
   private intents: Map<number, IntentMap>;
   private callLogs: Map<number, CallLog>;
   private emailLogs: Map<number, EmailLog>;
+  private emailReplies: Map<number, EmailReply>;
   private chatLogs: Map<number, ChatLog>;
   private whatsappLogs: Map<number, WhatsappLog>;
   private meetingLogs: Map<number, MeetingLog>;
@@ -363,6 +364,7 @@ export class MemStorage implements IStorage {
     this.intents = new Map();
     this.callLogs = new Map();
     this.emailLogs = new Map();
+    this.emailReplies = new Map();
     this.chatLogs = new Map();
     this.whatsappLogs = new Map();
     this.meetingLogs = new Map();
@@ -400,6 +402,7 @@ export class MemStorage implements IStorage {
       intents: 1,
       callLogs: 1,
       emailLogs: 1,
+      emailReplies: 1,
       chatLogs: 1,
       whatsappLogs: 1,
       meetingLogs: 1,
