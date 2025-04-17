@@ -12,7 +12,8 @@ import * as fs from "fs";
 // Helper function to handle authenticated routes
 function withAuth(handler: (req: Request, res: Response, user: User) => Promise<any>) {
   return async (req: Request, res: Response) => {
-    if (!req.isAuthenticated()) {
+    // Check if user is authenticated via our middleware
+    if (!req.user) {
       return res.status(401).json({ success: false, error: "Unauthorized" });
     }
     
