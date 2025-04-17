@@ -690,8 +690,19 @@ export class ZenderService {
         `Product: ${p.name}\nDescription: ${p.description || 'N/A'}\nPrice: $${(p.priceInCents / 100).toFixed(2)}\nSKU: ${p.sku}`
       ).join('\n\n');
       
-      // Create the prompt
-      const systemPrompt = `You are an AI assistant for a business. Respond to customer inquiries in a helpful, professional manner. 
+      // Check if this might be a scheduling request by looking for keywords
+      const scheduleKeywords = ['schedule', 'meeting', 'appointment', 'book', 'calendar', 'meet'];
+      const messageHasScheduleKeywords = scheduleKeywords.some(
+        keyword => incomingMessage.toLowerCase().includes(keyword.toLowerCase())
+      );
+      
+      // Check for email addresses in the message
+      const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+      const emailMatches = incomingMessage.match(emailRegex);
+      const attendeeEmail = emailMatches ? emailMatches[0] : null;
+      
+      // Create the base prompt
+      let systemPrompt = `You are an AI assistant for a business. Respond to customer inquiries in a helpful, professional manner. 
 Keep responses concise but informative (max 3-4 sentences). Include relevant information about products or services when needed.
 
 Available products:
@@ -703,6 +714,35 @@ ${trainingContent}
 If the customer is asking about pricing, availability, or product details, provide the relevant information from the product catalog.
 If the customer requests a meeting or callback, politely acknowledge this and state someone will contact them soon.
 Be friendly but professional at all times.`;
+
+      // Add scheduling intent detection to system prompt if keywords detected
+      if (messageHasScheduleKeywords) {
+        systemPrompt += `\n\nThis appears to be a meeting scheduling request. If the user wants to schedule a meeting:
+1. Extract the requested date and time (interpret timezone abbreviations like PST, EST, etc.)
+2. Identify the attendee email address 
+3. Determine the meeting subject/purpose
+4. Respond in JSON format with these properties: 
+   {
+     "is_scheduling_request": true,
+     "date_time": "YYYY-MM-DD HH:MM:SS", 
+     "email": "user@example.com",
+     "subject": "Meeting subject",
+     "duration_minutes": 30,
+     "timezone": "America/Los_Angeles" 
+   }
+
+For example, if the user says "Schedule a meeting for tomorrow at 2pm PST with john@example.com", respond with:
+{
+  "is_scheduling_request": true,
+  "date_time": "2025-04-18 14:00:00",
+  "email": "john@example.com",
+  "subject": "Follow-up Meeting",
+  "duration_minutes": 30,
+  "timezone": "America/Los_Angeles"
+}
+
+If this is NOT a meeting scheduling request, respond normally and set is_scheduling_request to false.`;
+      }
 
       // Create messages array
       const messages = [
@@ -725,7 +765,8 @@ Be friendly but professional at all times.`;
           model: "gpt-4o", // Use the latest model
           messages: messages,
           max_tokens: 300,
-          temperature: 0.7
+          temperature: 0.7,
+          response_format: messageHasScheduleKeywords ? { type: "json_object" } : undefined
         })
       });
       
@@ -736,9 +777,90 @@ Be friendly but professional at all times.`;
       }
       
       const responseData = await response.json();
-      const aiResponse = responseData.choices[0].message.content.trim();
+      const aiReplyText = responseData.choices[0].message.content.trim();
+      let replyToUser = aiReplyText;
       
-      console.log(`AI generated response: ${aiResponse.substring(0, 100)}...`);
+      // If this is a scheduling request, process it
+      if (messageHasScheduleKeywords) {
+        try {
+          // Try to parse the response as JSON
+          const schedulingData = JSON.parse(aiReplyText);
+          
+          if (schedulingData.is_scheduling_request === true) {
+            console.log('Detected meeting scheduling request:', schedulingData);
+            
+            // Parse the date time string into a proper Date object
+            const parsedDateTime = new Date(schedulingData.date_time);
+            console.log('Parsed date time:', parsedDateTime);
+            
+            // Calculate end time based on duration
+            const duration = schedulingData.duration_minutes || 30;
+            const endDateTime = new Date(parsedDateTime.getTime() + (duration * 60 * 1000));
+            console.log('End date time:', endDateTime);
+            
+            // Use timezone if provided
+            const timezone = schedulingData.timezone || 'UTC';
+            
+            // Format meeting data for the API endpoint (same format as used by the manual scheduling form)
+            const meetingData = {
+              subject: schedulingData.subject || 'Meeting from WhatsApp',
+              description: `Meeting scheduled via WhatsApp chat with ${phoneNumber}. Original message: "${incomingMessage}"`,
+              startTime: parsedDateTime.toISOString(),
+              endTime: endDateTime.toISOString(),
+              attendees: [schedulingData.email || `${phoneNumber}@whatsapp.virtual.user`],
+              timezone: timezone
+            };
+            
+            console.log('Scheduling meeting with formatted data:', meetingData);
+            
+            // Use the same API endpoint that's used by the manual form to ensure consistent handling
+            const apiEndpoint = '/api/calendar/meetings';
+            const meetingResponse = await fetch(`http://localhost:${process.env.PORT || 5000}${apiEndpoint}`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(meetingData)
+            });
+            
+            // Parse response data
+            const responseData = await meetingResponse.json();
+            
+            console.log('Meeting scheduling API response:', responseData);
+            
+            // Create a user-friendly response
+            if (!responseData.error) {
+              // Get meeting link if available
+              const meetingLink = responseData.meetingLink || "No link available";
+              
+              // Create a user-friendly reply
+              replyToUser = `I've scheduled your meeting for ${parsedDateTime.toLocaleString()} with ${schedulingData.email || 'you'}.\n\nSubject: ${schedulingData.subject || 'Meeting from WhatsApp'}\n\nMeeting link: ${meetingLink}`;
+              
+              // Log the meeting scheduling
+              await storage.createSystemActivity({
+                module: 'Calendar',
+                event: 'Meeting Scheduled via WhatsApp',
+                status: 'Completed',
+                timestamp: new Date(),
+                details: {
+                  phone: phoneNumber,
+                  subject: schedulingData.subject,
+                  startTime: parsedDateTime.toISOString(),
+                  meetingLink: meetingLink
+                }
+              });
+            } else {
+              // If there was an error, inform the user
+              replyToUser = `I'm sorry, I couldn't schedule your meeting due to an error: ${responseData.error}. Please try again or contact our support team.`;
+            }
+          }
+        } catch (error) {
+          console.error('Error processing scheduling request:', error);
+          // If we can't parse the JSON, just use the AI response as is
+        }
+      }
+      
+      console.log(`AI generated response: ${replyToUser.substring(0, 100)}...`);
       
       // Log system activity about AI generating a response
       await storage.createSystemActivity({
@@ -748,13 +870,13 @@ Be friendly but professional at all times.`;
         timestamp: new Date(),
         details: {
           to: phoneNumber,
-          messagePreview: aiResponse.substring(0, 100) + (aiResponse.length > 100 ? '...' : '')
+          messagePreview: replyToUser.substring(0, 100) + (replyToUser.length > 100 ? '...' : '')
         }
       });
       
       // Get active WhatsApp template for sent messages
       const sentTemplates = await storage.getWhatsappTemplatesByCategory(this.userId, 'sent');
-      let messageBody = aiResponse;
+      let messageBody = replyToUser;
       
       // Use template if available
       if (sentTemplates.length > 0) {
@@ -767,7 +889,7 @@ Be friendly but professional at all times.`;
         await storage.updateWhatsappTemplate(template.id, {});
         
         // Use the template content with AI message as a variable
-        messageBody = template.content.replace('{{message}}', aiResponse);
+        messageBody = template.content.replace('{{message}}', replyToUser);
       }
       
       // Send the AI response back to the user
