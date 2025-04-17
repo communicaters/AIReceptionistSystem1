@@ -223,14 +223,19 @@ export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage
   };
   
   storage.deleteUser = async function(id: number): Promise<boolean> {
-    // First delete all user-related data
-    await this.db.delete(this.schema.featureUsageLogs).where(eq(this.schema.featureUsageLogs.userId, id));
-    await this.db.delete(this.schema.loginActivity).where(eq(this.schema.loginActivity.userId, id));
-    await this.db.delete(this.schema.userPackages).where(eq(this.schema.userPackages.userId, id));
-    
-    // Then delete the user
-    const result = await this.db.delete(this.schema.users).where(eq(this.schema.users.id, id));
-    return result.rowCount > 0;
+    try {
+      // First delete all user-related data
+      await db.delete(featureUsageLogs).where(eq(featureUsageLogs.userId, id));
+      await db.delete(loginActivity).where(eq(loginActivity.userId, id));
+      await db.delete(userPackages).where(eq(userPackages.userId, id));
+      
+      // Then delete the user
+      const result = await db.delete(users).where(eq(users.id, id));
+      return result.rowCount > 0;
+    } catch (error) {
+      console.error("Error in deleteUser:", error);
+      throw error;
+    }
   };
   
   /**
@@ -238,18 +243,28 @@ export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage
    */
   
   storage.getAllPackages = async function(): Promise<Package[]> {
-    const result = await this.db.query.packages.findMany({
-      orderBy: [asc(this.schema.packages.id)]
-    });
-    return result;
+    try {
+      const result = await db.query.packages.findMany({
+        orderBy: [asc(packages.id)]
+      });
+      return result;
+    } catch (error) {
+      console.error("Error in getAllPackages:", error);
+      return [];
+    }
   };
   
   storage.getActivePackages = async function(): Promise<Package[]> {
-    const result = await this.db.query.packages.findMany({
-      where: eq(this.schema.packages.isActive, true),
-      orderBy: [asc(this.schema.packages.id)]
-    });
-    return result;
+    try {
+      const result = await db.query.packages.findMany({
+        where: eq(packages.isActive, true),
+        orderBy: [asc(packages.id)]
+      });
+      return result;
+    } catch (error) {
+      console.error("Error in getActivePackages:", error);
+      return [];
+    }
   };
   
   storage.getPackage = async function(id: number): Promise<any> {
@@ -265,33 +280,53 @@ export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage
   };
   
   storage.getPackageByName = async function(name: string): Promise<Package | undefined> {
-    const result = await this.db.query.packages.findFirst({
-      where: eq(this.schema.packages.name, name)
-    });
-    return result;
+    try {
+      const result = await db.query.packages.findFirst({
+        where: eq(packages.name, name)
+      });
+      return result;
+    } catch (error) {
+      console.error("Error in getPackageByName:", error);
+      return undefined;
+    }
   };
   
   storage.createPackage = async function(pkg: InsertPackage): Promise<Package> {
-    const [result] = await this.db.insert(this.schema.packages).values(pkg).returning();
-    return result;
+    try {
+      const [result] = await db.insert(packages).values(pkg).returning();
+      return result;
+    } catch (error) {
+      console.error("Error in createPackage:", error);
+      throw error;
+    }
   };
   
   storage.updatePackage = async function(id: number, updates: Partial<Package>): Promise<Package> {
-    const [result] = await this.db
-      .update(this.schema.packages)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(this.schema.packages.id, id))
-      .returning();
-    return result;
+    try {
+      const [result] = await db
+        .update(packages)
+        .set({ ...updates, updatedAt: new Date() })
+        .where(eq(packages.id, id))
+        .returning();
+      return result;
+    } catch (error) {
+      console.error("Error in updatePackage:", error);
+      throw error;
+    }
   };
   
   storage.deletePackage = async function(id: number): Promise<boolean> {
-    // First delete all package features
-    await this.db.delete(this.schema.packageFeatures).where(eq(this.schema.packageFeatures.packageId, id));
-    
-    // Then delete the package
-    const result = await this.db.delete(this.schema.packages).where(eq(this.schema.packages.id, id));
-    return result.rowCount > 0;
+    try {
+      // First delete all package features
+      await db.delete(packageFeatures).where(eq(packageFeatures.packageId, id));
+      
+      // Then delete the package
+      const result = await db.delete(packages).where(eq(packages.id, id));
+      return result.rowCount ? result.rowCount > 0 : false;
+    } catch (error) {
+      console.error("Error in deletePackage:", error);
+      throw error;
+    }
   };
   
   /**
@@ -299,20 +334,30 @@ export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage
    */
   
   storage.getPackageFeature = async function(id: number): Promise<PackageFeature | undefined> {
-    const result = await this.db.query.packageFeatures.findFirst({
-      where: eq(this.schema.packageFeatures.id, id)
-    });
-    return result;
+    try {
+      const result = await db.query.packageFeatures.findFirst({
+        where: eq(packageFeatures.id, id)
+      });
+      return result;
+    } catch (error) {
+      console.error("Error in getPackageFeature:", error);
+      return undefined;
+    }
   };
   
   storage.getPackageFeatureByKey = async function(packageId: number, featureKey: string): Promise<PackageFeature | undefined> {
-    const result = await this.db.query.packageFeatures.findFirst({
-      where: and(
-        eq(this.schema.packageFeatures.packageId, packageId),
-        eq(this.schema.packageFeatures.featureKey, featureKey)
-      )
-    });
-    return result;
+    try {
+      const result = await db.query.packageFeatures.findFirst({
+        where: and(
+          eq(packageFeatures.packageId, packageId),
+          eq(packageFeatures.featureKey, featureKey)
+        )
+      });
+      return result;
+    } catch (error) {
+      console.error("Error in getPackageFeatureByKey:", error);
+      return undefined;
+    }
   };
   
   storage.getPackageFeaturesByPackageId = async function(packageId: number): Promise<any[]> {
@@ -329,8 +374,13 @@ export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage
   };
   
   storage.createPackageFeature = async function(feature: InsertPackageFeature): Promise<PackageFeature> {
-    const [result] = await this.db.insert(this.schema.packageFeatures).values(feature).returning();
-    return result;
+    try {
+      const [result] = await db.insert(packageFeatures).values(feature).returning();
+      return result;
+    } catch (error) {
+      console.error("Error in createPackageFeature:", error);
+      throw error;
+    }
   };
   
   storage.updatePackageFeature = async function(id: number, updates: Partial<PackageFeature>): Promise<PackageFeature> {
