@@ -43,13 +43,14 @@ export async function getAccessToken(userId: number) {
     
     // Set refresh token
     oauth2Client.setCredentials({
-      refresh_token: config.googleRefreshToken,
-      // Add required scopes for conference data
-      scope: [
-        'https://www.googleapis.com/auth/calendar',
-        'https://www.googleapis.com/auth/calendar.events'
-      ]
+      refresh_token: config.googleRefreshToken
     });
+    
+    // These scopes should be added when authorizing the application,
+    // not when setting credentials. Adding them here for reference only.
+    console.log('Required Google Calendar API scopes:');
+    console.log('- https://www.googleapis.com/auth/calendar');
+    console.log('- https://www.googleapis.com/auth/calendar.events');
     
     console.log('Requesting access token from Google API');
     
