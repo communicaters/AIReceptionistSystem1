@@ -170,7 +170,16 @@ async function processUnrepliedEmails() {
       try {
         console.log(`Processing unreplied email: ${email.id}, Subject: ${email.subject}`);
         
-        // Skip if email is already being processed or has been replied to
+        // Check if email is already replied to (double check with DB for safety)
+        const existingReply = await storage.getEmailReplyByOriginalEmailId(email.id);
+        if (existingReply) {
+          console.log(`Email ${email.id} already has a reply (${existingReply.id}), marking as replied and skipping`);
+          // Ensure the email is properly marked as replied in database
+          await storage.updateEmailLogIsReplied(email.id, true, existingReply.messageId || undefined);
+          continue;
+        }
+        
+        // Skip if email is marked as replied
         if (email.isReplied) {
           console.log(`Email ${email.id} is already marked as replied, skipping`);
           continue;
@@ -207,14 +216,25 @@ async function processUnrepliedEmails() {
         // Get sender information based on service
         const { fromEmail, fromName } = await getSenderInfo(userId, service);
         
-        // Send the reply
+        // Format the response as clean HTML
+        const { formatEmailBodyAsHtml, formatEmailBodyAsText } = require('./email-formatter');
+        const htmlContent = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            ${formatEmailBodyAsHtml(response)}
+            <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0; color: #718096; font-size: 12px;">
+              <p>AI Receptionist - Sent on ${new Date().toLocaleDateString()}</p>
+            </div>
+          </div>
+        `;
+        
+        // Send the reply with proper formatting
         const sendResult = await emailController.sendEmail({
           to: email.from,
           from: fromEmail,
           fromName: fromName,
           subject: replySubject,
-          text: response,
-          html: response.replace(/\n/g, '<br>') // Simple HTML conversion
+          text: formatEmailBodyAsText(response),
+          html: htmlContent
         }, service, userId);
         
         if (sendResult.success) {

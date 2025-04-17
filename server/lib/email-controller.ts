@@ -269,8 +269,21 @@ export async function parseEmailAndGenerateResponse(
     }
     
     try {
+      // Clean up the response before parsing
+      let cleanedResponse = aiResponse.content;
+      
+      // Remove markdown code blocks (```json ... ```)
+      if (cleanedResponse.includes('```json')) {
+        cleanedResponse = cleanedResponse.replace(/```json\s*([\s\S]*?)\s*```/g, (_, jsonContent) => {
+          return jsonContent.trim();
+        });
+      }
+      
+      // Remove backticks if present
+      cleanedResponse = cleanedResponse.replace(/```/g, '');
+      
       // Parse the JSON response from the AI
-      const parsedResponse = JSON.parse(aiResponse.content);
+      const parsedResponse = JSON.parse(cleanedResponse);
       
       // Validate the response structure
       if (!parsedResponse.response || !Array.isArray(parsedResponse.intents)) {
@@ -286,9 +299,13 @@ export async function parseEmailAndGenerateResponse(
     } catch (parseError) {
       console.error("Error parsing AI response:", parseError);
       
-      // Return the raw response as fallback
+      // Use the email formatter to extract clean text
+      const { extractCleanResponseText } = require('./email-formatter');
+      const cleanText = extractCleanResponseText(aiResponse.content);
+      
+      // Return the cleaned text as fallback
       return {
-        response: aiResponse.content,
+        response: cleanText || aiResponse.content,
         intents: ["general_inquiry"],
         shouldScheduleMeeting: false
       };
