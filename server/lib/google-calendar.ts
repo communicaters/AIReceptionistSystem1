@@ -327,12 +327,13 @@ export async function scheduleMeeting(
     description?: string,
     dateTimeString: string,
     duration?: number // in minutes
+    timezone?: string // Timezone identifier e.g. 'America/Los_Angeles'
   }
 ): Promise<{ success: boolean; message: string; eventId?: string; error?: string; meetingLink?: string }> {
   try {
     console.log(`Attempting to schedule meeting with options:`, options);
     
-    const { attendeeEmail, subject = 'Meeting', description = '', dateTimeString, duration = 60 } = options;
+    const { attendeeEmail, subject = 'Meeting', description = '', dateTimeString, duration = 60, timezone = 'UTC' } = options;
     
     // Get user's calendar config
     const config = await storage.getCalendarConfigByUserId(userId);

@@ -2849,12 +2849,22 @@ If this is NOT a meeting scheduling request, respond normally and set is_schedul
                           // Import the Google Calendar module
                           const { scheduleMeeting } = require('./lib/google-calendar');
                           
-                          // Attempt to schedule the meeting
+                          // Log the scheduling attempt with detailed information
+                          console.log('Scheduling meeting with the following data:', {
+                            attendeeEmail: schedulingData.email || phoneNumber + '@whatsapp.virtual.user',
+                            subject: schedulingData.subject || 'Meeting from WhatsApp',
+                            dateTimeString: schedulingData.date_time,
+                            duration: schedulingData.duration_minutes || 30,
+                            timezone: schedulingData.timezone || 'UTC'
+                          });
+                          
+                          // Attempt to schedule the meeting with timezone support
                           const result = await scheduleMeeting(userId, {
                             attendeeEmail: schedulingData.email || phoneNumber + '@whatsapp.virtual.user',
                             subject: schedulingData.subject || 'Meeting from WhatsApp',
                             dateTimeString: schedulingData.date_time,
                             duration: schedulingData.duration_minutes || 30,
+                            timezone: schedulingData.timezone || 'UTC',
                             description: `Meeting scheduled via WhatsApp chat with ${phoneNumber}. Original message: "${messageText}"`
                           });
                           
