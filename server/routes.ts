@@ -3996,5 +3996,39 @@ If this is NOT a meeting scheduling request, respond normally and set is_schedul
     }
   });
 
+  // Test WhatsApp Message History Processing - FOR DEVELOPMENT ONLY
+  app.get("/api/whatsapp/test-history", async (req, res) => {
+    try {
+      const userId = 1;
+      const { phoneNumber } = req.query;
+      
+      if (!phoneNumber) {
+        return apiResponse(res, { error: "Phone number is required" }, 400);
+      }
+      
+      // Get the message history in the same way the AI processor does
+      const previousMessages = await storage.getWhatsappLogsByPhoneNumber(userId, phoneNumber as string);
+      const messageHistory = previousMessages
+        .slice(0, 30)
+        .reverse()
+        .map(msg => ({
+          role: msg.direction === 'inbound' ? 'user' : 'assistant',
+          content: msg.message
+        }));
+      
+      // Return information about the message history
+      apiResponse(res, {
+        totalMessagesInDatabase: previousMessages.length,
+        messagesUsedForContext: messageHistory.length,
+        firstThreeMessages: messageHistory.slice(0, 3),
+        lastThreeMessages: messageHistory.slice(-3),
+        sortOrder: "Chronological (oldest to newest, ready for AI)" 
+      });
+    } catch (error) {
+      console.error("Error testing WhatsApp message history:", error);
+      apiResponse(res, { error: "Failed to test WhatsApp message history" }, 500);
+    }
+  });
+
   return httpServer;
 }
