@@ -9,16 +9,117 @@ export const users = pgTable("users", {
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   fullName: text("full_name").notNull(),
-  role: text("role").notNull().default("user"),
-  email: text("email").notNull(),
+  role: text("role").notNull().default("user"), // admin, user
+  email: text("email").notNull().unique(),
+  status: text("status").notNull().default("active"), // active, inactive, suspended
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  lastLogin: timestamp("last_login"),
+  emailVerified: boolean("email_verified").default(false),
+  resetToken: text("reset_token"),
+  resetTokenExpiry: timestamp("reset_token_expiry"),
+  verificationToken: text("verification_token"),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-  fullName: true,
-  role: true,
-  email: true,
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  lastLogin: true,
+  resetToken: true,
+  resetTokenExpiry: true,
+  verificationToken: true,
+});
+
+// Packages for feature management
+export const packages = pgTable("packages", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  price: integer("price"), // in cents
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertPackageSchema = createInsertSchema(packages).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Features that can be assigned to packages
+export const packageFeatures = pgTable("package_features", {
+  id: serial("id").primaryKey(),
+  packageId: integer("package_id").notNull().references(() => packages.id, { onDelete: 'cascade' }),
+  featureKey: text("feature_key").notNull(), // e.g., "email_management", "voice_call", etc.
+  usageLimit: integer("usage_limit"), // null means unlimited
+  isEnabled: boolean("is_enabled").notNull().default(true),
+});
+
+export const insertPackageFeatureSchema = createInsertSchema(packageFeatures).omit({
+  id: true,
+});
+
+// User-package assignments
+export const userPackages = pgTable("user_packages", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  packageId: integer("package_id").notNull().references(() => packages.id, { onDelete: 'cascade' }),
+  assignedAt: timestamp("assigned_at").notNull().defaultNow(),
+  expiresAt: timestamp("expires_at"),
+  isActive: boolean("is_active").notNull().default(true),
+});
+
+export const insertUserPackageSchema = createInsertSchema(userPackages).omit({
+  id: true,
+  assignedAt: true,
+});
+
+// Feature usage logs
+export const featureUsageLogs = pgTable("feature_usage_logs", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  featureKey: text("feature_key").notNull(),
+  usedAt: timestamp("used_at").notNull().defaultNow(),
+  usageCount: integer("usage_count").notNull().default(1),
+  metadata: jsonb("metadata"),
+});
+
+export const insertFeatureUsageLogSchema = createInsertSchema(featureUsageLogs).omit({
+  id: true,
+  usedAt: true,
+});
+
+// Login activity tracking
+export const loginActivity = pgTable("login_activity", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  loginTime: timestamp("login_time").notNull().defaultNow(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  status: text("status").notNull(), // success, failed
+  metadata: jsonb("metadata"),
+});
+
+export const insertLoginActivitySchema = createInsertSchema(loginActivity).omit({
+  id: true,
+  loginTime: true,
+});
+
+// Reports cache for faster reporting
+export const adminReportsCache = pgTable("admin_reports_cache", {
+  id: serial("id").primaryKey(),
+  reportType: text("report_type").notNull(),
+  data: jsonb("data").notNull(),
+  generatedAt: timestamp("generated_at").notNull().defaultNow(),
+  filtersApplied: jsonb("filters_applied"),
+  expiresAt: timestamp("expires_at").notNull(),
+});
+
+export const insertAdminReportsCacheSchema = createInsertSchema(adminReportsCache).omit({
+  id: true,
+  generatedAt: true,
 });
 
 // Define user relations
@@ -41,6 +142,52 @@ export const usersRelations = relations(users, ({ many }) => ({
   whatsappLogs: many(whatsappLogs),
   meetingLogs: many(meetingLogs),
   voiceSettings: many(voiceSettings),
+  // New user management relations
+  userPackages: many(userPackages),
+  featureUsageLogs: many(featureUsageLogs),
+  loginActivities: many(loginActivity),
+}));
+
+// Package relations
+export const packagesRelations = relations(packages, ({ many }) => ({
+  features: many(packageFeatures),
+  users: many(userPackages),
+}));
+
+// Package features relations
+export const packageFeaturesRelations = relations(packageFeatures, ({ one }) => ({
+  package: one(packages, {
+    fields: [packageFeatures.packageId],
+    references: [packages.id],
+  }),
+}));
+
+// User packages relations
+export const userPackagesRelations = relations(userPackages, ({ one }) => ({
+  user: one(users, {
+    fields: [userPackages.userId],
+    references: [users.id],
+  }),
+  package: one(packages, {
+    fields: [userPackages.packageId],
+    references: [packages.id],
+  }),
+}));
+
+// Feature usage logs relations
+export const featureUsageLogsRelations = relations(featureUsageLogs, ({ one }) => ({
+  user: one(users, {
+    fields: [featureUsageLogs.userId],
+    references: [users.id],
+  }),
+}));
+
+// Login activity relations
+export const loginActivityRelations = relations(loginActivity, ({ one }) => ({
+  user: one(users, {
+    fields: [loginActivity.userId],
+    references: [users.id],
+  }),
 }));
 
 // Phone service configurations

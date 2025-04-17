@@ -24,15 +24,76 @@ import {
   meetingLogs, MeetingLog, InsertMeetingLog,
   moduleStatus, ModuleStatus, InsertModuleStatus,
   systemActivity, SystemActivity, InsertSystemActivity,
-  voiceSettings, VoiceSettings, InsertVoiceSettings
+  voiceSettings, VoiceSettings, InsertVoiceSettings,
+  // User management imports
+  packages, Package, InsertPackage,
+  packageFeatures, PackageFeature, InsertPackageFeature,
+  userPackages, UserPackage, InsertUserPackage,
+  featureUsageLogs, FeatureUsageLog, InsertFeatureUsageLog,
+  loginActivity, LoginActivity, InsertLoginActivity,
+  adminReportsCache, AdminReportsCache, InsertAdminReportsCache
 } from "@shared/schema";
 
 export interface IStorage {
   // Users
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateUser(id: number, user: Partial<InsertUser>): Promise<User | undefined>;
   getAllUsers(): Promise<User[]>;
+  updateUserStatus(id: number, status: string): Promise<User | undefined>;
+  updateUserRole(id: number, role: string): Promise<User | undefined>;
+  updateUserPassword(id: number, password: string): Promise<User | undefined>;
+  updateUserLastLogin(id: number): Promise<User | undefined>;
+  verifyUserEmail(id: number): Promise<User | undefined>;
+  setUserResetToken(id: number, token: string, expiry: Date): Promise<User | undefined>;
+  getUserByResetToken(token: string): Promise<User | undefined>;
+  deleteUser(id: number): Promise<boolean>;
+
+  // Packages
+  getPackage(id: number): Promise<Package | undefined>;
+  getPackageByName(name: string): Promise<Package | undefined>;
+  getAllPackages(): Promise<Package[]>;
+  getActivePackages(): Promise<Package[]>;
+  createPackage(pkg: InsertPackage): Promise<Package>;
+  updatePackage(id: number, pkg: Partial<InsertPackage>): Promise<Package | undefined>;
+  deletePackage(id: number): Promise<boolean>;
+
+  // Package Features
+  getPackageFeature(id: number): Promise<PackageFeature | undefined>;
+  getPackageFeaturesByPackageId(packageId: number): Promise<PackageFeature[]>;
+  getPackageFeatureByKey(packageId: number, featureKey: string): Promise<PackageFeature | undefined>;
+  createPackageFeature(feature: InsertPackageFeature): Promise<PackageFeature>;
+  updatePackageFeature(id: number, feature: Partial<InsertPackageFeature>): Promise<PackageFeature | undefined>;
+  deletePackageFeature(id: number): Promise<boolean>;
+
+  // User Packages
+  getUserPackage(id: number): Promise<UserPackage | undefined>;
+  getUserPackagesByUserId(userId: number): Promise<UserPackage[]>;
+  getActiveUserPackage(userId: number): Promise<UserPackage | undefined>;
+  createUserPackage(userPackage: InsertUserPackage): Promise<UserPackage>;
+  updateUserPackage(id: number, userPackage: Partial<InsertUserPackage>): Promise<UserPackage | undefined>;
+  deactivateUserPackage(id: number): Promise<UserPackage | undefined>;
+  deleteUserPackage(id: number): Promise<boolean>;
+
+  // Feature Usage Logs
+  getFeatureUsageLog(id: number): Promise<FeatureUsageLog | undefined>;
+  getFeatureUsageLogsByUserId(userId: number): Promise<FeatureUsageLog[]>;
+  getFeatureUsageLogsByFeatureKey(userId: number, featureKey: string): Promise<FeatureUsageLog[]>;
+  getFeatureUsageSummary(userId: number, timeframe?: string): Promise<any>;
+  createFeatureUsageLog(log: InsertFeatureUsageLog): Promise<FeatureUsageLog>;
+
+  // Login Activity
+  getLoginActivity(id: number): Promise<LoginActivity | undefined>;
+  getLoginActivitiesByUserId(userId: number, limit?: number): Promise<LoginActivity[]>;
+  createLoginActivity(activity: InsertLoginActivity): Promise<LoginActivity>;
+
+  // Admin Reports Cache
+  getReportCache(id: number): Promise<AdminReportsCache | undefined>;
+  getReportCacheByType(reportType: string): Promise<AdminReportsCache | undefined>;
+  createReportCache(report: InsertAdminReportsCache): Promise<AdminReportsCache>;
+  deleteReportCache(id: number): Promise<boolean>;
 
   // SIP Config
   getSipConfig(id: number): Promise<SipConfig | undefined>;
@@ -227,6 +288,14 @@ export class MemStorage implements IStorage {
   private moduleStatuses: Map<number, ModuleStatus>;
   private systemActivities: Map<number, SystemActivity>;
   private voiceSettings: Map<number, VoiceSettings>;
+  
+  // User management related maps
+  private packages: Map<number, Package>;
+  private packageFeatures: Map<number, PackageFeature>;
+  private userPackages: Map<number, UserPackage>;
+  private featureUsageLogs: Map<number, FeatureUsageLog>;
+  private loginActivities: Map<number, LoginActivity>;
+  private reportCaches: Map<number, AdminReportsCache>;
 
   private currentIds: {
     users: number;
@@ -253,6 +322,13 @@ export class MemStorage implements IStorage {
     moduleStatuses: number;
     systemActivities: number;
     voiceSettings: number;
+    // User management related ids
+    packages: number;
+    packageFeatures: number;
+    userPackages: number;
+    featureUsageLogs: number;
+    loginActivities: number;
+    reportCaches: number;
   };
 
   constructor() {
@@ -283,6 +359,14 @@ export class MemStorage implements IStorage {
     this.moduleStatuses = new Map();
     this.systemActivities = new Map();
     this.voiceSettings = new Map();
+    
+    // Initialize user management maps
+    this.packages = new Map();
+    this.packageFeatures = new Map();
+    this.userPackages = new Map();
+    this.featureUsageLogs = new Map();
+    this.loginActivities = new Map();
+    this.reportCaches = new Map();
 
     // Initialize IDs
     this.currentIds = {
@@ -312,6 +396,13 @@ export class MemStorage implements IStorage {
       moduleStatuses: 1,
       systemActivities: 1,
       voiceSettings: 1,
+      // Initialize user management IDs
+      packages: 1,
+      packageFeatures: 1,
+      userPackages: 1,
+      featureUsageLogs: 1,
+      loginActivities: 1,
+      reportCaches: 1,
     };
 
     // Initialize default data
@@ -559,15 +650,116 @@ export class MemStorage implements IStorage {
     );
   }
 
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find(
+      (user) => user.email === email,
+    );
+  }
+
   async createUser(user: InsertUser): Promise<User> {
     const id = this.currentIds.users++;
-    const newUser: User = { ...user, id };
+    const now = new Date();
+    const newUser: User = { 
+      ...user, 
+      id, 
+      createdAt: now,
+      updatedAt: now,
+      status: 'active',
+      emailVerified: false,
+    };
     this.users.set(id, newUser);
     return newUser;
   }
 
+  async updateUser(id: number, userData: Partial<InsertUser>): Promise<User | undefined> {
+    const existingUser = this.users.get(id);
+    if (!existingUser) return undefined;
+
+    const updatedUser: User = { 
+      ...existingUser, 
+      ...userData,
+      updatedAt: new Date()
+    };
+    this.users.set(id, updatedUser);
+    return updatedUser;
+  }
+
   async getAllUsers(): Promise<User[]> {
     return Array.from(this.users.values());
+  }
+
+  async updateUserStatus(id: number, status: string): Promise<User | undefined> {
+    const user = this.users.get(id);
+    if (!user) return undefined;
+
+    const updatedUser: User = { ...user, status, updatedAt: new Date() };
+    this.users.set(id, updatedUser);
+    return updatedUser;
+  }
+
+  async updateUserRole(id: number, role: string): Promise<User | undefined> {
+    const user = this.users.get(id);
+    if (!user) return undefined;
+
+    const updatedUser: User = { ...user, role, updatedAt: new Date() };
+    this.users.set(id, updatedUser);
+    return updatedUser;
+  }
+
+  async updateUserPassword(id: number, password: string): Promise<User | undefined> {
+    const user = this.users.get(id);
+    if (!user) return undefined;
+
+    const updatedUser: User = { ...user, password, updatedAt: new Date() };
+    this.users.set(id, updatedUser);
+    return updatedUser;
+  }
+
+  async updateUserLastLogin(id: number): Promise<User | undefined> {
+    const user = this.users.get(id);
+    if (!user) return undefined;
+
+    const updatedUser: User = { ...user, lastLogin: new Date(), updatedAt: new Date() };
+    this.users.set(id, updatedUser);
+    return updatedUser;
+  }
+
+  async verifyUserEmail(id: number): Promise<User | undefined> {
+    const user = this.users.get(id);
+    if (!user) return undefined;
+
+    const updatedUser: User = { 
+      ...user, 
+      emailVerified: true, 
+      verificationToken: null,
+      updatedAt: new Date() 
+    };
+    this.users.set(id, updatedUser);
+    return updatedUser;
+  }
+
+  async setUserResetToken(id: number, token: string, expiry: Date): Promise<User | undefined> {
+    const user = this.users.get(id);
+    if (!user) return undefined;
+
+    const updatedUser: User = { 
+      ...user, 
+      resetToken: token, 
+      resetTokenExpiry: expiry,
+      updatedAt: new Date() 
+    };
+    this.users.set(id, updatedUser);
+    return updatedUser;
+  }
+
+  async getUserByResetToken(token: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find(
+      (user) => user.resetToken === token && user.resetTokenExpiry > new Date(),
+    );
+  }
+
+  async deleteUser(id: number): Promise<boolean> {
+    return this.users.delete(id);
   }
 
   // SIP Config
