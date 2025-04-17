@@ -894,6 +894,7 @@ const EmailManagement = () => {
   const [createScheduledEmailMode, setCreateScheduledEmailMode] = useState(false);
   const [editScheduledEmailId, setEditScheduledEmailId] = useState<number | null>(null);
   const [viewEmailLog, setViewEmailLog] = useState<EmailLog | null>(null);
+  const [replyToEmail, setReplyToEmail] = useState<EmailLog | null>(null);
   
   // Query for fetching email configurations
   const { 
@@ -1285,6 +1286,15 @@ const EmailManagement = () => {
     }
   });
 
+  // Function to handle sending an email reply
+  const handleSendReply = (to: string, subject: string, body: string, service?: 'sendgrid' | 'smtp' | 'mailgun') => {
+    sendEmailMutation.mutate({
+      email: { to, subject, body },
+      service
+    });
+    setReplyToEmail(null);
+  };
+
   return (
     <>
       <div className="space-y-6">
@@ -1300,6 +1310,104 @@ const EmailManagement = () => {
             isPending={testEmailMutation.isPending}
           />
         </div>
+        
+        {/* Reply Email Dialog */}
+        <Dialog open={!!replyToEmail} onOpenChange={(open) => !open && setReplyToEmail(null)}>
+          <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader>
+              <DialogTitle>Reply to Email</DialogTitle>
+              <DialogDescription>
+                Send a reply to the sender of this email.
+              </DialogDescription>
+            </DialogHeader>
+            {replyToEmail && (
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="replyTo">To</Label>
+                  <Input 
+                    id="replyTo" 
+                    value={replyToEmail.from.match(/<(.+?)>/) ? replyToEmail.from.match(/<(.+?)>/)?.[1] : replyToEmail.from} 
+                    readOnly 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="replySubject">Subject</Label>
+                  <Input 
+                    id="replySubject" 
+                    defaultValue={replyToEmail.subject.startsWith('Re:') ? replyToEmail.subject : `Re: ${replyToEmail.subject}`} 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="replyBody">Message</Label>
+                  <Textarea 
+                    id="replyBody" 
+                    placeholder="Type your reply here..." 
+                    className="min-h-[200px]"
+                    defaultValue={`\n\n------------------\nOriginal Message:\n${replyToEmail.body}`}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="replyService">Email Service</Label>
+                  <Select defaultValue={
+                    emailConfigs?.smtp?.isActive ? 'smtp' : 
+                    emailConfigs?.sendgrid?.isActive ? 'sendgrid' : 
+                    emailConfigs?.mailgun?.isActive ? 'mailgun' : 'none'
+                  }>
+                    <SelectTrigger id="replyService">
+                      <SelectValue placeholder="Select email service" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {emailConfigs?.sendgrid?.isActive && (
+                        <SelectItem value="sendgrid">SendGrid</SelectItem>
+                      )}
+                      {emailConfigs?.smtp?.isActive && (
+                        <SelectItem value="smtp">SMTP</SelectItem>
+                      )}
+                      {emailConfigs?.mailgun?.isActive && (
+                        <SelectItem value="mailgun">Mailgun</SelectItem>
+                      )}
+                      {!(emailConfigs?.sendgrid?.isActive || emailConfigs?.smtp?.isActive || emailConfigs?.mailgun?.isActive) && (
+                        <SelectItem value="none">No active service</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setReplyToEmail(null)}>Cancel</Button>
+              <Button 
+                onClick={() => {
+                  if (!replyToEmail) return;
+                  const form = document.getElementById('replyBody') as HTMLTextAreaElement;
+                  const subject = (document.getElementById('replySubject') as HTMLInputElement).value;
+                  const select = document.querySelector('[id="replyService"] [data-value]') as HTMLElement;
+                  const service = select?.getAttribute('data-value') as 'sendgrid' | 'smtp' | 'mailgun' | undefined;
+                  
+                  handleSendReply(
+                    replyToEmail.from.match(/<(.+?)>/) ? replyToEmail.from.match(/<(.+?)>/)?.[1] || replyToEmail.from : replyToEmail.from,
+                    subject,
+                    form.value,
+                    service === 'none' ? undefined : service
+                  );
+                }}
+                disabled={sendEmailMutation.isPending}
+              >
+                {sendEmailMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Send className="mr-2 h-4 w-4" />
+                    Send Reply
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
       <Tabs defaultValue="inbox">
         <TabsList>
@@ -1386,7 +1494,11 @@ const EmailManagement = () => {
                       </div>
                       <p className="text-sm text-muted-foreground line-clamp-2">{email.body}</p>
                       <div className="flex justify-end mt-2 space-x-2">
-                        <Button variant="outline" size="sm">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => setReplyToEmail(email)}
+                        >
                           <Mail className="h-4 w-4 mr-1" />
                           Reply
                         </Button>
