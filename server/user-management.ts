@@ -1,5 +1,4 @@
 import { eq, and, gte, lt, desc, sql, asc, count, ne, isNull, not, inArray, or } from 'drizzle-orm';
-import { storage as baseStorage } from './storage';
 import { DatabaseStorage } from './database-storage';
 import { 
   User, InsertUser, Package, InsertPackage, 
@@ -7,9 +6,14 @@ import {
   UserPackage, InsertUserPackage, 
   FeatureUsageLog, InsertFeatureUsageLog,
   LoginActivity, InsertLoginActivity,
-  ReportCache, InsertReportCache
+  ReportCache, InsertReportCache,
+  users, packages, packageFeatures, userPackages, featureUsageLogs, loginActivity, reportCache, systemActivity, moduleStatus
 } from '@shared/schema';
 import { compare } from './lib/encryption';
+import { db } from './db';
+
+// Import storage after we've defined the extension function
+import { storage } from './storage';
 
 // Implement user management methods for DatabaseStorage
 export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage) {
@@ -18,17 +22,27 @@ export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage
    */
   
   storage.getUserByUsername = async function(username: string): Promise<User | undefined> {
-    const result = await this.db.query.users.findFirst({
-      where: eq(this.schema.users.username, username)
-    });
-    return result;
+    try {
+      const result = await db.query.users.findFirst({
+        where: eq(users.username, username)
+      });
+      return result || undefined;
+    } catch (error) {
+      console.error("Error in getUserByUsername:", error);
+      return undefined;
+    }
   };
   
   storage.getUserByEmail = async function(email: string): Promise<User | undefined> {
-    const result = await this.db.query.users.findFirst({
-      where: eq(this.schema.users.email, email)
-    });
-    return result;
+    try {
+      const result = await db.query.users.findFirst({
+        where: eq(users.email, email)
+      });
+      return result || undefined;
+    } catch (error) {
+      console.error("Error in getUserByEmail:", error);
+      return undefined;
+    }
   };
   
   storage.getUserByVerificationToken = async function(token: string): Promise<User | undefined> {
@@ -57,8 +71,13 @@ export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage
   };
   
   storage.createUser = async function(user: InsertUser): Promise<User> {
-    const [result] = await this.db.insert(this.schema.users).values(user).returning();
-    return result;
+    try {
+      const [result] = await db.insert(users).values(user).returning();
+      return result;
+    } catch (error) {
+      console.error("Error in createUser:", error);
+      throw error;
+    }
   };
   
   storage.updateUser = async function(id: number, updates: Partial<User>): Promise<User> {
@@ -519,5 +538,8 @@ export function extendDatabaseStorageWithUserManagement(storage: DatabaseStorage
   return storage;
 }
 
-// Apply the extensions to the base storage
-extendDatabaseStorageWithUserManagement(baseStorage as DatabaseStorage);
+// Extend the storage with user management methods
+extendDatabaseStorageWithUserManagement(storage as DatabaseStorage);
+
+// Initialize the user management module
+console.log('User management methods initialized');

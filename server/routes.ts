@@ -24,6 +24,10 @@ import { setupWebsocketHandlers, broadcastMessage } from "./lib/websocket";
 import { aiRouter } from "./routes/ai";
 import { speechRouter } from "./routes/speech";
 import whatsappRouter from "./routes/whatsapp";
+import authRouter from "./routes/auth-routes";
+import usersRouter from "./routes/users-routes";
+import packagesRouter from "./routes/packages-routes";
+import reportsRouter from "./routes/reports-routes";
 import { authenticate } from "./middleware/auth";
 import express from "express";
 import path from "path";
@@ -288,6 +292,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.sendFile(path.join(process.cwd(), 'public', 'embed-chat.js'));
   });
 
+  // Register authentication routes (these don't require auth)
+  app.use("/api/auth", authRouter);
+  
   // Apply authentication middleware to all other routes
   app.use(authenticate);
 
@@ -299,6 +306,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Register WhatsApp routes
   app.use("/api/whatsapp", whatsappRouter);
+  
+  // Register User Management routes that require authentication
+  app.use("/api/users", usersRouter);
+  app.use("/api/packages", packagesRouter);
+  app.use("/api/reports", reportsRouter);
   
   // API routes
   app.get("/api/health", (req, res) => {
@@ -327,26 +339,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Users and authentication
-  app.get("/api/users", async (req, res) => {
-    try {
-      const users = await storage.getAllUsers();
-      apiResponse(res, users);
-    } catch (error) {
-      console.error("Error fetching users:", error);
-      apiResponse(res, { error: "Failed to fetch users" }, 500);
-    }
-  });
-
-  app.post("/api/users", async (req, res) => {
-    try {
-      const user = await storage.createUser(req.body);
-      apiResponse(res, user);
-    } catch (error) {
-      console.error("Error creating user:", error);
-      apiResponse(res, { error: "Failed to create user" }, 500);
-    }
-  });
+  // Users and authentication routes are now handled by the new controllers
 
   // Voice Call module
   app.get("/api/voice/configs", async (req, res) => {
