@@ -417,7 +417,8 @@ export class ZenderService {
             }
             
             console.log(`Extracted data from whatsapp webhook form-encoded format: ${sender}, ${message}`);
-            return { sender, message, mediaUrl, timestamp, messageId };
+            // Don't return yet, continue processing the message below
+            // The extracted data will be used in the standard processing flow
           }
         }
         

@@ -178,4 +178,56 @@ router.post('/test-history', async (req, res) => {
   }
 });
 
+// Webhook test endpoint to manually simulate an incoming WhatsApp message
+router.post('/test-webhook', async (req, res) => {
+  try {
+    const { phoneNumber, message } = req.body;
+    
+    if (!phoneNumber || !message) {
+      return apiResponse(res, { error: "Phone number and message are required" }, 400);
+    }
+    
+    // Create a simulated webhook payload in the Zender format
+    const webhookPayload = {
+      secret: "test_secret",
+      type: "whatsapp",
+      "data[id]": String(Date.now()),
+      "data[wid]": phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`,
+      "data[phone]": phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`,
+      "data[message]": message,
+      "data[attachment]": "0",
+      "data[timestamp]": (Math.floor(Date.now() / 1000)).toString()
+    };
+    
+    console.log("Simulated webhook payload:", webhookPayload);
+    
+    // Process the webhook with the Zender service
+    const userId = 1; // For demo purposes
+    const zenderService = getZenderService(userId);
+    await zenderService.initialize();
+    
+    const success = await zenderService.processWebhook(webhookPayload);
+    
+    if (success) {
+      return apiResponse(res, {
+        success: true,
+        message: "Test webhook processed successfully",
+        payload: webhookPayload
+      });
+    } else {
+      return apiResponse(res, {
+        success: false,
+        message: "Failed to process test webhook",
+        payload: webhookPayload
+      }, 400);
+    }
+  } catch (error: any) {
+    console.error("Error in test-webhook:", error);
+    return apiResponse(res, { 
+      error: error.message || "Unknown error occurred",
+      success: false
+    }, 500);
+  }
+});
+
 export default router;
