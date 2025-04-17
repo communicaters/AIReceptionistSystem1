@@ -1238,6 +1238,54 @@ export class MemStorage implements IStorage {
     return newLog;
   }
 
+  async updateEmailLogIsReplied(id: number, isReplied: boolean, inReplyTo?: string): Promise<EmailLog | undefined> {
+    const emailLog = this.emailLogs.get(id);
+    if (!emailLog) return undefined;
+
+    const updatedLog: EmailLog = {
+      ...emailLog,
+      isReplied: isReplied,
+      inReplyTo: inReplyTo || emailLog.inReplyTo
+    };
+    
+    this.emailLogs.set(id, updatedLog);
+    return updatedLog;
+  }
+
+  async getUnrepliedEmails(userId: number): Promise<EmailLog[]> {
+    return Array.from(this.emailLogs.values())
+      .filter(log => log.userId === userId && (log.isReplied === false || log.isReplied === null))
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+  }
+
+  // Email Replies
+  async createEmailReply(reply: InsertEmailReply): Promise<EmailReply> {
+    const id = this.currentIds.emailReplies++;
+    const newReply: EmailReply = { ...reply, id };
+    this.emailReplies.set(id, newReply);
+    return newReply;
+  }
+
+  async getEmailReplyByOriginalEmailId(originalEmailId: number): Promise<EmailReply | undefined> {
+    return Array.from(this.emailReplies.values())
+      .find(reply => reply.originalEmailId === originalEmailId);
+  }
+
+  async updateEmailReplyStatus(id: number, status: string, messageId?: string, error?: string): Promise<EmailReply | undefined> {
+    const reply = this.emailReplies.get(id);
+    if (!reply) return undefined;
+
+    const updatedReply: EmailReply = {
+      ...reply,
+      status,
+      sentMessageId: messageId || reply.sentMessageId,
+      error: error || reply.error
+    };
+    
+    this.emailReplies.set(id, updatedReply);
+    return updatedReply;
+  }
+
   // Chat Logs
   async getChatLog(id: number): Promise<ChatLog | undefined> {
     return this.chatLogs.get(id);

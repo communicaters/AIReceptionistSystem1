@@ -755,6 +755,158 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Email reply endpoint
+  app.post("/api/email/reply", async (req, res) => {
+    try {
+      const userId = 1; // For demo, use fixed user ID
+      const { emailId, replyContent, subject } = req.body;
+      
+      if (!emailId || !replyContent) {
+        return apiResponse(res, { error: "Missing required fields" }, 400);
+      }
+
+      // Get original email to reply to
+      const originalEmail = await storage.getEmailLog(parseInt(emailId));
+      if (!originalEmail) {
+        return apiResponse(res, { error: "Original email not found" }, 404);
+      }
+
+      // Create the email reply record
+      const reply = await storage.createEmailReply({
+        originalEmailId: originalEmail.id,
+        userId,
+        content: replyContent,
+        status: 'pending',
+        sentTimestamp: new Date(),
+        sentMessageId: null,
+        error: null
+      });
+
+      // Update the original email as replied
+      await storage.updateEmailLogIsReplied(originalEmail.id, true, originalEmail.messageId || undefined);
+
+      // Send the reply via appropriate email service
+      // First determine which service to use
+      let emailService = 'none';
+      let fromEmail = '';
+      let fromName = '';
+      
+      // Check if SendGrid is configured
+      const sendgridConfig = await storage.getSendgridConfigByUserId(userId);
+      if (sendgridConfig && sendgridConfig.isActive) {
+        emailService = 'sendgrid';
+        fromEmail = sendgridConfig.fromEmail;
+        fromName = sendgridConfig.fromName;
+      } else {
+        // Check if SMTP is configured
+        const smtpConfig = await storage.getSmtpConfigByUserId(userId);
+        if (smtpConfig && smtpConfig.isActive) {
+          emailService = 'smtp';
+          fromEmail = smtpConfig.fromEmail;
+        } else {
+          // Check if Mailgun is configured
+          const mailgunConfig = await storage.getMailgunConfigByUserId(userId);
+          if (mailgunConfig && mailgunConfig.isActive) {
+            emailService = 'mailgun';
+            fromEmail = mailgunConfig.fromEmail;
+            fromName = mailgunConfig.fromName;
+          }
+        }
+      }
+
+      if (emailService === 'none') {
+        await storage.updateEmailReplyStatus(reply.id, 'failed', null, 'No active email service configured');
+        return apiResponse(res, { error: "No active email service configured" }, 400);
+      }
+
+      // Prepare headers for thread linking
+      const headers = {
+        'In-Reply-To': originalEmail.messageId || '',
+        'References': originalEmail.messageId || ''
+      };
+
+      // Subject should include "Re:" prefix if not already present
+      const replySubject = subject || (originalEmail.subject.startsWith('Re:') 
+        ? originalEmail.subject 
+        : `Re: ${originalEmail.subject}`);
+
+      // Send the email using the selected service
+      let sendResult = { success: false, error: 'Unknown error', messageId: null };
+      
+      if (emailService === 'sendgrid') {
+        sendResult = await sendEmailWithSendGrid(
+          userId,
+          originalEmail.from, // 'to' should be the 'from' of the original email
+          replySubject,
+          replyContent,
+          fromEmail,
+          fromName,
+          headers
+        );
+      } else if (emailService === 'smtp') {
+        sendResult = await sendEmailWithSMTP(
+          userId,
+          originalEmail.from, // 'to' should be the 'from' of the original email
+          replySubject,
+          replyContent,
+          fromEmail,
+          headers
+        );
+      } else if (emailService === 'mailgun') {
+        sendResult = await sendEmailWithMailgun(
+          userId,
+          originalEmail.from, // 'to' should be the 'from' of the original email
+          replySubject,
+          replyContent,
+          fromEmail,
+          fromName,
+          headers
+        );
+      }
+
+      // Update the reply status based on the send result
+      if (sendResult.success) {
+        await storage.updateEmailReplyStatus(reply.id, 'sent', sendResult.messageId || null);
+        
+        // Log the system activity
+        await storage.createSystemActivity({
+          module: "Email",
+          event: "Email Reply Sent",
+          status: "Completed",
+          timestamp: new Date(),
+          details: { 
+            recipient: originalEmail.from,
+            subject: replySubject, 
+            service: emailService 
+          }
+        });
+        
+        apiResponse(res, { success: true, reply });
+      } else {
+        await storage.updateEmailReplyStatus(reply.id, 'failed', null, sendResult.error);
+        
+        // Log the failure as system activity
+        await storage.createSystemActivity({
+          module: "Email",
+          event: "Email Reply Failed",
+          status: "Error",
+          timestamp: new Date(),
+          details: { 
+            recipient: originalEmail.from,
+            subject: replySubject, 
+            service: emailService,
+            error: sendResult.error
+          }
+        });
+        
+        apiResponse(res, { error: `Failed to send email reply: ${sendResult.error}` }, 500);
+      }
+    } catch (error) {
+      console.error("Error sending email reply:", error);
+      apiResponse(res, { error: "Failed to send email reply" }, 500);
+    }
+  });
+  
   // Sync emails from IMAP server
   app.post("/api/email/sync", async (req, res) => {
     try {
