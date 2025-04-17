@@ -263,19 +263,51 @@ export async function scheduleMeeting(
       };
     }
 
-    // Parse the date-time string
+    // Parse the date-time string with enhanced logging and handling
     let startDateTime: Date;
     try {
-      // Handle various date formats
+      console.log(`Parsing date-time string: "${dateTimeString}"`);
+      
+      // Handle various date formats, first try direct parsing
       startDateTime = new Date(dateTimeString);
       
       // Check if the date is valid
       if (isNaN(startDateTime.getTime())) {
-        throw new Error('Invalid date format');
+        console.log("Direct date parsing failed, trying additional formats...");
+        
+        // Try parsing with additional formatting help
+        // Handle format like "Today at 4:30PM PST"
+        if (dateTimeString.toLowerCase().includes('today at')) {
+          console.log("Detected 'Today at' format");
+          const timeMatch = dateTimeString.match(/(\d+):(\d+)(?:\s*)(am|pm)/i);
+          
+          if (timeMatch) {
+            const today = new Date();
+            const hours = parseInt(timeMatch[1]);
+            const minutes = parseInt(timeMatch[2]);
+            const isPM = timeMatch[3].toLowerCase() === 'pm';
+            
+            today.setHours(isPM && hours < 12 ? hours + 12 : hours);
+            today.setMinutes(minutes);
+            today.setSeconds(0);
+            today.setMilliseconds(0);
+            
+            startDateTime = today;
+            console.log(`Parsed 'Today at' time to: ${startDateTime.toISOString()}`);
+          }
+        }
+        
+        // If still invalid, throw error
+        if (isNaN(startDateTime.getTime())) {
+          throw new Error('Invalid date format');
+        }
       }
+      
+      console.log(`Successfully parsed date-time to: ${startDateTime.toISOString()}`);
       
       // If the date is in the past, return error
       if (startDateTime < new Date()) {
+        console.log(`Meeting time is in the past: ${startDateTime.toISOString()}`);
         return {
           success: false,
           message: 'Cannot schedule meetings in the past',
