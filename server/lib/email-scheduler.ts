@@ -185,6 +185,43 @@ async function processUnrepliedEmails() {
           continue;
         }
         
+        // LOOP PREVENTION: Check if this is a system-generated email by checking if sender and recipient are the same
+        // Get sender email configurations
+        const sendgridConfig = await storage.getSendgridConfigByUserId(userId);
+        const smtpConfig = await storage.getSmtpConfigByUserId(userId);
+        const mailgunConfig = await storage.getMailgunConfigByUserId(userId);
+        
+        // Create a list of system emails
+        const systemEmails = [
+          sendgridConfig?.fromEmail,
+          smtpConfig?.fromEmail,
+          mailgunConfig?.fromEmail
+        ].filter(Boolean) as string[];
+        
+        // Check if both sender and recipient are system emails (loop detection)
+        if (systemEmails.includes(email.from) && systemEmails.includes(email.to)) {
+          console.log(`LOOP PREVENTION: Detected email loop between ${email.from} and ${email.to}, marking as replied and skipping`);
+          
+          // Mark as replied to prevent future processing
+          await storage.updateEmailLogIsReplied(email.id, true);
+          
+          // Log the prevention
+          await storage.createSystemActivity({
+            module: "Email",
+            event: "EmailLoopPrevented",
+            status: "success",
+            timestamp: new Date(),
+            details: { 
+              emailId: email.id,
+              from: email.from,
+              to: email.to,
+              subject: email.subject
+            }
+          });
+          
+          continue;
+        }
+        
         // Use AI to generate a response to this email
         const { response, intents, shouldScheduleMeeting, meetingDetails } = 
           await emailController.parseEmailAndGenerateResponse({

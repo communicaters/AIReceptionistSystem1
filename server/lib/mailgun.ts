@@ -66,6 +66,8 @@ export interface EmailParams {
   text?: string;
   html?: string;
   fromName?: string;
+  headers?: Record<string, string>;
+  isAutomatedReply?: boolean;
 }
 
 // Function to send email using Mailgun

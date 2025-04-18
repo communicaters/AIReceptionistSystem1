@@ -65,6 +65,8 @@ export interface EmailParams {
   text?: string;
   html?: string;
   fromName?: string;
+  headers?: Record<string, string>;
+  isAutomatedReply?: boolean;
 }
 
 // Function to send email using SMTP
@@ -84,8 +86,14 @@ export async function sendEmail(params: EmailParams, userId: number = 1): Promis
       to: params.to,
       subject: params.subject,
       text: params.text,
-      html: params.html
+      html: params.html,
+      headers: params.headers || {}, // Include any provided headers
     };
+    
+    // Always include AI system identifier header (for loop detection)
+    if (!message.headers['X-AI-Receptionist']) {
+      message.headers['X-AI-Receptionist'] = 'true';
+    }
     
     // Send email
     await transport.sendMail(message);

@@ -30,6 +30,17 @@ export async function sendEmail(params: EmailParams, service?: EmailService, use
   // Log the attempt for debugging
   console.log(`Attempting to send email to ${params.to} with subject "${params.subject}" via ${service || 'preferred'} service`);
   
+  // Add AI Receptionist identifier to email headers
+  if (!params.headers) {
+    params.headers = {};
+  }
+  
+  // Add a unique identifier to mark this as a system-generated email
+  params.headers['X-AI-Receptionist'] = 'true';
+  
+  // Set isAutomatedReply flag
+  params.isAutomatedReply = true;
+  
   // Validate critical parameters
   if (!params.to || !params.from || !params.subject) {
     const missingFields = [];
