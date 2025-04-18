@@ -652,10 +652,69 @@ export class UserProfileAssistant {
       
       console.log(`Company question detection - isAskingAboutCompany: ${isAskingAboutCompany}, isDenyingCompany: ${isDenyingCompany}`);
                                                          
+      // Check if the question appears to be directly asking about the company
+      const isDirectCompanyQuestion = context.chatHistory.some((entry: {role: string; content: string}) => 
+        entry.role === 'user' && companyQuestions.some(q => entry.content.toLowerCase().includes(q))
+      );
+      
       // If this appears to be a direct company question with a denial response, override with company info
-      if ((isAskingAboutCompany && isDenyingCompany) || (context.chatHistory.some(entry => entry.role === 'user' && companyQuestions.some(q => entry.content.toLowerCase().includes(q))) && isDenyingCompany)) {
+      // Define interface for company info
+      interface CompanyInfo {
+        name?: string;
+        description?: string;
+      }
+      
+      if ((isAskingAboutCompany && isDenyingCompany) || (isDirectCompanyQuestion && isDenyingCompany) || 
+          (isDirectCompanyQuestion && aiResponse.toLowerCase().includes("openai"))) {
         console.log("Detected company question with incorrect response - overriding with company information");
-        enhancedResponse = `I work for TechSolutions Inc., a leading provider of AI-powered business automation. We specialize in creating intelligent virtual assistants for businesses of all sizes. Our mission is to help companies streamline their customer interactions and internal processes with cutting-edge AI technology. Is there something specific about our company you'd like to know?`;
+        
+        // Get specific company information from database
+        let companyInfo: CompanyInfo = {};
+        try {
+          const { storage } = await import('../database-storage');
+          const companyData = await storage.getTrainingDataByCategory(1, 'company');
+          
+          if (companyData && companyData.length > 0) {
+            // Found company information in the database
+            companyInfo.name = "TechSolutions Inc.";
+            companyInfo.description = "a leading provider of AI-powered business automation";
+            
+            // Try to extract the actual company name and description
+            const content = companyData[0].content;
+            const nameMatch = content.match(/Our company,\s+([^,\.]+)/i);
+            if (nameMatch && nameMatch[1]) {
+              companyInfo.name = nameMatch[1].trim();
+              console.log(`Extracted company name from training data: ${companyInfo.name}`);
+            }
+            
+            const descMatch = content.match(/is a\s+([^\.]+)/i);
+            if (descMatch && descMatch[1]) {
+              companyInfo.description = descMatch[1].trim();
+              console.log(`Extracted company description from training data: ${companyInfo.description}`);
+            }
+          } else {
+            console.log("No company data found in 'company' category, checking 'business' category");
+            // Try business category as fallback
+            const businessData = await storage.getTrainingDataByCategory(1, 'business');
+            if (businessData && businessData.length > 0) {
+              const content = businessData.find(item => item.content.includes("company name"))?.content;
+              if (content) {
+                const nameMatch = content.match(/company name is\s+([^,\.]+)/i);
+                if (nameMatch && nameMatch[1]) {
+                  companyInfo.name = nameMatch[1].trim();
+                  console.log(`Extracted company name from business category: ${companyInfo.name}`);
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error("Error retrieving company data:", error);
+        }
+        
+        // Use the extracted or default company information for the response
+        enhancedResponse = `I work for ${companyInfo.name || "TechSolutions Inc."}, ${companyInfo.description || "a leading provider of AI-powered business automation"}. We specialize in creating intelligent virtual assistants for businesses of all sizes. Our mission is to help companies streamline their customer interactions and internal processes with cutting-edge AI technology. Is there something specific about our company you'd like to know?`;
+        
+        console.log(`Company response override: Using company name: ${companyInfo.name || "TechSolutions Inc."}`);
       }
       
       // Check for phrases indicating the AI is deflecting tasks it should perform
