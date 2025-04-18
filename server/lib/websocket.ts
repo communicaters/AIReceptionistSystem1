@@ -368,24 +368,34 @@ async function handleChatMessage(clientId: string, message: string) {
     const phone = phoneMatches ? phoneMatches[0] : null;
     const name = nameMatches ? nameMatches[1] : null;
     
-    // Find or create a user profile based on session ID
-    // We use this for tracking purposes since we might not have real contact info yet
-    const sessionProfile = await userProfileManager.findOrCreateProfile({
-      userId,
-      sessionId, // We use the session ID as a temporary identifier
-      channel: 'livechat'
-    });
-
-    // If we found user information in this message, update the profile
-    let profileUpdated = false;
-    if (sessionProfile) {
-      const updates: any = {};
-      
-      if (email && !sessionProfile.email) {
-        updates.email = email;
-        profileUpdated = true;
+    // Check if the user has provided an email that already exists in the system
+    let existingProfile = null;
+    if (email) {
+      try {
+        existingProfile = await storage.getUserProfileByEmail(email);
+        if (existingProfile) {
+          console.log(`Found existing profile with email ${email}, profile ID: ${existingProfile.id}`);
+        }
+      } catch (error) {
+        console.error("Error checking for existing profile by email:", error);
       }
+    }
+    
+    // If we've found a profile with the provided email, use that profile
+    let sessionProfile;
+    if (existingProfile) {
+      sessionProfile = existingProfile;
       
+      // Update the session profile with any new information
+      const updates: any = {};
+      let profileUpdated = false;
+      
+      // Update lastSeen and lastInteractionSource
+      updates.lastSeen = new Date();
+      updates.lastInteractionSource = 'livechat';
+      profileUpdated = true;
+      
+      // Update with any new information from this message
       if (phone && !sessionProfile.phone) {
         updates.phone = phone;
         profileUpdated = true;
@@ -398,10 +408,63 @@ async function handleChatMessage(clientId: string, message: string) {
       
       if (profileUpdated) {
         await userProfileManager.updateProfile(sessionProfile.id, updates);
-        console.log(`Updated profile for session ${sessionId} with extracted information`);
+        console.log(`Updated existing profile ${sessionProfile.id} with new information from chat`);
       }
+    } else {
+      // Find or create a user profile based on session ID
+      // We use this for tracking purposes since we might not have real contact info yet
+      sessionProfile = await userProfileManager.findOrCreateProfile({
+        userId,
+        sessionId, // We use the session ID as a temporary identifier
+        channel: 'livechat'
+      });
       
-      // Record this incoming message as an interaction
+      // If we found user information in this message, update the profile
+      let profileUpdated = false;
+      if (sessionProfile) {
+        const updates: any = {};
+        
+        if (email && !sessionProfile.email) {
+          updates.email = email;
+          profileUpdated = true;
+        }
+        
+        if (phone && !sessionProfile.phone) {
+          updates.phone = phone;
+          profileUpdated = true;
+        }
+        
+        if (name && !sessionProfile.name) {
+          updates.name = name;
+          profileUpdated = true;
+        }
+        
+        if (profileUpdated) {
+          try {
+            await userProfileManager.updateProfile(sessionProfile.id, updates);
+            console.log(`Updated profile for session ${sessionId} with extracted information`);
+          } catch (error) {
+            console.error("Error updating profile with extracted information:", error);
+            // If we get a duplicate key error, it's likely the email already exists
+            // Let's try to find the profile with that email and use it instead
+            if (email && error.toString().includes('duplicate key value')) {
+              try {
+                const emailProfile = await storage.getUserProfileByEmail(email);
+                if (emailProfile) {
+                  sessionProfile = emailProfile;
+                  console.log(`Switched to existing profile with email ${email}, profile ID: ${emailProfile.id}`);
+                }
+              } catch (innerError) {
+                console.error("Error finding profile by email after duplicate key error:", innerError);
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    // Record this incoming message as an interaction
+    if (sessionProfile) {
       await userProfileManager.recordInteraction(
         sessionProfile.id,
         'livechat',
