@@ -51,12 +51,43 @@ export class UserProfileAssistant {
   }> {
     console.log(`Processing ${channel} message from ${contactIdentifier}`);
     
-    // Step 1: Get or create user profile based on the contact info
+    // First, check if the message contains an email address or phone number
+    // We do this first before any other lookups to see if we have additional identifiers
+    const extractedInfo = this.extractUserInfoFromMessage(messageContent);
     let profile: UserProfileData | undefined;
     let profileId = existingProfileId;
     let newInfoExtracted = false;
     
-    if (!profileId) {
+    // Step 1: Try to find a profile by any extracted email or phone before going further
+    if (extractedInfo.email) {
+      try {
+        const emailProfile = await userProfileManager.findProfileByEmail(extractedInfo.email);
+        if (emailProfile) {
+          console.log(`Found existing profile with email ${extractedInfo.email}, profile ID: ${emailProfile.id}`);
+          profile = emailProfile;
+          profileId = emailProfile.id;
+        }
+      } catch (error) {
+        console.error("Error finding profile by extracted email:", error);
+      }
+    }
+    
+    // If we didn't find a profile by email, try phone
+    if (!profile && extractedInfo.phone) {
+      try {
+        const phoneProfile = await userProfileManager.findProfileByPhone(extractedInfo.phone);
+        if (phoneProfile) {
+          console.log(`Found existing profile with phone ${extractedInfo.phone}, profile ID: ${phoneProfile.id}`);
+          profile = phoneProfile;
+          profileId = phoneProfile.id;
+        }
+      } catch (error) {
+        console.error("Error finding profile by extracted phone:", error);
+      }
+    }
+    
+    // If we still don't have a profile and we don't have an existing profile ID, continue with the regular lookup
+    if (!profile && !profileId) {
       // Try to find user profile based on channel and contact identifier
       if (channel === 'whatsapp' || channel === 'call') {
         // Remove any spaces, dashes, or formatting from phone numbers
@@ -83,13 +114,63 @@ export class UserProfileAssistant {
           createData.email = contactIdentifier;
         }
         
-        profile = await userProfileManager.createProfile(createData);
-        console.log(`Created new profile with ID ${profile.id} for ${contactIdentifier}`);
+        // Also add any extracted information we have
+        if (extractedInfo.name) createData.name = extractedInfo.name;
+        if (extractedInfo.email && !createData.email) createData.email = extractedInfo.email;
+        if (extractedInfo.phone && !createData.phone) createData.phone = extractedInfo.phone;
+        
+        try {
+          profile = await userProfileManager.createProfile(createData);
+          console.log(`Created new profile with ID ${profile.id} for ${contactIdentifier}`);
+          newInfoExtracted = true;
+        } catch (error) {
+          console.error("Error creating profile:", error);
+          
+          // If we get a duplicate key error, it's likely a unique constraint violation
+          // Try to find the profile with the email or phone we tried to use
+          if (error.toString().includes('duplicate key value')) {
+            if (createData.email) {
+              try {
+                profile = await userProfileManager.findProfileByEmail(createData.email);
+                if (profile) {
+                  console.log(`Found existing profile with email ${createData.email} after duplicate key error`);
+                }
+              } catch (innerError) {
+                console.error("Error finding profile by email after duplicate key error:", innerError);
+              }
+            } else if (createData.phone) {
+              try {
+                profile = await userProfileManager.findProfileByPhone(createData.phone);
+                if (profile) {
+                  console.log(`Found existing profile with phone ${createData.phone} after duplicate key error`);
+                }
+              } catch (innerError) {
+                console.error("Error finding profile by phone after duplicate key error:", innerError);
+              }
+            }
+            
+            // If we still don't have a profile, create one without the conflicting fields
+            if (!profile) {
+              delete createData.email;
+              delete createData.phone;
+              
+              try {
+                profile = await userProfileManager.createProfile(createData);
+                console.log(`Created new profile without contact info with ID ${profile.id}`);
+              } catch (createError) {
+                console.error("Error creating fallback profile:", createError);
+                throw new Error("Unable to create or find a user profile");
+              }
+            }
+          } else {
+            throw error; // Re-throw if it's not a duplicate key error
+          }
+        }
       }
       
       profileId = profile.id;
-    } else {
-      // Load the profile using the provided ID
+    } else if (profileId && !profile) {
+      // Load the profile using the provided ID if we have a profileId but no profile object
       profile = await userProfileManager.getProfile(profileId);
       if (!profile) {
         throw new Error(`Invalid profile ID: ${profileId}`);
@@ -113,8 +194,8 @@ export class UserProfileAssistant {
       content: messageContent
     });
     
-    // Step 3: Extract any new information from the message
-    const extractedInfo = this.extractUserInfoFromMessage(messageContent);
+    // Step 3: Update profile with extracted information if needed
+    // We already extracted the info earlier, so reuse that
     const updatedProfile = {...profile};
     let infoChanged = false;
     
@@ -138,9 +219,18 @@ export class UserProfileAssistant {
     
     // Update profile if new info was found
     if (infoChanged) {
-      await userProfileManager.updateProfile(profileId, updatedProfile);
-      profile = await userProfileManager.getProfile(profileId);
-      console.log(`Updated profile ${profileId} with new information`);
+      try {
+        await userProfileManager.updateProfile(profileId, updatedProfile);
+        const updatedProfileData = await userProfileManager.getProfile(profileId);
+        if (updatedProfileData) {
+          profile = updatedProfileData;
+          console.log(`Updated profile ${profileId} with new information`);
+        } else {
+          console.error(`Failed to retrieve updated profile for ID ${profileId}`);
+        }
+      } catch (error) {
+        console.error(`Error updating profile ${profileId}:`, error);
+      }
     }
     
     // Step 4: Determine which information is still missing
