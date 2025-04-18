@@ -1048,6 +1048,160 @@ export class DatabaseStorage implements IStorage {
     await db.delete(scheduledEmails).where(eq(scheduledEmails.id, id));
     return true;
   }
+
+  // User Profile Data
+  async getUserProfile(id: number): Promise<UserProfileData | undefined> {
+    const result = await db.select().from(userProfileData).where(eq(userProfileData.id, id));
+    return result[0];
+  }
+
+  async getUserProfileByEmail(email: string): Promise<UserProfileData | undefined> {
+    const result = await db.select().from(userProfileData).where(eq(userProfileData.email, email));
+    return result[0];
+  }
+
+  async getUserProfileByPhone(phone: string): Promise<UserProfileData | undefined> {
+    const result = await db.select().from(userProfileData).where(eq(userProfileData.phone, phone));
+    return result[0];
+  }
+
+  async getUserProfilesByUserId(userId: number): Promise<UserProfileData[]> {
+    return await db.select().from(userProfileData)
+      .where(eq(userProfileData.userId, userId))
+      .orderBy(desc(userProfileData.lastSeen));
+  }
+
+  async createUserProfile(profile: InsertUserProfileData): Promise<UserProfileData> {
+    const now = new Date();
+    const result = await db.insert(userProfileData).values({
+      ...profile,
+      createdAt: now,
+      updatedAt: now
+    }).returning();
+    return result[0];
+  }
+
+  async updateUserProfile(id: number, profile: Partial<InsertUserProfileData>): Promise<UserProfileData | undefined> {
+    const result = await db.update(userProfileData)
+      .set({
+        ...profile,
+        updatedAt: new Date()
+      })
+      .where(eq(userProfileData.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async mergeUserProfiles(sourceId: number, targetId: number): Promise<UserProfileData> {
+    // First, get both profiles
+    const [sourceProfile, targetProfile] = await Promise.all([
+      this.getUserProfile(sourceId),
+      this.getUserProfile(targetId)
+    ]);
+
+    if (!sourceProfile || !targetProfile) {
+      throw new Error('One or both profiles not found');
+    }
+
+    // Update all interactions from source to target
+    await db.update(userInteractions)
+      .set({ userProfileId: targetId })
+      .where(eq(userInteractions.userProfileId, sourceId));
+
+    // Merge metadata if it exists
+    let mergedMetadata = targetProfile.metadata || {};
+    if (sourceProfile.metadata) {
+      mergedMetadata = { ...mergedMetadata, ...sourceProfile.metadata };
+    }
+
+    // Update the target profile with any non-null values from source profile
+    const updateData: Partial<InsertUserProfileData> = {};
+    
+    // Only update if target fields are empty or null
+    if (!targetProfile.name && sourceProfile.name) updateData.name = sourceProfile.name;
+    if (!targetProfile.phone && sourceProfile.phone) updateData.phone = sourceProfile.phone;
+    
+    // Always keep the most recent data
+    updateData.metadata = mergedMetadata;
+    
+    // Use the most recent lastSeen date
+    if (sourceProfile.lastSeen && (!targetProfile.lastSeen || sourceProfile.lastSeen > targetProfile.lastSeen)) {
+      updateData.lastSeen = sourceProfile.lastSeen;
+    }
+
+    // Update the target profile
+    const updatedProfile = await this.updateUserProfile(targetId, updateData);
+
+    // Delete the source profile
+    await db.delete(userProfileData).where(eq(userProfileData.id, sourceId));
+
+    return updatedProfile!;
+  }
+
+  async deleteUserProfile(id: number): Promise<boolean> {
+    await db.delete(userProfileData).where(eq(userProfileData.id, id));
+    return true;
+  }
+
+  // User Interactions
+  async getUserInteraction(id: number): Promise<UserInteraction | undefined> {
+    const result = await db.select().from(userInteractions).where(eq(userInteractions.id, id));
+    return result[0];
+  }
+
+  async getUserInteractionsByProfileId(userProfileId: number, limit?: number): Promise<UserInteraction[]> {
+    let query = db.select().from(userInteractions)
+      .where(eq(userInteractions.userProfileId, userProfileId))
+      .orderBy(desc(userInteractions.timestamp));
+    
+    if (limit) {
+      query = query.limit(limit);
+    }
+    
+    return await query;
+  }
+
+  async getUserInteractionsBySource(userProfileId: number, source: string, limit?: number): Promise<UserInteraction[]> {
+    let query = db.select().from(userInteractions)
+      .where(and(
+        eq(userInteractions.userProfileId, userProfileId),
+        eq(userInteractions.interactionSource, source)
+      ))
+      .orderBy(desc(userInteractions.timestamp));
+    
+    if (limit) {
+      query = query.limit(limit);
+    }
+    
+    return await query;
+  }
+
+  async getRecentUserInteractions(limit: number = 50): Promise<UserInteraction[]> {
+    return await db.select().from(userInteractions)
+      .orderBy(desc(userInteractions.timestamp))
+      .limit(limit);
+  }
+
+  async createUserInteraction(interaction: InsertUserInteraction): Promise<UserInteraction> {
+    const result = await db.insert(userInteractions).values({
+      ...interaction,
+      timestamp: new Date()
+    }).returning();
+    return result[0];
+  }
+
+  async updateUserInteraction(id: number, interaction: Partial<InsertUserInteraction>): Promise<UserInteraction | undefined> {
+    const result = await db.update(userInteractions)
+      .set(interaction)
+      .where(eq(userInteractions.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteUserInteraction(id: number): Promise<boolean> {
+    await db.delete(userInteractions).where(eq(userInteractions.id, id));
+    return true;
+  }
 }
 
 // Export a singleton instance of DatabaseStorage for global use
