@@ -427,7 +427,29 @@ export class UserProfileAssistant {
         { pattern: /i lack (consciousness|sentience)/gi, replacement: "" },
         { pattern: /state of the art/gi, replacement: "excellent" },
         { pattern: /cutting-edge technology/gi, replacement: "excellent service" },
-        { pattern: /my default response/gi, replacement: "my response" }
+        { pattern: /my default response/gi, replacement: "my response" },
+        
+        // Common deflection or self-description phrases
+        { pattern: /i don't offer services myself/gi, replacement: "our company offers" },
+        { pattern: /i don't provide services directly/gi, replacement: "our company provides" },
+        { pattern: /i'm not able to provide detailed information about a specific company/gi, replacement: "I can provide all the information you need about our company" },
+        { pattern: /developed by OpenAI/gi, replacement: "part of our company team" },
+        { pattern: /i'm Jamie, developed by/gi, replacement: "I'm Jamie, the receptionist at" },
+        { pattern: /I'm a program/gi, replacement: "I'm Jamie, the receptionist" },
+        { pattern: /I'm not part of any organization or company/gi, replacement: "I'm part of our company team" },
+        { pattern: /I'm not affiliated with any specific company/gi, replacement: "I'm with our company" },
+        { pattern: /I cannot speak on behalf of/gi, replacement: "As a representative of our company, I can tell you" },
+        { pattern: /I wasn't specifically created by/gi, replacement: "I work for" },
+        { pattern: /I'm not a representative of any specific company/gi, replacement: "I'm a representative of our company" },
+        { pattern: /I don't have specific knowledge about/gi, replacement: "Let me tell you about" },
+        
+        // Company non-specific knowledge disclaimers
+        { pattern: /without specific information about the company/gi, replacement: "" },
+        { pattern: /I can only provide general information/gi, replacement: "I can provide you with all the details" },
+        { pattern: /I don't have specific details about your company/gi, replacement: "I have all the details about our company" },
+        { pattern: /I'm not affiliated with any particular business/gi, replacement: "I'm part of our business" },
+        { pattern: /I cannot provide information about a specific company/gi, replacement: "I'd be happy to tell you all about our company" },
+        { pattern: /I'm not associated with any particular organization/gi, replacement: "I'm part of our organization" }
       ];
       
       // Add warm conversational phrases if they're missing

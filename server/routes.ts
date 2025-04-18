@@ -2907,7 +2907,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 
               console.log(`Using ${messageHistory.length} messages for context history`);
               
-              // Create a system prompt based on training data
+              // Use the unified system prompt and user profile assistant for consistent behavior
+              // Import the UserProfileAssistant
+              const { getUserProfileAssistant } = await import('./lib/user-profile-assistant');
+              const userProfileAssistant = getUserProfileAssistant();
+              
+              console.log(`Using unified prompt system for WhatsApp with phone number ${phoneNumber}`);
+              
+              // Use the user profile assistant to generate a response that considers the profile
+              try {
+                const { response: aiReplyText, profileId } = await userProfileAssistant.generateResponse(
+                  userId,
+                  phoneNumber,
+                  messageText,
+                  'whatsapp'
+                );
+                
+                console.log(`Generated AI response with unified system prompt. Response length: ${aiReplyText.length}`);
+                
+                // We now have the AI response text, so create a log for it and send it back
+                // Create a log entry for the outbound message
+                const responseLogs = await storage.createWhatsappLog({
+                  userId,
+                  phoneNumber,
+                  message: aiReplyText,
+                  direction: "outbound",
+                  timestamp: new Date(),
+                  status: 'pending'
+                });
+                
+                // Check which provider to use for sending the message
+                if (config.provider === 'zender') {
+                  // Use Zender service for sending message
+                  const zenderService = getZenderService(userId);
+                  await zenderService.initialize();
+                  
+                  // Send message via Zender
+                  const result = await zenderService.sendMessage({
+                    recipient: phoneNumber,
+                    message: aiReplyText,
+                    type: 'text',
+                    logId: responseLogs.id
+                  });
+                  
+                  if (result.success) {
+                    console.log(`Auto-response sent successfully via Zender to ${phoneNumber}`);
+                    await storage.updateWhatsappLog(responseLogs.id, { 
+                      status: 'sent',
+                      externalId: result.messageId
+                    });
+                  } else {
+                    console.error(`Failed to send auto-response via Zender: ${result.error}`);
+                  }
+                } else {
+                  // Use Facebook WhatsApp API
+                  const facebookService = getFacebookWhatsappService(userId);
+                  await facebookService.initialize();
+                  
+                  // Send message via Facebook
+                  const result = await facebookService.sendMessage({
+                    recipient: phoneNumber,
+                    message: aiReplyText
+                  });
+                  
+                  if (result.success) {
+                    console.log(`Auto-response sent successfully via Facebook to ${phoneNumber}`);
+                    await storage.updateWhatsappLog(responseLogs.id, { 
+                      status: 'sent',
+                      externalId: result.messageId
+                    });
+                  } else {
+                    console.error(`Failed to send auto-response via Facebook: ${result.error}`);
+                  }
+                }
+                
+                return;
+              } catch (profileError) {
+                console.error("Error using unified profile assistant for WhatsApp:", profileError);
+                // Continue with legacy implementation as fallback if unified system fails
+              }
+              
+              // LEGACY FALLBACK - Only used if the unified system above fails
+              console.log("FALLING BACK to legacy WhatsApp handling system");
               const trainingData = await storage.getTrainingDataByCategory(userId, 'whatsapp');
               let systemPrompt = "You are an AI assistant for a business. Be helpful, concise, and professional.";
               
