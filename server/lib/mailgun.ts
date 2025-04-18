@@ -93,13 +93,28 @@ export async function sendEmail(params: EmailParams, userId: number = 1): Promis
     }
     
     // Configure email message
-    const messageData = {
+    const messageData: any = {
       from: params.fromName ? `${params.fromName} <${params.from || fromEmail}>` : (params.from || fromEmail),
       to: params.to,
       subject: params.subject,
       text: params.text,
       html: params.html
     };
+    
+    // Add headers if provided
+    if (params.headers && Object.keys(params.headers).length > 0) {
+      messageData['h:X-AI-Receptionist'] = 'true';
+      
+      // Add all other headers with h: prefix (Mailgun-specific requirement)
+      Object.keys(params.headers).forEach((headerKey: string) => {
+        if (headerKey !== 'X-AI-Receptionist') {
+          messageData[`h:${headerKey}`] = params.headers?.[headerKey];
+        }
+      });
+    } else {
+      // Always include AI system identifier header (for loop detection)
+      messageData['h:X-AI-Receptionist'] = 'true';
+    }
     
     // Send email
     await client.messages.create(domain, messageData);
@@ -199,12 +214,17 @@ export async function autoRespondToEmail(incomingEmail: {
       ? incomingEmail.subject 
       : `Re: ${incomingEmail.subject}`;
     
-    // Send the auto-response
+    // Send the auto-response with appropriate headers
     return await sendEmail({
       to: incomingEmail.from,
       from: mailgunConfig.fromEmail,
       subject: responseSubject,
       text: responseBody,
+      headers: {
+        'X-AI-Receptionist': 'true',
+        'X-Auto-Reply': 'true'
+      },
+      isAutomatedReply: true
     }, userId);
     
   } catch (error) {

@@ -62,13 +62,31 @@ export async function sendEmail(params: EmailParams): Promise<boolean> {
     const client = await getSendgridClient();
     const userId = 1; // For demo purposes
     
-    await client.send({
+    // Prepare message object
+    const message: any = {
       to: params.to,
       from: params.fromName ? { email: params.from, name: params.fromName } : params.from,
       subject: params.subject,
       text: params.text,
       html: params.html,
-    });
+    };
+    
+    // Add headers if provided
+    if (params.headers && Object.keys(params.headers).length > 0) {
+      message.headers = params.headers;
+    }
+    
+    // Always include AI system identifier header (for loop detection)
+    if (!message.headers) {
+      message.headers = {};
+    }
+    
+    if (!message.headers['X-AI-Receptionist']) {
+      message.headers['X-AI-Receptionist'] = 'true';
+    }
+    
+    // Send the email
+    await client.send(message);
     
     // Log the sent email
     await storage.createEmailLog({
@@ -164,13 +182,18 @@ export async function autoRespondToEmail(incomingEmail: {
       ? incomingEmail.subject 
       : `Re: ${incomingEmail.subject}`;
     
-    // Send the auto-response
+    // Send the auto-response with appropriate headers
     return await sendEmail({
       to: incomingEmail.from,
       from: sendgridConfig.fromEmail,
       fromName: sendgridConfig.fromName,
       subject: responseSubject,
       text: responseBody,
+      headers: {
+        'X-AI-Receptionist': 'true',
+        'X-Auto-Reply': 'true'
+      },
+      isAutomatedReply: true
     });
     
   } catch (error) {

@@ -192,12 +192,17 @@ export async function autoRespondToEmail(incomingEmail: {
       ? incomingEmail.subject 
       : `Re: ${incomingEmail.subject}`;
     
-    // Send the auto-response
+    // Send the auto-response with appropriate headers
     return await sendEmail({
       to: incomingEmail.from,
       from: smtpConfig.fromEmail,
       subject: responseSubject,
       text: responseBody,
+      headers: {
+        'X-AI-Receptionist': 'true',
+        'X-Auto-Reply': 'true'
+      },
+      isAutomatedReply: true
     }, userId);
     
   } catch (error) {
