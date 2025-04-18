@@ -4632,6 +4632,56 @@ AI Receptionist
       apiResponse(res, { error: "Failed to create training data" }, 500);
     }
   });
+  
+  // Update training data
+  app.patch("/api/training/data/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return apiResponse(res, { error: "Invalid training data ID" }, 400);
+      }
+      
+      // Ensure the data object is properly formatted
+      if (!req.body || (typeof req.body !== 'object')) {
+        return apiResponse(res, { error: "Invalid request data format" }, 400);
+      }
+      
+      const trainingData = await storage.updateTrainingData(id, req.body);
+      if (!trainingData) {
+        return apiResponse(res, { error: "Training data not found" }, 404);
+      }
+      
+      apiResponse(res, trainingData);
+    } catch (error) {
+      console.error("Error updating training data:", error);
+      apiResponse(res, { error: "Failed to update training data" }, 500);
+    }
+  });
+  
+  // Alternative PUT endpoint for training data
+  app.put("/api/training/data/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return apiResponse(res, { error: "Invalid training data ID" }, 400);
+      }
+      
+      // Ensure the data object is properly formatted
+      if (!req.body || (typeof req.body !== 'object')) {
+        return apiResponse(res, { error: "Invalid request data format" }, 400);
+      }
+      
+      const trainingData = await storage.updateTrainingData(id, req.body);
+      if (!trainingData) {
+        return apiResponse(res, { error: "Training data not found" }, 404);
+      }
+      
+      apiResponse(res, trainingData);
+    } catch (error) {
+      console.error("Error updating training data:", error);
+      apiResponse(res, { error: "Failed to update training data" }, 500);
+    }
+  });
 
   app.get("/api/training/intents", async (req, res) => {
     try {
@@ -4662,7 +4712,46 @@ AI Receptionist
         return apiResponse(res, { error: "Invalid intent ID" }, 400);
       }
       
-      const intent = await storage.updateIntent(id, req.body.data);
+      // Ensure the data object is properly formatted
+      let updateData = req.body;
+      if (req.body && req.body.data) {
+        updateData = req.body.data;
+      }
+      
+      // Logging for debugging
+      console.log("Update intent request:", {
+        id,
+        requestBody: req.body,
+        updateData
+      });
+      
+      const intent = await storage.updateIntent(id, updateData);
+      if (!intent) {
+        return apiResponse(res, { error: "Intent not found" }, 404);
+      }
+      
+      apiResponse(res, intent);
+    } catch (error) {
+      console.error("Error updating intent:", error);
+      apiResponse(res, { error: "Failed to update intent" }, 500);
+    }
+  });
+  
+  // Add PATCH endpoint for intents as well
+  app.patch("/api/training/intents/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return apiResponse(res, { error: "Invalid intent ID" }, 400);
+      }
+      
+      // Ensure the data object is properly formatted
+      let updateData = req.body;
+      if (req.body && req.body.data) {
+        updateData = req.body.data;
+      }
+      
+      const intent = await storage.updateIntent(id, updateData);
       if (!intent) {
         return apiResponse(res, { error: "Intent not found" }, 404);
       }
