@@ -1,11 +1,9 @@
 import WebSocket from 'ws';
 
-console.log('WebSocket Test - Testing AI Receptionist Chat');
+console.log('WebSocket Test - Testing AI Receptionist Chat with Pagination');
 
-// Get the hostname from the replit environment
-const hostname = process.env.REPL_SLUG ? `${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co` : 'localhost:5000';
-const wsProtocol = hostname.includes('repl.co') ? 'wss' : 'ws';
-const wsUrl = `${wsProtocol}://${hostname}/ws`;
+// Use direct localhost connection for testing
+const wsUrl = 'ws://localhost:5000/ws';
 
 console.log(`Connecting to WebSocket at ${wsUrl}`);
 
@@ -16,10 +14,11 @@ ws.on('open', function open() {
   
   // Wait for welcome message
   setTimeout(() => {
-    console.log('Sending chat message...');
+    console.log('Requesting active sessions with pagination...');
     ws.send(JSON.stringify({
-      type: 'chat',
-      message: 'Hello, I would like to know about your company.'
+      type: 'get_active_sessions',
+      page: 1,
+      pageSize: 10
     }));
   }, 1000);
 });
@@ -29,18 +28,11 @@ ws.on('message', function incoming(data) {
     const message = JSON.parse(data);
     console.log('Received:', message.type);
     
-    if (message.type === 'chat') {
-      console.log('Response:', message.message);
+    if (message.type === 'active_sessions') {
+      console.log('Sessions:', message.sessions);
+      console.log('Pagination:', message.pagination);
       
-      // Close connection after receiving a chat response
-      setTimeout(() => {
-        console.log('Test complete, closing connection');
-        ws.close();
-      }, 1000);
-    } else if (message.type === 'welcome') {
-      console.log('Welcome message received, session ID:', message.sessionId);
-      
-      // Send user info after welcome
+      // After receiving sessions, test the user info form
       setTimeout(() => {
         console.log('Sending user info...');
         ws.send(JSON.stringify({
@@ -52,8 +44,27 @@ ws.on('message', function incoming(data) {
           }
         }));
       }, 500);
+    } else if (message.type === 'welcome') {
+      console.log('Welcome message received, session ID:', message.sessionId);
     } else if (message.type === 'user_info_ack') {
       console.log('User info acknowledged, updated:', message.updated);
+      
+      // Send a chat message
+      setTimeout(() => {
+        console.log('Sending chat message...');
+        ws.send(JSON.stringify({
+          type: 'chat',
+          message: 'Hello, I would like to know about your company.'
+        }));
+      }, 500);
+    } else if (message.type === 'chat') {
+      console.log('Chat response:', message.message);
+      
+      // Test is complete, close connection
+      setTimeout(() => {
+        console.log('Test complete, closing connection');
+        ws.close();
+      }, 1000);
     }
   } catch (e) {
     console.error('Error parsing message:', e);

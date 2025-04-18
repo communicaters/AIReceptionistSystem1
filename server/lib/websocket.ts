@@ -115,7 +115,10 @@ export function setupWebsocketHandlers(wss: WebSocketServer) {
             break;
             
           case 'get_active_sessions':
-            sendActiveSessions(ws);
+            // Handle pagination parameters if provided
+            const page = message.page ? parseInt(message.page, 10) : 1;
+            const pageSize = message.pageSize ? parseInt(message.pageSize, 10) : 10;
+            sendActiveSessions(ws, page, pageSize);
             break;
             
           default:
@@ -249,12 +252,13 @@ function broadcastActiveSessions() {
 }
 
 /**
- * Send active sessions to a specific client
+ * Send active sessions to a specific client with pagination support
+ * page starts at 1, pageSize defaults to 10
  */
-function sendActiveSessions(ws: WebSocket) {
+function sendActiveSessions(ws: WebSocket, page: number = 1, pageSize: number = 10) {
   try {
     // Convert the connected clients map to an array of session data
-    const sessions = Array.from(connectedClients.entries()).map(([clientId, client]) => {
+    const allSessions = Array.from(connectedClients.entries()).map(([clientId, client]) => {
       return {
         id: clientId,
         userId: client.userId,
@@ -264,10 +268,33 @@ function sendActiveSessions(ws: WebSocket) {
       };
     });
     
-    // Send the active sessions to the client
+    // Sort sessions by lastActive (most recent first)
+    allSessions.sort((a, b) => 
+      new Date(b.lastActive).getTime() - new Date(a.lastActive).getTime()
+    );
+    
+    // Calculate pagination values
+    const totalSessions = allSessions.length;
+    const totalPages = Math.ceil(totalSessions / pageSize);
+    const safePageNum = Math.max(1, Math.min(page, totalPages || 1));
+    const startIndex = (safePageNum - 1) * pageSize;
+    const endIndex = Math.min(startIndex + pageSize, totalSessions);
+    
+    // Get the current page of sessions
+    const sessions = allSessions.slice(startIndex, endIndex);
+    
+    // Send the paginated active sessions to the client
     sendToClient(ws, {
       type: 'active_sessions',
       sessions,
+      pagination: {
+        page: safePageNum,
+        pageSize,
+        totalPages,
+        totalSessions,
+        hasNextPage: safePageNum < totalPages,
+        hasPreviousPage: safePageNum > 1
+      },
       timestamp: new Date().toISOString()
     });
   } catch (error) {
