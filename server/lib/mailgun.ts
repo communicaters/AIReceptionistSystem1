@@ -195,37 +195,75 @@ export async function autoRespondToEmail(incomingEmail: {
       throw new Error("Mailgun configuration not found");
     }
     
-    // Generate AI response using chat completion
-    const aiResponse = await createChatCompletion([
-      { 
-        role: "system", 
-        content: "You are an AI Receptionist responding to an email. Respond professionally and helpfully."
-      },
-      { 
-        role: "user", 
-        content: `Subject: ${incomingEmail.subject}\n\nBody: ${incomingEmail.body}`
-      }
-    ]);
+    // Generate AI response using the unified agent with user profile handling
+    try {
+      // Import the email unified handler for processing with consistent behavior
+      const { processEmailWithUnifiedProfile } = await import('./email-unified-handler');
+      
+      // Process via unified handler to ensure company name consistency
+      const result = await processEmailWithUnifiedProfile({
+        from: incomingEmail.from,
+        subject: incomingEmail.subject,
+        body: incomingEmail.body
+      }, userId);
+      
+      // Use the AI-generated response from the unified handler
+      const responseBody = result.response;
+      console.log(`Generated company-specific email response using unified profile system`);
+      
+      // Prepare response subject line
+      const responseSubject = incomingEmail.subject.startsWith("Re:") 
+        ? incomingEmail.subject 
+        : `Re: ${incomingEmail.subject}`;
+        
+      // Send the auto-response with appropriate headers
+      return await sendEmail({
+        to: incomingEmail.from,
+        from: mailgunConfig.fromEmail,
+        subject: responseSubject,
+        text: responseBody,
+        headers: {
+          'X-AI-Receptionist': 'true',
+          'X-Auto-Reply': 'true'
+        },
+        isAutomatedReply: true
+      }, userId);
+      
+    } catch (processingError) {
+      console.error("Error using unified profile processor:", processingError);
+      
+      // Fallback to direct chat completion if unified system fails
+      const aiResponse = await createChatCompletion([
+        { 
+          role: "system", 
+          content: "You are a receptionist at TechSolutions Inc. responding to an email. IMPORTANT: Your company name is TechSolutions Inc. Always introduce yourself as Jamie, a human receptionist. Respond warmly and professionally."
+        },
+        { 
+          role: "user", 
+          content: `Subject: ${incomingEmail.subject}\n\nBody: ${incomingEmail.body}`
+        }
+      ]);
+      
+      const responseBody = aiResponse.success ? aiResponse.content : "Thank you for your email. Our team at TechSolutions Inc. will get back to you shortly.";
     
-    const responseBody = aiResponse.success ? aiResponse.content : "Thank you for your email. We'll get back to you shortly.";
+      // Prepare response subject line
+      const responseSubject = incomingEmail.subject.startsWith("Re:") 
+        ? incomingEmail.subject 
+        : `Re: ${incomingEmail.subject}`;
     
-    // Prepare response subject line
-    const responseSubject = incomingEmail.subject.startsWith("Re:") 
-      ? incomingEmail.subject 
-      : `Re: ${incomingEmail.subject}`;
-    
-    // Send the auto-response with appropriate headers
-    return await sendEmail({
-      to: incomingEmail.from,
-      from: mailgunConfig.fromEmail,
-      subject: responseSubject,
-      text: responseBody,
-      headers: {
-        'X-AI-Receptionist': 'true',
-        'X-Auto-Reply': 'true'
-      },
-      isAutomatedReply: true
-    }, userId);
+      // Send the auto-response with appropriate headers
+      return await sendEmail({
+        to: incomingEmail.from,
+        from: mailgunConfig.fromEmail,
+        subject: responseSubject,
+        text: responseBody,
+        headers: {
+          'X-AI-Receptionist': 'true',
+          'X-Auto-Reply': 'true'
+        },
+        isAutomatedReply: true
+      }, userId);
+    }
     
   } catch (error) {
     console.error("Error auto-responding to email via Mailgun:", error);
