@@ -749,49 +749,98 @@ export class ZenderService {
   
   /**
    * Generate an AI response to an incoming message and send it back to the user
+   * Uses UserProfileAssistant for personalized, context-aware responses
    */
   private async generateAndSendAIResponse(phoneNumber: string, incomingMessage: string): Promise<void> {
+    // Use the dedicated profile handler for intelligent response generation
+    try {
+      const { processWhatsappMessageWithProfile } = await import('./whatsapp-profile-handler');
+      const result = await processWhatsappMessageWithProfile(
+        this.userId,
+        phoneNumber,
+        incomingMessage,
+        this
+      );
+      
+      if (!result.success) {
+        console.error(`Error processing WhatsApp message with profile: ${result.error}`);
+      }
+      
+      // Early return since the profile handler handles everything including sending the message
+      return;
+    } catch (error) {
+      console.error('Error importing or using whatsapp-profile-handler:', error);
+      console.log('Falling back to legacy AI response generation...');
+    }
+    
+    // Legacy code below as fallback (will execute only if the profile handler fails)
+    
     try {
       console.log(`Generating AI response to message from ${phoneNumber}: ${incomingMessage.substring(0, 50)}...`);
       
-      // Get training data to include in the prompt
-      const trainingData = await storage.getTrainingDataByUserId(this.userId);
-      const trainingContent = trainingData.map(item => 
-        `${item.category}: ${item.content}`
-      ).join('\n\n');
-      
-      // Get product data to include in the prompt
-      const products = await storage.getProductsByUserId(this.userId);
-      const productContent = products.map(p => 
-        `Product: ${p.name}\nDescription: ${p.description || 'N/A'}\nPrice: $${(p.priceInCents / 100).toFixed(2)}\nSKU: ${p.sku}`
-      ).join('\n\n');
+      // Import the UserProfileAssistant
+      const { getUserProfileAssistant } = await import('./user-profile-assistant');
+      const userProfileAssistant = getUserProfileAssistant();
       
       // Check if this might be a scheduling request by looking for specific scheduling intent keywords
-      // More specific to avoid false positives
       const scheduleKeywords = ['schedule a meeting', 'book a meeting', 'arrange a call', 'set up a meeting', 'book an appointment'];
       const messageHasScheduleKeywords = scheduleKeywords.some(
         keyword => incomingMessage.toLowerCase().includes(keyword.toLowerCase())
       );
       
-      // Check for email addresses in the message
+      // Get or create user profile and generate context-aware response
+      const { response: aiReplyText, profileId } = await userProfileAssistant.generateResponse(
+        this.userId,
+        phoneNumber,
+        incomingMessage,
+        'whatsapp'
+      );
+      
+      // Check for email addresses in the message that might be used for scheduling
       const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
       const emailMatches = incomingMessage.match(emailRegex);
       const attendeeEmail = emailMatches ? emailMatches[0] : null;
       
+      // Initialize the reply but we'll only use the one from OpenAI later
+      // (this is legacy support code)
+      
+      // If an email was found in the message and we have a profile ID, update the profile
+      if (attendeeEmail && profileId) {
+        const userProfile = await userProfileManager.getProfile(profileId);
+        if (userProfile && !userProfile.email) {
+          await userProfileManager.updateProfile(profileId, {
+            email: attendeeEmail
+          });
+          console.log(`Updated user profile ${profileId} with email from message: ${attendeeEmail}`);
+        }
+      }
+
       // Create the base prompt
       let systemPrompt = `You are an AI assistant for a business. Respond to customer inquiries in a helpful, professional manner. 
-Keep responses concise but informative (max 3-4 sentences). Include relevant information about products or services when needed.
+Keep responses concise but informative (max 3-4 sentences).`;
 
-Available products:
-${productContent}
-
-Business information and common responses:
-${trainingContent}
-
-If the customer is asking about pricing, availability, or product details, provide the relevant information from the product catalog.
-If the customer requests a meeting or callback, politely acknowledge this and state someone will contact them soon.
-Be friendly but professional at all times.`;
-
+      // Get training data to include in the prompt
+      const trainingData = await storage.getTrainingDataByUserId(this.userId);
+      if (trainingData.length > 0) {
+        const trainingContent = trainingData.map(item => 
+          `${item.category}: ${item.content}`
+        ).join('\n\n');
+        
+        systemPrompt += `\n\nBusiness information and common responses:
+${trainingContent}`;
+      }
+      
+      // Get product data to include in the prompt
+      const products = await storage.getProductsByUserId(this.userId);
+      if (products.length > 0) {
+        const productContent = products.map(p => 
+          `Product: ${p.name}\nDescription: ${p.description || 'N/A'}\nPrice: $${(p.priceInCents / 100).toFixed(2)}\nSKU: ${p.sku}`
+        ).join('\n\n');
+        
+        systemPrompt += `\n\nAvailable products:
+${productContent}`;
+      }
+      
       // Add scheduling intent detection to system prompt if keywords detected
       if (messageHasScheduleKeywords) {
         systemPrompt += `\n\nThis appears to be a meeting scheduling request. If the user wants to schedule a meeting:
@@ -855,9 +904,9 @@ If this is NOT a meeting scheduling request, respond normally and set is_schedul
         throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`);
       }
       
-      const responseData = await response.json();
-      const aiReplyText = responseData.choices[0].message.content.trim();
-      let replyToUser = aiReplyText;
+      const aiResponseData = await response.json();
+      const legacyAiReplyText = aiResponseData.choices[0].message.content.trim();
+      let replyToUser = legacyAiReplyText;
       
       // If this is a scheduling request, process it
       if (messageHasScheduleKeywords) {
@@ -865,7 +914,7 @@ If this is NOT a meeting scheduling request, respond normally and set is_schedul
           // Try to parse the response as JSON
           let schedulingData;
           try {
-            schedulingData = JSON.parse(aiReplyText);
+            schedulingData = JSON.parse(legacyAiReplyText);
           } catch (jsonError) {
             // If we can't parse as JSON, it's likely a regular text response
             console.log('Response is not in JSON format, treating as regular text');
@@ -936,14 +985,14 @@ If this is NOT a meeting scheduling request, respond normally and set is_schedul
             };
             
             // Directly call scheduleMeeting function (bypassing API authentication)
-            const responseData = await scheduleMeeting(this.userId, meetingRequestData);
+            const meetingResponseData = await scheduleMeeting(this.userId, meetingRequestData);
             
-            console.log('Meeting scheduling response:', JSON.stringify(responseData, null, 2));
+            console.log('Meeting scheduling response:', JSON.stringify(meetingResponseData, null, 2));
             
             // Create a user-friendly response
-            if (responseData.success) {
+            if (meetingResponseData.success) {
               // Get meeting link if available
-              const meetingLink = responseData.meetingLink || "No link available";
+              const meetingLink = meetingResponseData.meetingLink || "No link available";
               
               // Create a user-friendly reply
               replyToUser = `I've scheduled your meeting for ${parsedDateTime.toLocaleString()} with ${schedulingData.email || 'you'}.\n\nSubject: ${schedulingData.subject || 'Meeting from WhatsApp'}\n\nMeeting link: ${meetingLink}`;
@@ -963,7 +1012,7 @@ If this is NOT a meeting scheduling request, respond normally and set is_schedul
               });
             } else {
               // If there was an error, inform the user
-              replyToUser = `I'm sorry, I couldn't schedule your meeting due to an error: ${responseData.error}. Please try again or contact our support team.`;
+              replyToUser = `I'm sorry, I couldn't schedule your meeting due to an error: ${meetingResponseData.error}. Please try again or contact our support team.`;
             }
           }
         } catch (error) {
