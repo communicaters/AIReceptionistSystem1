@@ -187,7 +187,7 @@ async function processUnrepliedEmails() {
           continue;
         }
         
-        // LOOP PREVENTION: Check if this is a system-generated email by checking if sender and recipient are the same
+        // Enhanced LOOP PREVENTION with multiple checks
         // Get sender email configurations
         const sendgridConfig = await storage.getSendgridConfigByUserId(userId);
         const smtpConfig = await storage.getSmtpConfigByUserId(userId);
@@ -200,9 +200,31 @@ async function processUnrepliedEmails() {
           mailgunConfig?.fromEmail
         ].filter(Boolean) as string[];
         
-        // Check if both sender and recipient are system emails (loop detection)
-        if (systemEmails.includes(email.from) && systemEmails.includes(email.to)) {
-          console.log(`LOOP PREVENTION: Detected email loop between ${email.from} and ${email.to}, marking as replied and skipping`);
+        // Check multiple loop conditions
+        const fromIsSystemEmail = systemEmails.some(sysEmail => {
+          // Check if the from email matches any system email (exact or within <> format)
+          if (!sysEmail) return false;
+          const normalizedFrom = email.from.toLowerCase().trim();
+          const normalizedSys = sysEmail.toLowerCase().trim();
+          return normalizedFrom === normalizedSys || 
+                 normalizedFrom.includes(`<${normalizedSys}>`) ||
+                 normalizedFrom.includes(`"${normalizedSys}"`) ||
+                 normalizedFrom.startsWith(normalizedSys);
+        });
+        
+        // Check if email contains auto-reply headers
+        const hasAutoReplyHeader = 
+          email.subject.startsWith('Re:') || 
+          email.subject.startsWith('RE:') ||
+          (email.body && email.body.includes('AI Receptionist')) ||
+          (email.body && email.body.includes('This is an automated response'));
+        
+        // Extended loop detection
+        if (fromIsSystemEmail || 
+            (systemEmails.includes(email.from) && systemEmails.includes(email.to)) ||
+            (email.from === email.to && hasAutoReplyHeader)) {
+          console.log(`LOOP PREVENTION: Detected potential email loop from ${email.from}, marking as replied and skipping`);
+          console.log(`Loop detection details: fromIsSystemEmail=${fromIsSystemEmail}, sameAddresses=${email.from === email.to}, hasAutoReplyHeader=${hasAutoReplyHeader}`);
           
           // Mark as replied to prevent future processing
           await storage.updateEmailLogIsReplied(email.id, true);

@@ -35,8 +35,10 @@ export async function sendEmail(params: EmailParams, service?: EmailService, use
     params.headers = {};
   }
   
-  // Add a unique identifier to mark this as a system-generated email
+  // Add unique identifiers to mark this as a system-generated email and prevent reply loops
   params.headers['X-AI-Receptionist'] = 'true';
+  params.headers['X-Auto-Reply'] = 'true';
+  params.headers['Auto-Submitted'] = 'auto-replied'; // RFC 3834 standard for auto-replies
   
   // Set isAutomatedReply flag
   params.isAutomatedReply = true;
