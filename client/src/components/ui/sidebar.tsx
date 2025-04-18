@@ -19,6 +19,7 @@ import {
   UserCog
 } from "lucide-react";
 import { useAuth } from "@/components/providers/auth-provider";
+import { cn } from "@/lib/utils";
 
 interface SidebarProps {
   isMobileOpen: boolean;
@@ -88,29 +89,31 @@ const Sidebar = ({ isMobileOpen, setIsMobileOpen }: SidebarProps) => {
           Main
         </div>
         <Link href="/">
-          <a
-            className={`flex items-center px-4 py-3 ${
+          <div
+            className={cn(
+              "flex items-center px-4 py-3 cursor-pointer",
               isActive("/")
                 ? "text-white bg-primary hover:bg-primary-dark"
                 : "text-neutral-300 hover:bg-neutral-700"
-            }`}
+            )}
           >
             <Home className="w-5 h-5" />
             <span className="ml-3">Dashboard</span>
-          </a>
+          </div>
         </Link>
 
         <Link href="/settings">
-          <a
-            className={`flex items-center px-4 py-3 ${
+          <div
+            className={cn(
+              "flex items-center px-4 py-3 cursor-pointer",
               isActive("/settings")
                 ? "text-white bg-primary hover:bg-primary-dark"
                 : "text-neutral-300 hover:bg-neutral-700"
-            }`}
+            )}
           >
             <Settings className="w-5 h-5" />
             <span className="ml-3">System Settings</span>
-          </a>
+          </div>
         </Link>
 
         <div className="px-4 py-2 mt-4 text-neutral-400 text-xs uppercase font-semibold">
@@ -118,16 +121,17 @@ const Sidebar = ({ isMobileOpen, setIsMobileOpen }: SidebarProps) => {
         </div>
 
         <Link href="/voice-call">
-          <a
-            className={`flex items-center px-4 py-3 ${
+          <div
+            className={cn(
+              "flex items-center px-4 py-3 cursor-pointer",
               isActive("/voice-call")
                 ? "text-white bg-primary hover:bg-primary-dark"
                 : "text-neutral-300 hover:bg-neutral-700"
-            }`}
+            )}
           >
             <Phone className="w-5 h-5" />
             <span className="ml-3">Voice Call Handling</span>
-          </a>
+          </div>
         </Link>
 
         <Link href="/email-management">

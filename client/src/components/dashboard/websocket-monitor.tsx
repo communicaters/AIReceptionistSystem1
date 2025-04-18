@@ -200,10 +200,10 @@ export function WebSocketMonitor() {
           </div>
           <CardDescription>
             {sessionId ? (
-              <div className="flex items-center gap-1.5">
+              <span className="flex items-center gap-1.5">
                 <Cpu className="h-3.5 w-3.5" />
                 <span className="truncate">Session: {sessionId}</span>
-              </div>
+              </span>
             ) : (
               "No active session"
             )}
