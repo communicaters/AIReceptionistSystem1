@@ -31,12 +31,51 @@ export async function processWhatsappMessageWithProfile(
     const userProfileAssistant = getUserProfileAssistant();
     
     // Generate context-aware response using user profile data
-    const { response: aiReplyText, profileId } = await userProfileAssistant.generateResponse(
-      userId,
-      phoneNumber,
-      incomingMessage,
-      'whatsapp'
-    );
+    console.log(`Calling userProfileAssistant.generateResponse for WhatsApp message from ${phoneNumber}`);
+    
+    let aiReplyText;
+    let profileId;
+    
+    try {
+      const result = await userProfileAssistant.generateResponse(
+        userId,
+        phoneNumber,
+        incomingMessage,
+        'whatsapp'
+      );
+      
+      aiReplyText = result.response;
+      profileId = result.profileId;
+      
+      console.log(`Successfully generated WhatsApp response for ${phoneNumber}, profileId: ${profileId || 'none'}`);
+    } catch (responseError) {
+      console.error(`Error generating WhatsApp response for ${phoneNumber}:`, responseError);
+      // Provide a fallback response
+      aiReplyText = "I'm sorry, I'm having trouble processing your message right now. Please try again in a moment.";
+      
+      // Try to find profile just based on phone number for logging
+      try {
+        const profile = await userProfileManager.findProfileByPhone(phoneNumber);
+        if (profile) {
+          profileId = profile.id;
+          console.log(`Found existing profile by phone for fallback: ${profileId}`);
+        }
+      } catch (profileError) {
+        console.error('Error finding profile by phone for fallback:', profileError);
+      }
+      
+      // Log error for debugging
+      await storage.createSystemActivity({
+        module: 'WhatsApp',
+        event: 'Message Processing Error',
+        status: 'Error',
+        timestamp: new Date(),
+        details: { 
+          phoneNumber,
+          error: responseError instanceof Error ? responseError.message : String(responseError)
+        }
+      });
+    }
     
     if (!profileId) {
       console.error(`Failed to get profile ID for ${phoneNumber}`);

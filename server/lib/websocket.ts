@@ -1,341 +1,434 @@
-import { WebSocketServer, WebSocket } from 'ws';
-import { storage } from '../storage';
-import { pool } from '../db';
-import { createChatCompletion, classifyIntent } from './openai';
-import { validateWebSocketMessage, safeParse, safeStringify } from './ws-validator';
-import { messageDeduplicator } from './message-filter';
-import { createEvent } from './google-calendar';
-import { userProfileManager } from './user-profile-manager';
-import { getUserProfileAssistant } from './user-profile-assistant';
-import { scheduleMeeting } from './google-calendar';
+/**
+ * WebSocket Server Implementation
+ * 
+ * Handles WebSocket connections for real-time communications including:
+ * - Chat sessions
+ * - Module status updates
+ * - User information collection
+ * - Meeting scheduling requests
+ */
 
-// Store connected clients
+import { WebSocketServer, WebSocket } from 'ws';
+import { storage } from '../database-storage';
+import { createChatCompletion, classifyIntent } from './openai';
+import { UserProfileManager } from './user-profile-manager';
+import { getUserProfileAssistant } from './user-profile-assistant';
+import { createEvent } from './google-calendar';
+import { pool } from '../db';
+
+// Global state to track all connected clients
 const connectedClients: Map<string, {
   ws: WebSocket;
   userId: number;
   sessionId: string;
-  lastPing: number; // Track last ping time
+  lastPing: number;
+  profileId?: number;
 }> = new Map();
 
-// Heart beat interval (15 seconds)
-const HEARTBEAT_INTERVAL = 15000;
-// Timeout for client connection (45 seconds - 3x the heartbeat)
-const CLIENT_TIMEOUT = HEARTBEAT_INTERVAL * 3;
+// Create a user profile manager instance
+const userProfileManager = new UserProfileManager();
 
-// Setup WebSocket server handlers
+/**
+ * Setup WebSocket server and initialize event handlers
+ */
 export function setupWebsocketHandlers(wss: WebSocketServer) {
-  // Heartbeat check interval with enhanced reliability
-  setInterval(() => {
-    const now = Date.now();
+  console.log('Setting up WebSocket handlers...');
+  
+  // Handle new connection
+  wss.on('connection', (ws, request) => {
+    // Extract URL parameters
+    const url = new URL(request.url || '', `http://${request.headers.host}`);
+    const userId = parseInt(url.searchParams.get('userId') || '1', 10);
+    const sessionId = url.searchParams.get('sessionId') || generateSessionId();
+    const clientId = `${userId}-${sessionId}`;
     
-    try {
-      // Check each client's last ping time
-      connectedClients.forEach((client, clientId) => {
-        // Check if WebSocket is still open before evaluating timeout
-        if (client.ws.readyState !== WebSocket.OPEN) {
-          console.log(`Client ${clientId} connection no longer open (state: ${client.ws.readyState}). Cleaning up.`);
-          connectedClients.delete(clientId);
-          return;
-        }
-        
-        // If client hasn't sent a ping in the timeout period, terminate connection
-        if (now - client.lastPing > CLIENT_TIMEOUT) {
-          console.log(`Client ${clientId} timed out (no ping for ${CLIENT_TIMEOUT}ms). Terminating connection.`);
-          
-          try {
-            // Send a close frame first for graceful termination
-            client.ws.close(1000, 'Connection timeout');
-            // Then force terminate after a small delay if still connected
-            setTimeout(() => {
-              if (client.ws.readyState !== WebSocket.CLOSED) {
-                client.ws.terminate();
-              }
-              connectedClients.delete(clientId);
-            }, 1000);
-          } catch (err) {
-            console.error(`Error terminating client connection:`, err);
-            // Ensure we always clean up the map even if termination fails
-            connectedClients.delete(clientId);
-          }
-        } else {
-          // For active connections, send a ping to verify connection is still alive
-          if (client.ws.readyState === WebSocket.OPEN) {
-            try {
-              client.ws.ping();
-            } catch (pingErr) {
-              console.warn(`Error sending ping to client ${clientId}:`, pingErr);
-            }
-          }
-        }
-      });
-    } catch (intervalError) {
-      console.error('Error in WebSocket heartbeat interval:', intervalError);
-    }
-  }, HEARTBEAT_INTERVAL);
-
-  // Handle connection errors at the server level
-  wss.on('error', (error) => {
-    console.error('WebSocket server error:', error);
-  });
-
-  wss.on('connection', (ws, req) => {
-    // Track client IP for better logging
-    const ip = req.socket.remoteAddress || 'unknown';
+    console.log(`WebSocket client connected - Session: ${sessionId}, IP: ${request.socket.remoteAddress}, User: ${userId}`);
     
-    // Extract sessionId from URL query if it exists, otherwise generate a new one
-    let sessionId: string;
-    try {
-      const url = new URL(req.url || '', `http://${req.headers.host}`);
-      sessionId = url.searchParams.get('sessionId') || `session_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-    } catch (error) {
-      // If there's an error parsing the URL, generate a new session ID
-      sessionId = `session_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-    }
-    
-    const userId = 1; // For demo purposes
-    
-    // Store the client connection
-    const clientId = Date.now().toString();
-    connectedClients.set(clientId, { 
-      ws, 
-      userId, 
-      sessionId, 
-      lastPing: Date.now() // Initialize last ping time
+    // Store client connection information
+    connectedClients.set(clientId, {
+      ws,
+      userId,
+      sessionId,
+      lastPing: Date.now()
     });
     
-    console.log(`WebSocket client connected: ${clientId}, Session: ${sessionId}, IP: ${ip}`);
+    // Create initial system activity record
+    storage.createSystemActivity({
+      module: 'WebSocket',
+      event: 'Client Connected',
+      status: 'Active',
+      timestamp: new Date(),
+      details: { sessionId, userId, clientId }
+    }).catch(error => console.error('Error recording client connection:', error));
     
     // Send welcome message
     sendToClient(ws, {
       type: 'welcome',
-      message: 'Connected to AI Receptionist',
-      sessionId
-    });
-    
-    // Handle pings to keep connection alive
-    ws.on('ping', () => {
-      const client = connectedClients.get(clientId);
-      if (client) {
-        client.lastPing = Date.now();
-        connectedClients.set(clientId, client);
-      }
-      
-      // Respond with pong
-      ws.pong();
-    });
-    
-    // Handle pongs (responses to our pings)
-    ws.on('pong', () => {
-      const client = connectedClients.get(clientId);
-      if (client) {
-        client.lastPing = Date.now();
-        connectedClients.set(clientId, client);
+      sessionId: sessionId,
+      timestamp: new Date().toISOString(),
+      config: {
+        requireUserInfo: true,
+        showCompanyDetails: true
       }
     });
     
-    // Handle incoming messages
-    ws.on('message', async (message) => {
+    // Broadcast active users count
+    broadcastActiveSessions();
+    
+    // Handle WebSocket events
+    
+    // Client messages
+    ws.on('message', (data) => {
       try {
-        // Update the client's last ping time
+        const message = JSON.parse(data.toString());
+        console.log(`Received message from client ${clientId}:`, message.type);
+        
+        // Update last ping time to track active connections
         const client = connectedClients.get(clientId);
         if (client) {
           client.lastPing = Date.now();
           connectedClients.set(clientId, client);
         }
         
-        // Parse and validate the message
-        const parsedData = safeParse(message.toString());
-        if (!parsedData) {
-          return sendToClient(ws, {
-            type: 'error',
-            message: 'Invalid JSON message format',
-            timestamp: new Date().toISOString()
-          });
-        }
-        
-        // Validate the message structure and content
-        const validationResult = validateWebSocketMessage(parsedData);
-        if (!validationResult.isValid || !validationResult.data) {
-          return sendToClient(ws, {
-            type: 'error',
-            message: validationResult.error || 'Invalid message format',
-            timestamp: new Date().toISOString()
-          });
-        }
-        
-        const data = validationResult.data;
-        
-        // Check for duplicate messages to prevent processing the same message multiple times
-        // Skip deduplication for ping/pong messages as they are expected to be duplicate
-        if (data.type !== 'ping' && data.type !== 'pong' && messageDeduplicator.isDuplicate(data)) {
-          console.log(`Duplicate message filtered: ${data.type} from ${clientId}`);
-          return; // Silently ignore duplicate messages
-        }
-        
         // Handle different message types
-        if (data.type === 'chat' && data.message) {
-          await handleChatMessage(clientId, data.message);
-        } else if (data.type === 'status' && data.moduleId && data.status) {
-          await handleStatusUpdate(clientId, data.moduleId, data.status);
-        } else if (data.type === 'user_info' && data.userInfo) {
-          await handleUserInfo(clientId, data.userInfo);
-        } else if (data.type === 'ping') {
-          // Handle explicit ping messages from client
-          sendToClient(ws, {
-            type: 'pong',
-            timestamp: new Date().toISOString()
-          });
+        switch (message.type) {
+          case 'ping':
+            sendToClient(ws, { type: 'pong', timestamp: new Date().toISOString() });
+            break;
+            
+          case 'chat':
+            if (message.message && typeof message.message === 'string') {
+              handleChatMessage(clientId, message.message);
+            }
+            break;
+            
+          case 'user_info':
+            if (message.data && typeof message.data === 'object') {
+              handleUserInfo(clientId, message.data);
+            }
+            break;
+            
+          case 'status_update':
+            if (message.moduleId && message.status) {
+              handleStatusUpdate(clientId, message.moduleId, message.status);
+            }
+            break;
+            
+          case 'get_active_sessions':
+            sendActiveSessions(ws);
+            break;
+            
+          default:
+            console.log(`Unknown message type: ${message.type}`);
         }
       } catch (error) {
-        console.error(`Error handling WebSocket message from ${clientId}:`, error);
+        console.error(`Error handling WebSocket message: ${error}`);
+        
+        // Send error response
         sendToClient(ws, {
           type: 'error',
-          message: 'Failed to process message',
-          details: error instanceof Error ? error.message : 'Unknown error'
+          message: 'Invalid message format',
+          timestamp: new Date().toISOString()
         });
-        
-        // Log system activity for errors
-        try {
-          storage.createSystemActivity({
-            module: 'WebSocket',
-            event: 'Message Processing Error',
-            status: 'Error',
-            timestamp: new Date(),
-            details: { 
-              clientId, 
-              error: error instanceof Error ? error.message : 'Unknown error'
-            }
-          }).catch(err => console.error('Failed to log WebSocket error activity:', err));
-        } catch (err) {
-          console.error('Failed to create system activity for WebSocket error:', err);
-        }
       }
     });
     
-    // Handle connection errors
-    ws.on('error', (error) => {
-      console.error(`WebSocket client ${clientId} error:`, error);
+    // Handle disconnection
+    ws.on('close', () => {
+      console.log(`WebSocket client disconnected - Session: ${sessionId}`);
       
-      // Create system activity for error
-      try {
-        storage.createSystemActivity({
-          module: 'WebSocket',
-          event: 'Connection Error',
-          status: 'Error',
-          timestamp: new Date(),
-          details: { clientId, sessionId, error: error.message || 'Unknown error' }
-        }).catch(err => console.error('Failed to log WebSocket error activity:', err));
-      } catch (err) {
-        console.error('Failed to create system activity for WebSocket error:', err);
-      }
-    });
-    
-    // Handle client disconnect
-    ws.on('close', (code, reason) => {
-      console.log(`WebSocket client disconnected: ${clientId}, Code: ${code}, Reason: ${reason}`);
+      // Remove client from active connections
       connectedClients.delete(clientId);
       
-      // Create system activity for disconnect
-      try {
-        storage.createSystemActivity({
-          module: 'WebSocket',
-          event: 'Client Disconnected',
-          status: 'Info',
-          timestamp: new Date(),
-          details: { clientId, sessionId, code, reason: reason.toString() }
-        }).catch(err => console.error('Failed to log WebSocket disconnect activity:', err));
-      } catch (err) {
-        console.error('Failed to create system activity for WebSocket disconnect:', err);
-      }
+      // Record disconnection in system activity
+      storage.createSystemActivity({
+        module: 'WebSocket',
+        event: 'Client Disconnected',
+        status: 'Inactive',
+        timestamp: new Date(),
+        details: { sessionId, userId, clientId }
+      }).catch(error => console.error('Error recording client disconnection:', error));
+      
+      // Broadcast updated active users count
+      broadcastActiveSessions();
     });
     
-    // Set up ping interval for this specific client
-    const pingInterval = setInterval(() => {
-      if (ws.readyState === WebSocket.OPEN) {
-        try {
-          ws.ping();
-        } catch (error) {
-          console.error(`Error sending ping to client ${clientId}:`, error);
-          clearInterval(pingInterval);
+    // Handle errors
+    ws.on('error', (error) => {
+      console.error(`WebSocket error for client ${clientId}:`, error);
+      
+      // Record error in system activity
+      storage.createSystemActivity({
+        module: 'WebSocket',
+        event: 'Connection Error',
+        status: 'Error',
+        timestamp: new Date(),
+        details: { 
+          sessionId, 
+          userId, 
+          clientId,
+          error: error.message
         }
-      } else {
-        clearInterval(pingInterval);
-      }
-    }, HEARTBEAT_INTERVAL);
-    
-    // Clear ping interval when client disconnects
-    ws.on('close', () => clearInterval(pingInterval));
+      }).catch(error => console.error('Error recording WebSocket error:', error));
+    });
   });
-
-  console.log('WebSocket server initialized with heartbeat monitoring');
+  
+  // Set up a periodic cleanup of stale connections
+  setInterval(cleanupStaleConnections, 60000);
+  
+  console.log('WebSocket handlers setup complete');
 }
 
-// Send message to specific client
+/**
+ * Send a message to a client if their connection is open
+ */
 function sendToClient(ws: WebSocket, data: any): boolean {
+  if (ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(data));
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Broadcast a message to all connected clients
+ * Returns the number of clients that received the message
+ */
+export function broadcastMessage(data: any): number {
+  let count = 0;
+  connectedClients.forEach((client, id) => {
+    if (sendToClient(client.ws, data)) {
+      count++;
+    }
+  });
+  return count;
+}
+
+/**
+ * Generate a random session ID for new connections
+ */
+function generateSessionId(): string {
+  return 'ws-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
+}
+
+/**
+ * Cleanup stale connections that haven't sent a ping in over 5 minutes
+ */
+function cleanupStaleConnections() {
+  const now = Date.now();
+  const staleThreshold = 5 * 60 * 1000; // 5 minutes
+  
+  connectedClients.forEach((client, id) => {
+    if (now - client.lastPing > staleThreshold) {
+      console.log(`Closing stale connection for client ${id}`);
+      
+      // Close the connection
+      if (client.ws.readyState === WebSocket.OPEN) {
+        client.ws.terminate();
+      }
+      
+      // Remove from tracked connections
+      connectedClients.delete(id);
+    }
+  });
+}
+
+/**
+ * Broadcast active sessions count to all clients
+ */
+function broadcastActiveSessions() {
+  // Count the current websocket connections as active sessions
+  const count = connectedClients.size;
+  console.log(`Updated chat sessions: found ${count} active WebSocket connections`);
+  
+  broadcastMessage({
+    type: 'active_sessions_count',
+    count,
+    timestamp: new Date().toISOString()
+  });
+}
+
+/**
+ * Send active sessions to a specific client
+ */
+function sendActiveSessions(ws: WebSocket) {
   try {
-    if (ws.readyState === WebSocket.OPEN) {
-      // Use safeStringify to ensure we never throw JSON stringify errors
-      ws.send(safeStringify(data));
-      return true;
+    // Convert the connected clients map to an array of session data
+    const sessions = Array.from(connectedClients.entries()).map(([clientId, client]) => {
+      return {
+        id: clientId,
+        userId: client.userId,
+        sessionId: client.sessionId,
+        lastActive: new Date(client.lastPing).toISOString(),
+        profileId: client.profileId || null
+      };
+    });
+    
+    // Send the active sessions to the client
+    sendToClient(ws, {
+      type: 'active_sessions',
+      sessions,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error sending active sessions:', error);
+    
+    sendToClient(ws, {
+      type: 'error',
+      message: 'Failed to retrieve active sessions',
+      timestamp: new Date().toISOString()
+    });
+  }
+}
+
+/**
+ * Handle module status updates from clients
+ */
+async function handleStatusUpdate(clientId: string, moduleId: string, status: string) {
+  const client = connectedClients.get(clientId);
+  if (!client) return;
+  
+  // Update module status in storage
+  const moduleStatus = await storage.getModuleStatusByName(moduleId);
+  if (moduleStatus) {
+    await storage.updateModuleStatus(moduleStatus.id, {
+      status,
+      lastChecked: new Date()
+    });
+    
+    // Broadcast the status change to all clients
+    broadcastMessage({
+      type: 'moduleStatus',
+      moduleId,
+      status,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Create system activity record
+    await storage.createSystemActivity({
+      module: 'System',
+      event: `Module "${moduleId}" Status Changed`,
+      status: 'Completed',
+      timestamp: new Date(),
+      details: { moduleId, newStatus: status }
+    });
+  }
+}
+
+/**
+ * Handle user info submissions from pre-chat form
+ */
+async function handleUserInfo(clientId: string, userInfo: any) {
+  const client = connectedClients.get(clientId);
+  if (!client) return;
+  
+  const { ws, userId, sessionId } = client;
+  
+  console.log(`Received user info from ${clientId} for session ${sessionId}`);
+  
+  try {
+    // Validate the userInfo object
+    if (!userInfo.fullName || !userInfo.mobileNumber || !userInfo.emailAddress) {
+      console.error(`Invalid user info received: missing required fields`);
+      return sendToClient(ws, {
+        type: 'error',
+        message: 'User info is missing required fields',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    // Find or create user profile
+    const profile = await userProfileManager.findOrCreateProfile({
+      userId
+    });
+    
+    if (profile) {
+      // Update profile with new information
+      const updates: any = {};
+      let hasUpdates = false;
+      
+      if (userInfo.fullName && (!profile.name || profile.name !== userInfo.fullName)) {
+        updates.name = userInfo.fullName;
+        hasUpdates = true;
+      }
+      
+      if (userInfo.emailAddress && (!profile.email || profile.email !== userInfo.emailAddress)) {
+        updates.email = userInfo.emailAddress;
+        hasUpdates = true;
+      }
+      
+      if (userInfo.mobileNumber && (!profile.phone || profile.phone !== userInfo.mobileNumber)) {
+        updates.phone = userInfo.mobileNumber;
+        hasUpdates = true;
+      }
+      
+      // Always update these fields
+      updates.lastSeen = new Date();
+      updates.lastInteractionSource = 'livechat';
+      hasUpdates = true;
+      
+      if (hasUpdates) {
+        await userProfileManager.updateProfile(profile.id, updates);
+        console.log(`Updated profile ${profile.id} with user info from client ${clientId}`);
+        
+        // Store the profile ID in the client information
+        client.profileId = profile.id;
+        connectedClients.set(clientId, client);
+        
+        // Record this as an interaction
+        await userProfileManager.recordInteraction(
+          profile.id,
+          'livechat',
+          'inbound',
+          `Pre-chat form submitted: ${userInfo.fullName}, ${userInfo.emailAddress}, ${userInfo.mobileNumber}`,
+          {
+            sessionId,
+            timestamp: new Date(),
+            formData: true
+          }
+        );
+        
+        // Acknowledge receipt of user info
+        sendToClient(client.ws, {
+          type: 'user_info_ack',
+          updated: true,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        console.log(`No updates needed for profile ${profile.id}`);
+        
+        // Acknowledge receipt even if no updates
+        sendToClient(client.ws, {
+          type: 'user_info_ack',
+          updated: false,
+          timestamp: new Date().toISOString()
+        });
+      }
     } else {
-      console.warn(`Cannot send message: WebSocket is not in OPEN state. Current state: ${ws.readyState}`);
-      return false;
+      console.error(`Failed to find or create profile for session ${sessionId}`);
+      
+      // Send error response
+      sendToClient(ws, {
+        type: 'error',
+        message: 'Failed to process user information',
+        timestamp: new Date().toISOString()
+      });
     }
   } catch (error) {
-    console.error('Error sending message to client:', error);
-    return false;
+    console.error(`Error processing user info for session ${sessionId}:`, error);
+    
+    // Send error response
+    sendToClient(ws, {
+      type: 'error',
+      message: 'Failed to process user information',
+      timestamp: new Date().toISOString()
+    });
   }
 }
 
-// Broadcast message to all connected clients
-export function broadcastMessage(data: any): number {
-  let successCount = 0;
-  let messageData: any;
-  
-  // If data is a string, try to parse it
-  if (typeof data === 'string') {
-    try {
-      messageData = JSON.parse(data);
-    } catch (e) {
-      // If it's not valid JSON, use it as is
-      messageData = { type: 'notification', message: data };
-    }
-  } else {
-    messageData = data;
-  }
-  
-  // Add timestamp if not already present
-  if (!messageData.timestamp) {
-    messageData.timestamp = new Date().toISOString();
-  }
-  
-  console.log(`Broadcasting message to ${connectedClients.size} clients:`, JSON.stringify(messageData).substring(0, 200));
-  
-  connectedClients.forEach(({ ws }, clientId) => {
-    try {
-      if (ws.readyState === WebSocket.OPEN) {
-        // Use safeStringify to ensure we never throw JSON stringify errors
-        ws.send(typeof messageData === 'string' ? messageData : safeStringify(messageData));
-        successCount++;
-        
-        // Log success at debug level
-        if (messageData.type) {
-          console.log(`Sent ${messageData.type} message to client ${clientId.substring(0, 8)}...`);
-        }
-      } else {
-        console.warn(`Cannot send to client ${clientId}: WebSocket not OPEN (state: ${ws.readyState})`);
-      }
-    } catch (error) {
-      console.error(`Error broadcasting to client ${clientId}:`, error);
-    }
-  });
-  
-  // Return the number of successful sends
-  console.log(`Successfully broadcast message to ${successCount}/${connectedClients.size} clients`);
-  return successCount;
-}
-
-// Handle chat messages with user profile integration
+/**
+ * Handle chat messages with user profile integration
+ */
 async function handleChatMessage(clientId: string, message: string) {
   const client = connectedClients.get(clientId);
   if (!client) return;
@@ -415,9 +508,7 @@ async function handleChatMessage(clientId: string, message: string) {
       // Find or create a user profile based on session ID
       // We use this for tracking purposes since we might not have real contact info yet
       sessionProfile = await userProfileManager.findOrCreateProfile({
-        userId,
-        sessionId, // We use the session ID as a temporary identifier
-        channel: 'livechat'
+        userId
       });
       
       // If we found user information in this message, update the profile
@@ -482,151 +573,164 @@ async function handleChatMessage(clientId: string, message: string) {
     // Get a reference to the unified profile assistant
     const userProfileAssistant = getUserProfileAssistant();
     
-    // Use the unified agent system to generate a response
-    const { response: profileAwareResponse, profileId } = await userProfileAssistant.generateResponse(
-      userId,
-      sessionId, // We use sessionId as the identifier since we may not have phone/email yet
-      message,
-      'livechat'
-    );
+    console.log('Getting unified agent response for live chat message');
     
-    // Identify the intent of the message using our AI
-    // Include schedule_meeting to detect calendar-related requests
-    const possibleIntents = ["inquiry", "complaint", "support", "order", "general", "schedule_meeting"];
-    const intentResult = await classifyIntent(message, possibleIntents);
-    
-    let aiResponse = profileAwareResponse;
-    
-    // Check if this is a meeting scheduling intent
-    if (intentResult.intent === "schedule_meeting" && intentResult.confidence > 0.7) {
-      try {
-        // First, make sure we have required user information for scheduling a meeting
-        const profile = await userProfileManager.getProfile(profileId);
-        
-        // If we're missing information, ask for it before attempting scheduling
-        if (!profile || !profile.email || !profile.name) {
-          // Build a response that asks for the missing information
-          let missingInfoResponse = "I'd be happy to schedule a meeting for you, but I need a few details first.\n\n";
-          
-          if (!profile || !profile.name) {
-            missingInfoResponse += "What is your full name?\n";
-          }
-          
-          if (!profile || !profile.email) {
-            missingInfoResponse += "What email address should I use for the meeting invitation?\n";
-          }
-          
-          if (!profile?.phone) {
-            missingInfoResponse += "Could you provide a phone number in case there are any issues with the meeting?\n";
-          }
-          
-          aiResponse = missingInfoResponse;
-        } else {
-          // We have the necessary information, proceed with scheduling
-          // Enhance the meeting request with the user's information
-          const schedulingResult = await handleMeetingScheduling(message, userId, sessionId, profile);
-          
-          if (schedulingResult.success) {
-            aiResponse = schedulingResult.response;
-            
-            // Inform the client that a meeting was scheduled
-            sendToClient(ws, {
-              type: 'meeting_scheduled',
-              message: schedulingResult.meetingDetails,
-              timestamp: new Date().toISOString()
-            });
-          } else {
-            // If scheduling failed, use the response from the scheduling handler
-            aiResponse = schedulingResult.response;
-          }
-        }
-      } catch (error) {
-        console.error("Error handling meeting scheduling:", error);
-        // Fall back to regular chat if scheduling fails
-        aiResponse = "I'm having trouble with the calendar system right now. Can you please provide more details about when you'd like to schedule a meeting?";
-      }
-    }
-    
-    // Record the outgoing message as an interaction
-    if (profileId) {
-      await userProfileManager.recordInteraction(
-        profileId,
-        'livechat',
-        'outbound',
-        aiResponse.substring(0, 100) + (aiResponse.length > 100 ? '...' : ''),
-        {
-          sessionId,
-          timestamp: new Date(),
-          aiGenerated: true
-        }
+    try {
+      // Use the unified agent system to generate a response
+      const { response: profileAwareResponse, profileId } = await userProfileAssistant.generateResponse(
+        userId,
+        sessionId, // We use sessionId as the identifier since we may not have phone/email yet
+        message,
+        'chat'
       );
       
-      // Update last interaction source in profile
-      await userProfileManager.updateProfile(profileId, {
-        lastInteractionSource: 'livechat'
+      // Identify the intent of the message using our AI
+      // Include schedule_meeting to detect calendar-related requests
+      const possibleIntents = ["inquiry", "complaint", "support", "order", "general", "schedule_meeting"];
+      const intentResult = await classifyIntent(message, possibleIntents);
+      
+      let aiResponse = profileAwareResponse;
+      
+      // Check if this is a meeting scheduling intent
+      if (intentResult.intent === "schedule_meeting" && intentResult.confidence > 0.7) {
+        try {
+          // First, make sure we have required user information for scheduling a meeting
+          const profile = await userProfileManager.getProfile(profileId);
+          
+          // If we're missing information, ask for it before attempting scheduling
+          if (!profile || !profile.email || !profile.name) {
+            // Build a response that asks for the missing information
+            let missingInfoResponse = "I'd be happy to schedule a meeting for you, but I need a few details first.\n\n";
+            
+            if (!profile || !profile.name) {
+              missingInfoResponse += "What is your full name?\n";
+            }
+            
+            if (!profile || !profile.email) {
+              missingInfoResponse += "What email address should I use for the meeting invitation?\n";
+            }
+            
+            if (!profile?.phone) {
+              missingInfoResponse += "Could you provide a phone number in case there are any issues with the meeting?\n";
+            }
+            
+            aiResponse = missingInfoResponse;
+          } else {
+            // We have the necessary information, proceed with scheduling
+            // Enhance the meeting request with the user's information
+            const schedulingResult = await handleMeetingScheduling(message, userId, sessionId, profile);
+            
+            if (schedulingResult.success) {
+              aiResponse = schedulingResult.response;
+              
+              // Inform the client that a meeting was scheduled
+              sendToClient(ws, {
+                type: 'meeting_scheduled',
+                message: schedulingResult.meetingDetails,
+                timestamp: new Date().toISOString()
+              });
+            } else {
+              // If scheduling failed, use the response from the scheduling handler
+              aiResponse = schedulingResult.response;
+            }
+          }
+        } catch (error) {
+          console.error("Error handling meeting scheduling:", error);
+          // Fall back to regular chat if scheduling fails
+          aiResponse = "I'm having trouble with the calendar system right now. Can you please provide more details about when you'd like to schedule a meeting?";
+        }
+      }
+      
+      // Record the outgoing message as an interaction
+      if (profileId) {
+        await userProfileManager.recordInteraction(
+          profileId,
+          'livechat',
+          'outbound',
+          aiResponse.substring(0, 100) + (aiResponse.length > 100 ? '...' : ''),
+          {
+            sessionId,
+            timestamp: new Date(),
+            aiGenerated: true
+          }
+        );
+        
+        // Update last interaction source in profile
+        await userProfileManager.updateProfile(profileId, {
+          lastInteractionSource: 'livechat'
+        });
+      }
+      
+      // Log the AI response
+      await storage.createChatLog({
+        userId,
+        sessionId,
+        message: aiResponse,
+        sender: 'ai',
+        timestamp: new Date()
+      });
+      
+      // Send response back to client
+      sendToClient(ws, {
+        type: 'chat',
+        message: aiResponse,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Create system activity record
+      await storage.createSystemActivity({
+        module: 'Live Chat',
+        event: 'Chat Message Processed',
+        status: 'Completed',
+        timestamp: new Date(),
+        details: { 
+          sessionId, 
+          intent: intentResult.intent,
+          profileId: profileId || null
+        }
+      });
+    } catch (error) {
+      console.error("Error processing chat message with user profile:", error);
+      
+      // Fallback to simple response if profile handling fails
+      const fallbackResponse = "I'm sorry, I'm having trouble processing your request right now. Please try again in a moment.";
+      
+      // Log the fallback response
+      await storage.createChatLog({
+        userId,
+        sessionId,
+        message: fallbackResponse,
+        sender: 'ai',
+        timestamp: new Date()
+      });
+      
+      // Send fallback response to client
+      sendToClient(ws, {
+        type: 'chat',
+        message: fallbackResponse,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Log the error
+      await storage.createSystemActivity({
+        module: 'Live Chat',
+        event: 'Profile Processing Error',
+        status: 'Error',
+        timestamp: new Date(),
+        details: { 
+          sessionId, 
+          error: error instanceof Error ? error.message : String(error)
+        }
       });
     }
-    
-    // Log the AI response
-    await storage.createChatLog({
-      userId,
-      sessionId,
-      message: aiResponse,
-      sender: 'ai',
-      timestamp: new Date()
-    });
-    
-    // Send response back to client
-    sendToClient(ws, {
-      type: 'chat',
-      message: aiResponse,
-      timestamp: new Date().toISOString()
-    });
-    
-    // Create system activity record
-    await storage.createSystemActivity({
-      module: 'Live Chat',
-      event: 'Chat Message Processed',
-      status: 'Completed',
-      timestamp: new Date(),
-      details: { 
-        sessionId, 
-        intent: intentResult.intent,
-        profileId: profileId || null
-      }
-    });
   } catch (error) {
-    console.error("Error processing chat message with user profile:", error);
+    console.error("Error in chat message handler:", error);
     
-    // Fallback to simple response if profile handling fails
-    const fallbackResponse = "I'm sorry, I'm having trouble processing your request right now. Please try again in a moment.";
-    
-    // Log the fallback response
-    await storage.createChatLog({
-      userId,
-      sessionId,
-      message: fallbackResponse,
-      sender: 'ai',
-      timestamp: new Date()
-    });
-    
-    // Send fallback response to client
+    // Send a generic error response to the client
     sendToClient(ws, {
-      type: 'chat',
-      message: fallbackResponse,
+      type: 'error',
+      message: "I'm sorry, I couldn't process your message. Please try again.",
       timestamp: new Date().toISOString()
-    });
-    
-    // Log the error
-    await storage.createSystemActivity({
-      module: 'Live Chat',
-      event: 'Profile Processing Error',
-      status: 'Error',
-      timestamp: new Date(),
-      details: { 
-        sessionId, 
-        error: error instanceof Error ? error.message : String(error)
-      }
     });
   }
 }
@@ -683,7 +787,7 @@ async function handleMeetingScheduling(
     if (!extractionResponse.success) {
       return {
         success: false,
-        response: "I couldn't understand the meeting details. Could you please provide more specific information about when you'd like to schedule the meeting?"
+        response: "I couldn't understand the meeting details. Could you please provide more specific information about when you'd like to schedule a meeting?"
       };
     }
     
@@ -920,189 +1024,5 @@ async function handleMeetingScheduling(
       success: false,
       response: "I encountered an error while trying to schedule your meeting. Please try again with specific date and time information."
     };
-  }
-}
-
-// Handle module status updates
-async function handleStatusUpdate(clientId: string, moduleId: string, status: string) {
-  const client = connectedClients.get(clientId);
-  if (!client) return;
-  
-  // Update module status in storage
-  const moduleStatus = await storage.getModuleStatusByName(moduleId);
-  if (moduleStatus) {
-    await storage.updateModuleStatus(moduleStatus.id, {
-      status,
-      lastChecked: new Date()
-    });
-    
-    // Broadcast the status change to all clients
-    broadcastMessage({
-      type: 'moduleStatus',
-      moduleId,
-      status,
-      timestamp: new Date().toISOString()
-    });
-    
-    // Create system activity record
-    await storage.createSystemActivity({
-      module: 'System',
-      event: `Module "${moduleId}" Status Changed`,
-      status: 'Completed',
-      timestamp: new Date(),
-      details: { moduleId, newStatus: status }
-    });
-  }
-}
-
-// Handle user info submissions from pre-chat form
-async function handleUserInfo(clientId: string, userInfo: any) {
-  const client = connectedClients.get(clientId);
-  if (!client) return;
-  
-  const { ws, userId, sessionId } = client;
-  
-  console.log(`Received user info from ${clientId} for session ${sessionId}`);
-  
-  try {
-    // Validate the userInfo object
-    if (!userInfo.fullName || !userInfo.mobileNumber || !userInfo.emailAddress) {
-      console.error(`Invalid user info received: missing required fields`);
-      return sendToClient(ws, {
-        type: 'error',
-        message: 'User info is missing required fields',
-        timestamp: new Date().toISOString()
-      });
-    }
-    
-    // Check if a profile already exists with this email
-    let existingProfile = null;
-    try {
-      existingProfile = await storage.getUserProfileByEmail(userInfo.emailAddress);
-      if (existingProfile) {
-        console.log(`Found existing profile with email ${userInfo.emailAddress}, profile ID: ${existingProfile.id}`);
-      }
-    } catch (error) {
-      console.error("Error checking for existing profile by email:", error);
-    }
-    
-    // If profile exists, update it with any new information
-    let profileId;
-    if (existingProfile) {
-      profileId = existingProfile.id;
-      
-      // Update the existing profile with new information
-      const updates: any = {};
-      let profileUpdated = false;
-      
-      // Always update lastSeen and lastInteractionSource
-      updates.lastSeen = new Date();
-      updates.lastInteractionSource = 'livechat';
-      profileUpdated = true;
-      
-      // Update name if it's not already set
-      if (!existingProfile.name) {
-        updates.name = userInfo.fullName;
-        profileUpdated = true;
-      }
-      
-      // Update phone if it's not already set
-      if (!existingProfile.phone) {
-        updates.phone = userInfo.mobileNumber;
-        profileUpdated = true;
-      }
-      
-      if (profileUpdated) {
-        await userProfileManager.updateProfile(profileId, updates);
-        console.log(`Updated existing profile ${profileId} with pre-chat form information`);
-      }
-    } else {
-      // Create a new profile with the user info
-      const newProfile = await userProfileManager.createProfile({
-        userId,
-        name: userInfo.fullName,
-        email: userInfo.emailAddress,
-        phone: userInfo.mobileNumber,
-        lastInteractionSource: 'livechat',
-        lastSeen: new Date(),
-        metadata: {
-          sessionId,
-          source: 'pre-chat-form'
-        }
-      });
-      
-      profileId = newProfile.id;
-      console.log(`Created new profile from pre-chat form, profile ID: ${profileId}`);
-    }
-    
-    // Record this form submission as an interaction
-    if (profileId) {
-      await userProfileManager.recordInteraction(
-        profileId,
-        'livechat',
-        'inbound',
-        `Pre-chat form submitted: ${userInfo.fullName}, ${userInfo.emailAddress}, ${userInfo.mobileNumber}`,
-        {
-          sessionId,
-          timestamp: new Date(),
-          formData: true
-        }
-      );
-      
-      // Store the profile ID in the client information for future reference
-      client.profileId = profileId;
-      connectedClients.set(clientId, client);
-      
-      console.log(`Recorded user info as interaction and associated profile ${profileId} with session ${sessionId}`);
-    }
-    
-    // Send confirmation to the client
-    sendToClient(ws, {
-      type: 'user_info_received',
-      timestamp: new Date().toISOString(),
-      message: 'User information received successfully'
-    });
-    
-    // Create system activity record
-    await storage.createSystemActivity({
-      module: 'Live Chat',
-      event: 'User Info Submitted',
-      status: 'Completed',
-      timestamp: new Date(),
-      details: { 
-        sessionId,
-        clientId,
-        profileId: profileId || null,
-        name: userInfo.fullName,
-        email: userInfo.emailAddress.substring(0, 3) + '***@' + userInfo.emailAddress.split('@')[1] // Redact email for logs
-      }
-    });
-    
-  } catch (error) {
-    console.error(`Error processing user info for ${clientId}:`, error);
-    
-    // Send error to client
-    sendToClient(ws, {
-      type: 'error',
-      message: 'Failed to process user information',
-      timestamp: new Date().toISOString()
-    });
-    
-    // Create system activity record for error
-    try {
-      await storage.createSystemActivity({
-        module: 'Live Chat',
-        event: 'User Info Processing Error',
-        status: 'Error',
-        timestamp: new Date(),
-        details: { 
-          clientId,
-          sessionId,
-          error: error instanceof Error ? error.message : 'Unknown error'
-        }
-      });
-    } catch (err) {
-      console.error('Failed to create system activity for user info error:', err);
-    }
   }
 }
