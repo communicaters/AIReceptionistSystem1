@@ -8,6 +8,7 @@
 import { UserProfileData } from "@shared/schema";
 import { userProfileManager } from "./user-profile-manager";
 import OpenAI from "openai";
+import { generateUnifiedSystemPrompt } from './unified-agent-prompt';
 
 // Regular expressions to detect information in messages
 const EMAIL_REGEX = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/;
@@ -315,8 +316,7 @@ export class UserProfileAssistant {
     channel: string,
     newInfoExtracted: boolean
   ): Promise<string> {
-    // Import the unified prompt generator
-    const { generateUnifiedSystemPrompt } = require('./unified-agent-prompt');
+    // Use the unified prompt generator that was imported at the top of the file
     
     // Get the user profile and other context
     const profile = context.userProfile;
