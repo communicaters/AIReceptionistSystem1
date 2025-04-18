@@ -347,6 +347,8 @@ export class UserProfileAssistant {
     profileId: number;
   }> {
     try {
+      console.log(`UserProfileAssistant.generateResponse called for ${channel} channel with message: "${messageContent.substring(0, 50)}..."`);
+      
       // Process the message to get enhanced context
       const { enhancedPrompt, context } = await this.processMessage(
         userId,
@@ -356,9 +358,12 @@ export class UserProfileAssistant {
         existingProfileId
       );
       
+      console.log(`Message processed, enhancedPrompt created, context has profileId: ${context.profileId || 'none'}`);
+      
       // Ensure we have a profile ID
       const profileId = context.profileId || 0;
       if (!profileId) {
+        console.error('No profile ID found after processing message');
         throw new Error('No profile ID found after processing message');
       }
       

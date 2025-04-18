@@ -351,6 +351,7 @@ async function handleChatMessage(clientId: string, message: string) {
   
   // Get the UserProfileAssistant instance
   const userProfileAssistant = getUserProfileAssistant();
+  console.log('UserProfileAssistant loaded for chat handling');
   
   try {
     // Extract any potential user information from the message using regex
