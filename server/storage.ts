@@ -32,7 +32,10 @@ import {
   userPackages, UserPackage, InsertUserPackage,
   featureUsageLogs, FeatureUsageLog, InsertFeatureUsageLog,
   loginActivity, LoginActivity, InsertLoginActivity,
-  adminReportsCache, AdminReportsCache, InsertAdminReportsCache
+  adminReportsCache, AdminReportsCache, InsertAdminReportsCache,
+  // Centralized user data management
+  userProfileData, UserProfileData, InsertUserProfileData,
+  userInteractions, UserInteraction, InsertUserInteraction
 } from "@shared/schema";
 
 export interface IStorage {
@@ -269,6 +272,25 @@ export interface IStorage {
   createVoiceSettings(settings: InsertVoiceSettings): Promise<VoiceSettings>;
   updateVoiceSettings(id: number, settings: Partial<InsertVoiceSettings>): Promise<VoiceSettings | undefined>;
   deleteVoiceSettings(id: number): Promise<boolean>;
+
+  // User Profile Data
+  getUserProfile(id: number): Promise<UserProfileData | undefined>;
+  getUserProfileByEmail(email: string): Promise<UserProfileData | undefined>;
+  getUserProfileByPhone(phone: string): Promise<UserProfileData | undefined>;
+  getUserProfilesByUserId(userId: number): Promise<UserProfileData[]>;
+  createUserProfile(profile: InsertUserProfileData): Promise<UserProfileData>;
+  updateUserProfile(id: number, profile: Partial<InsertUserProfileData>): Promise<UserProfileData | undefined>;
+  mergeUserProfiles(sourceId: number, targetId: number): Promise<UserProfileData>;
+  deleteUserProfile(id: number): Promise<boolean>;
+
+  // User Interactions
+  getUserInteraction(id: number): Promise<UserInteraction | undefined>;
+  getUserInteractionsByProfileId(userProfileId: number, limit?: number): Promise<UserInteraction[]>;
+  getUserInteractionsBySource(userProfileId: number, source: string, limit?: number): Promise<UserInteraction[]>;
+  getRecentUserInteractions(limit?: number): Promise<UserInteraction[]>;
+  createUserInteraction(interaction: InsertUserInteraction): Promise<UserInteraction>;
+  updateUserInteraction(id: number, interaction: Partial<InsertUserInteraction>): Promise<UserInteraction | undefined>;
+  deleteUserInteraction(id: number): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {

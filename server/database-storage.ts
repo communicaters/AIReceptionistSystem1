@@ -35,7 +35,10 @@ import {
   userPackages, UserPackage, InsertUserPackage,
   featureUsageLogs, FeatureUsageLog, InsertFeatureUsageLog,
   loginActivity, LoginActivity, InsertLoginActivity,
-  adminReportsCache, AdminReportsCache, InsertAdminReportsCache
+  adminReportsCache, AdminReportsCache, InsertAdminReportsCache,
+  // Centralized user data management
+  userProfileData, UserProfileData, InsertUserProfileData,
+  userInteractions, UserInteraction, InsertUserInteraction
 } from "@shared/schema";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
