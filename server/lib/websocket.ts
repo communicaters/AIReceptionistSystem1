@@ -5,6 +5,9 @@ import { createChatCompletion, classifyIntent } from './openai';
 import { validateWebSocketMessage, safeParse, safeStringify } from './ws-validator';
 import { messageDeduplicator } from './message-filter';
 import { createEvent } from './google-calendar';
+import { userProfileManager } from './user-profile-manager';
+import { getUserProfileAssistant } from './user-profile-assistant';
+import { scheduleMeeting } from './google-calendar';
 
 // Store connected clients
 const connectedClients: Map<string, {
