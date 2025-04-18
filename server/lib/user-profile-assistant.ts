@@ -494,14 +494,38 @@ export class UserProfileAssistant {
         'machine learning', 'trained on', 'algorithm', 'neural', 'model'
       ];
       
+      // Check for phrases indicating the AI is deflecting tasks it should perform
+      const deflectionPhrases = [
+        "I don't have", "I cannot", "I can't", "I'm unable", "unable to", 
+        "as a virtual", "as an ai", "as an assistant", "not able to", 
+        "don't have access", "don't have the ability", "apologize for any confusion"
+      ];
+      
       // Check for queries about the AI itself - use a more comprehensive approach
       const isAboutAI = aiPhrases.some(phrase => aiResponse.toLowerCase().includes(phrase)) ||
                         aiResponseContainsMultipleAIKeywords(aiResponse, aiInfoKeywords);
+                        
+      // Check if the response is deflecting actions the agent should perform
+      const isDeflecting = deflectionPhrases.some(phrase => aiResponse.toLowerCase().includes(phrase));
       
       // If the response is about AI, replace with company-specific redirection
       // Use a more personal, warm response that redirects to company information
       if (isAboutAI) {
         enhancedResponse = "I'm Jamie, the company receptionist. I'm here to help with information about our products, services, and scheduling meetings. If you'd like to know more about our company specifically, I'd be happy to share that information with you. Is there something specific about our business that I can help you with today?";
+      }
+      
+      // If the response is deflecting actions it should perform (especially scheduling)
+      if (isDeflecting) {
+        const scheduleKeywords = ['schedule', 'meeting', 'appointment', 'calendar', 'book', 'meet', 'talk', 'call'];
+        const isSchedulingRequest = scheduleKeywords.some(keyword => aiResponse.toLowerCase().includes(keyword));
+        
+        if (isSchedulingRequest) {
+          // Replace deflecting responses for meeting scheduling with helpful actions
+          enhancedResponse = "I'd be happy to schedule a meeting for you with our team. Could you please let me know what day and time works best for you? Also, if you could share a bit about what you'd like to discuss, that would be helpful in preparing for the meeting.";
+        } else {
+          // For other deflecting responses, be more helpful and assume ability
+          enhancedResponse = "I'd be happy to help you with that. Could you please provide a few more details about what you're looking for, and I'll take care of it right away.";
+        }
       }
       
       // Add personalization if we have profile data
