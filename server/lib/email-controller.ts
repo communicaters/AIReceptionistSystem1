@@ -5,6 +5,7 @@ import * as mailgunService from './mailgun';
 import { createChatCompletion } from './openai';
 import { EmailParams } from './sendgrid';
 import { generateEmailResponse, selectBestTemplate, processTemplate } from './template-processor';
+import { userProfileManager } from './user-profile-manager';
 
 // Email Service Type
 export type EmailService = 'sendgrid' | 'smtp' | 'mailgun';
@@ -446,7 +447,7 @@ export async function processIncomingEmail(
     }
     
     // Log the received email normally if no loop was detected
-    await storage.createEmailLog({
+    const emailLog = await storage.createEmailLog({
       userId,
       from: emailContent.from,
       to: emailContent.to,
@@ -456,6 +457,48 @@ export async function processIncomingEmail(
       status: "received",
       service
     });
+
+    // Find or create user profile based on email address
+    console.log(`Finding or creating user profile for email: ${fromEmailAddress}`);
+    const userProfile = await userProfileManager.findOrCreateProfile({
+      email: fromEmailAddress,
+      userId: userId
+    });
+
+    if (userProfile) {
+      console.log(`User profile found/created with ID: ${userProfile.id}`);
+      
+      // Extract potential name from email sender field
+      let senderName = null;
+      const nameMatch = emailContent.from.match(/^"?([^"<]+)"?\s*</);
+      if (nameMatch && nameMatch[1]) {
+        senderName = nameMatch[1].trim();
+      }
+      
+      // Update profile with sender's name if we don't have it yet
+      if (senderName && (!userProfile.name || userProfile.name === '')) {
+        await userProfileManager.updateProfile(userProfile.id, {
+          name: senderName
+        });
+        console.log(`Updated user profile with name: ${senderName}`);
+      }
+      
+      // Record this email interaction
+      await userProfileManager.recordInteraction(
+        userProfile.id,
+        'email',
+        'inbound',
+        `Email received: ${emailContent.subject}`,
+        {
+          subject: emailContent.subject,
+          emailLogId: emailLog.id,
+          timestamp: new Date()
+        }
+      );
+      console.log(`Recorded inbound email interaction for user profile ${userProfile.id}`);
+    } else {
+      console.warn(`Failed to create user profile for email: ${fromEmailAddress}`);
+    }
     
     // Step 1: Use AI to analyze the email and get intents and meeting details
     const { intents, shouldScheduleMeeting, meetingDetails } = 
@@ -506,6 +549,21 @@ export async function processIncomingEmail(
       
       // TODO: Add calendar integration to schedule the meeting
       console.log("Meeting scheduling requested:", meetingDetails);
+      
+      // Record meeting scheduling in user profile if available
+      if (userProfile) {
+        await userProfileManager.recordInteraction(
+          userProfile.id,
+          'calendar',
+          'meeting_request',
+          `Meeting requested via email: ${emailContent.subject}`,
+          {
+            meetingDetails,
+            emailLogId: emailLog.id
+          }
+        );
+        console.log(`Recorded meeting request interaction for user profile ${userProfile.id}`);
+      }
     }
     
     // Send response email
@@ -517,6 +575,28 @@ export async function processIncomingEmail(
       text: aiGeneratedResponse,
       html: aiGeneratedResponse.replace(/\n/g, '<br>') // Simple HTML conversion
     }, service, userId);
+    
+    // Record the outbound response in user profile if available
+    if (success && userProfile) {
+      await userProfileManager.recordInteraction(
+        userProfile.id,
+        'email',
+        'outbound',
+        `Email sent: ${responseSubject}`,
+        {
+          subject: responseSubject,
+          responseTo: emailLog.id,
+          timestamp: new Date()
+        }
+      );
+      
+      // Update the last seen time for this user profile
+      await userProfileManager.updateProfile(userProfile.id, {
+        lastSeen: new Date()
+      });
+      
+      console.log(`Recorded outbound email interaction for user profile ${userProfile.id}`);
+    }
     
     // Record the intents
     for (const intent of intents) {
@@ -538,7 +618,8 @@ export async function processIncomingEmail(
         subject: emailContent.subject, 
         intents,
         meetingRequested: shouldScheduleMeeting,
-        usedTemplate: true
+        usedTemplate: true,
+        userProfileId: userProfile?.id
       }
     });
     
