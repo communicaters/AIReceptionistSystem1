@@ -338,8 +338,16 @@ export class UserProfileAssistant {
       // Import the storage module to access the database functions
       const { storage } = await import('../database-storage');
       
+      // PRIORITY ORDERING FOR DATA SOURCES:
+      // 1. 'company' category (highest priority, contains official company name/mission)
+      // 2. 'company_info' category (descriptive information about the company) 
+      // 3. 'business' category (may contain company name but possibly outdated)
+      // 4. Other categories
+      
       // First try to get company-specific information since this is most important
       const companyInfo = await storage.getTrainingDataByCategory(userId, 'company');
+      const companyInfoData = await storage.getTrainingDataByCategory(userId, 'company_info');
+      const businessData = await storage.getTrainingDataByCategory(userId, 'business');
       
       // Then try to get product information
       const productInfo = await storage.getTrainingDataByCategory(userId, 'product');
@@ -347,10 +355,42 @@ export class UserProfileAssistant {
       // Then try to get service information
       const serviceInfo = await storage.getTrainingDataByCategory(userId, 'service');
       
-      // Combine all training data in a structured way
+      // Combine all training data in a structured way with priority ordering
+      // Start with highest priority company data
       if (companyInfo && companyInfo.length > 0) {
         trainingData += "ABOUT THE COMPANY:\n";
         trainingData += companyInfo.map(info => info.content).join('\n\n');
+        trainingData += "\n\n";
+      }
+      
+      // Add company_info category data for additional context
+      if (companyInfoData && companyInfoData.length > 0) {
+        trainingData += "COMPANY DETAILS:\n";
+        trainingData += companyInfoData.map(info => info.content).join('\n\n');
+        trainingData += "\n\n";
+      }
+      
+      // Add business info if we have it - note this might have conflicting company name
+      if (businessData && businessData.length > 0) {
+        // Extract just the company name for reference
+        const companyNameEntry = businessData.find(item => 
+          item.content.toLowerCase().includes("company name")
+        );
+        
+        if (companyNameEntry) {
+          const nameMatch = companyNameEntry.content.match(/company name is\s+([^,\.]+)/i);
+          if (nameMatch && nameMatch[1]) {
+            const businessCompanyName = nameMatch[1].trim();
+            
+            // If we already have company info, add note about potential name conflict
+            if (companyInfo && companyInfo.length > 0) {
+              trainingData += "NOTE: You may see references to both 'TechSolutions Inc.' and 'RedRay solutions' - always use 'TechSolutions Inc.' as the official company name.\n\n";
+            }
+          }
+        }
+        
+        trainingData += "BUSINESS INFORMATION:\n";
+        trainingData += businessData.map(info => info.content).join('\n\n');
         trainingData += "\n\n";
       }
       
@@ -369,7 +409,8 @@ export class UserProfileAssistant {
       // Get any other training data that might be useful
       const generalTrainingData = await storage.getTrainingDataByUserId(userId);
       const otherData = generalTrainingData.filter(info => 
-        !['company', 'product', 'service'].includes(info.category) && info.content.trim()
+        !['company', 'company_info', 'product', 'service', 'business'].includes(info.category) && 
+        info.content.trim()
       );
       
       if (otherData && otherData.length > 0) {
@@ -680,47 +721,73 @@ export class UserProfileAssistant {
          ) {
         console.log("Detected company question with incorrect response - overriding with company information");
         
-        // Get specific company information from database
-        let companyInfo: CompanyInfo = {};
+        // Get specific company information from database using multiple sources
+        let companyInfo: CompanyInfo = {
+          name: "TechSolutions Inc.",
+          description: "a leading provider of AI-powered business automation"
+        };
+        
         try {
+          console.log("Attempting to retrieve company information from multiple sources");
           const { storage } = await import('../database-storage');
-          const companyData = await storage.getTrainingDataByCategory(1, 'company');
           
+          // First check the 'company' category - highest priority
+          const companyData = await storage.getTrainingDataByCategory(1, 'company');
           if (companyData && companyData.length > 0) {
-            // Found company information in the database
-            companyInfo.name = "TechSolutions Inc.";
-            companyInfo.description = "a leading provider of AI-powered business automation";
-            
+            console.log("Found data in 'company' category");
             // Try to extract the actual company name and description
             const content = companyData[0].content;
+            
             const nameMatch = content.match(/Our company,\s+([^,\.]+)/i);
             if (nameMatch && nameMatch[1]) {
               companyInfo.name = nameMatch[1].trim();
-              console.log(`Extracted company name from training data: ${companyInfo.name}`);
+              console.log(`Extracted company name from 'company' category: ${companyInfo.name}`);
             }
             
             const descMatch = content.match(/is a\s+([^\.]+)/i);
             if (descMatch && descMatch[1]) {
               companyInfo.description = descMatch[1].trim();
-              console.log(`Extracted company description from training data: ${companyInfo.description}`);
+              console.log(`Extracted company description from 'company' category: ${companyInfo.description}`);
             }
-          } else {
-            console.log("No company data found in 'company' category, checking 'business' category");
-            // Try business category as fallback
-            const businessData = await storage.getTrainingDataByCategory(1, 'business');
-            if (businessData && businessData.length > 0) {
-              const content = businessData.find(item => item.content.includes("company name"))?.content;
-              if (content) {
-                const nameMatch = content.match(/company name is\s+([^,\.]+)/i);
-                if (nameMatch && nameMatch[1]) {
+          }
+          
+          // Check business category as alternative source
+          const businessData = await storage.getTrainingDataByCategory(1, 'business');
+          if (businessData && businessData.length > 0) {
+            console.log("Found data in 'business' category");
+            const companyNameEntry = businessData.find(item => 
+              item.content.toLowerCase().includes("company name")
+            );
+            
+            if (companyNameEntry) {
+              const content = companyNameEntry.content;
+              const nameMatch = content.match(/company name is\s+([^,\.]+)/i);
+              if (nameMatch && nameMatch[1]) {
+                // Only use this if we don't already have a company name from the higher priority source
+                if (!companyInfo.name || companyInfo.name === "TechSolutions Inc.") {
                   companyInfo.name = nameMatch[1].trim();
-                  console.log(`Extracted company name from business category: ${companyInfo.name}`);
+                  console.log(`Extracted company name from 'business' category: ${companyInfo.name}`);
+                } else {
+                  console.log(`Found company name in 'business' category (${nameMatch[1].trim()}) but using higher priority name: ${companyInfo.name}`);
                 }
               }
             }
           }
+          
+          // Also check company_info as another potential source
+          const companyInfoData = await storage.getTrainingDataByCategory(1, 'company_info');
+          if (companyInfoData && companyInfoData.length > 0) {
+            console.log("Found data in 'company_info' category");
+            // This category usually describes services but might mention company name
+            // For now we keep the higher priority sources
+          }
+          
+          // Log the final selected company info for debugging
+          console.log(`Final company info - Name: ${companyInfo.name}, Description: ${companyInfo.description}`);
+          
         } catch (error) {
           console.error("Error retrieving company data:", error);
+          // Use defaults set above if there's an error
         }
         
         // Use the extracted or default company information for the response
