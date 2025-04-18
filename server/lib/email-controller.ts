@@ -6,6 +6,8 @@ import { createChatCompletion } from './openai';
 import { EmailParams } from './sendgrid';
 import { generateEmailResponse, selectBestTemplate, processTemplate } from './template-processor';
 import { userProfileManager } from './user-profile-manager';
+import { getUserProfileAssistant } from './user-profile-assistant';
+import { generateUnifiedSystemPrompt } from './unified-agent-prompt';
 
 // Email Service Type
 export type EmailService = 'sendgrid' | 'smtp' | 'mailgun';
@@ -246,45 +248,33 @@ export async function parseEmailAndGenerateResponse(
   }
 }> {
   try {
-    // Generate AI response using chat completion
-    const aiResponse = await createChatCompletion([
-      { 
-        role: "system", 
-        content: `You are an AI Receptionist responding to an email. Respond professionally and helpfully.
-        If the email contains a request for scheduling a meeting, identify the requested date and time if provided.
-        
-        Provide your response in the following JSON format:
-        {
-          "response": "Your complete email response here",
-          "intents": ["list", "of", "identified", "user", "intents"],
-          "shouldScheduleMeeting": boolean value indicating if a meeting request was detected,
-          "meetingDetails": {
-            "date": "YYYY-MM-DD format if specified",
-            "time": "HH:MM format if specified",
-            "duration": duration in minutes if specified
-          }
-        }
-        
-        Note that meetingDetails should only be included if shouldScheduleMeeting is true.`
-      },
-      { 
-        role: "user", 
-        content: `From: ${emailContent.from}\nTo: ${emailContent.to || 'info@example.com'}\nSubject: ${emailContent.subject}\n\nBody: ${emailContent.body}`
-      }
-    ], true); // Set to true to get JSON response
+    // Extract the email address from the "from" field which might be in format "Name <email@domain.com>"
+    const fromEmailAddress = (emailContent.from.match(/<([^>]+)>/) || [null, emailContent.from])[1];
     
-    if (!aiResponse.success) {
-      // Default fallback response
-      return {
-        response: "Thank you for your email. We'll review it and get back to you shortly.",
-        intents: ["general_inquiry"],
-        shouldScheduleMeeting: false
-      };
-    }
+    // First, try to find or create a user profile based on email address
+    let profile = null;
+    let profileId = null;
     
     try {
+      // Use UserProfileAssistant to handle the email with profile awareness
+      const userProfileAssistant = getUserProfileAssistant();
+      
+      // Generate a context-aware response
+      const { response: assistantResponse, profileId: respProfileId } = await userProfileAssistant.generateResponse(
+        userId,
+        fromEmailAddress,
+        emailContent.body,
+        'email'
+      );
+      
+      // Set the profile ID from the response
+      profileId = respProfileId;
+      
+      // Continue with parsing the JSON response - the profile-aware prompt will ensure
+      // it outputs in the expected format with correct JSON structure
+      
       // Clean up the response before parsing
-      let cleanedResponse = aiResponse.content;
+      let cleanedResponse = assistantResponse;
       
       // Try to extract JSON from markdown code blocks
       const jsonBlockMatch = cleanedResponse.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
@@ -306,15 +296,10 @@ export async function parseEmailAndGenerateResponse(
         cleanedResponse = cleanedResponse.replace(/(\{|\,)\s*(\w+)\s*\:/g, '$1"$2":');
       }
       
-      console.log("Cleaned JSON response:", cleanedResponse);
+      console.log("Cleaned JSON response from UserProfileAssistant:", cleanedResponse);
       
-      // Parse the JSON response from the AI
+      // Parse the JSON response
       const parsedResponse = JSON.parse(cleanedResponse);
-      
-      // Validate the response structure
-      if (!parsedResponse.response || !Array.isArray(parsedResponse.intents)) {
-        throw new Error("Invalid response structure from AI");
-      }
       
       return {
         response: parsedResponse.response,
@@ -322,19 +307,102 @@ export async function parseEmailAndGenerateResponse(
         shouldScheduleMeeting: !!parsedResponse.shouldScheduleMeeting,
         meetingDetails: parsedResponse.meetingDetails
       };
-    } catch (parseError) {
-      console.error("Error parsing AI response:", parseError);
+    } catch (profileError) {
+      console.error("Error using profile-aware response system:", profileError);
+      console.log("Falling back to standard AI response system...");
       
-      // Use the email formatter to extract clean text
-      const { extractCleanResponseText } = require('./email-formatter');
-      const cleanText = extractCleanResponseText(aiResponse.content);
+      // If there's an error with profile system, fall back to the standard approach
       
-      // Return the cleaned text as fallback
-      return {
-        response: cleanText || aiResponse.content,
-        intents: ["general_inquiry"],
-        shouldScheduleMeeting: false
-      };
+      // Generate AI response using chat completion with unified prompt
+      const scheduleKeywords = ['schedule', 'meeting', 'appointment', 'calendar', 'call', 'zoom', 'teams'];
+      const messageHasScheduleKeywords = scheduleKeywords.some(keyword => 
+        emailContent.body.toLowerCase().includes(keyword) || emailContent.subject.toLowerCase().includes(keyword)
+      );
+      
+      // Generate a unified system prompt for email
+      const systemPrompt = await generateUnifiedSystemPrompt(
+        userId,
+        'email',
+        null, // No profile since the profile system had an error
+        {
+          scheduleKeywords: messageHasScheduleKeywords
+        }
+      );
+      
+      const aiResponse = await createChatCompletion([
+        { 
+          role: "system", 
+          content: systemPrompt
+        },
+        { 
+          role: "user", 
+          content: `From: ${emailContent.from}\nTo: ${emailContent.to || 'info@example.com'}\nSubject: ${emailContent.subject}\n\nBody: ${emailContent.body}`
+        }
+      ], { model: 'gpt-4o' }); // Using standard model
+    
+      if (!aiResponse.success) {
+        // Default fallback response
+        return {
+          response: "Thank you for your email. We'll review it and get back to you shortly.",
+          intents: ["general_inquiry"],
+          shouldScheduleMeeting: false
+        };
+      }
+      
+      try {
+        // Clean up the response before parsing
+        let cleanedResponse = aiResponse.content;
+        
+        // Try to extract JSON from markdown code blocks
+        const jsonBlockMatch = cleanedResponse.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        if (jsonBlockMatch && jsonBlockMatch[1]) {
+          // Use the content inside the code block
+          cleanedResponse = jsonBlockMatch[1].trim();
+        } else {
+          // If no code block, just clean up the response
+          // Replace backticks
+          cleanedResponse = cleanedResponse.replace(/```(?:json)?|```/g, '');
+        }
+        
+        // Additional cleanup
+        cleanedResponse = cleanedResponse.trim();
+        
+        // Handle common formatting issues
+        if (cleanedResponse.startsWith('{') && !cleanedResponse.startsWith('{"')) {
+          // Make sure property names are properly quoted
+          cleanedResponse = cleanedResponse.replace(/(\{|\,)\s*(\w+)\s*\:/g, '$1"$2":');
+        }
+        
+        console.log("Cleaned JSON response:", cleanedResponse);
+        
+        // Parse the JSON response from the AI
+        const parsedResponse = JSON.parse(cleanedResponse);
+        
+        // Validate the response structure
+        if (!parsedResponse.response || !Array.isArray(parsedResponse.intents)) {
+          throw new Error("Invalid response structure from AI");
+        }
+        
+        return {
+          response: parsedResponse.response,
+          intents: parsedResponse.intents,
+          shouldScheduleMeeting: !!parsedResponse.shouldScheduleMeeting,
+          meetingDetails: parsedResponse.meetingDetails
+        };
+      } catch (parseError) {
+        console.error("Error parsing AI response:", parseError);
+        
+        // Use the email formatter to extract clean text
+        const { extractCleanResponseText } = require('./email-formatter');
+        const cleanText = extractCleanResponseText(aiResponse.content);
+        
+        // Return the cleaned text as fallback
+        return {
+          response: cleanText || aiResponse.content,
+          intents: ["general_inquiry"],
+          shouldScheduleMeeting: false
+        };
+      }
     }
   } catch (error) {
     console.error("Error generating email response:", error);
