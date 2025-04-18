@@ -54,23 +54,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     };
 
-    // Auto-login function with demo credentials for development only
+    // Auto-login function with development endpoint for testing only
     const autoLoginForDevelopment = async () => {
       try {
-        console.log("Attempting auto-login with demo credentials...");
+        console.log("Attempting auto-login with dev endpoint...");
         
-        // Demo credentials for development only
-        const demoCredentials = {
-          usernameOrEmail: "admin",
-          password: "admin123"
-        };
-        
-        const response = await fetch("/api/auth/login", {
-          method: "POST",
+        // Use the dev-login endpoint that doesn't require password verification
+        const response = await fetch("/api/auth/dev-login", {
+          method: "GET",
           headers: {
             "Content-Type": "application/json"
-          },
-          body: JSON.stringify(demoCredentials)
+          }
         });
         
         const data = await response.json();
