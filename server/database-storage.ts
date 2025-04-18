@@ -1072,11 +1072,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createUserProfile(profile: InsertUserProfileData): Promise<UserProfileData> {
-    const now = new Date();
+    // Default timestamps are set by the database
     const result = await db.insert(userProfileData).values({
-      ...profile,
-      createdAt: now,
-      updatedAt: now
+      ...profile
     }).returning();
     return result[0];
   }
@@ -1183,9 +1181,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createUserInteraction(interaction: InsertUserInteraction): Promise<UserInteraction> {
+    // Timestamp is set by database default value
     const result = await db.insert(userInteractions).values({
-      ...interaction,
-      timestamp: new Date()
+      ...interaction
     }).returning();
     return result[0];
   }
