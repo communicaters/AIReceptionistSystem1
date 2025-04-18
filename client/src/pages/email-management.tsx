@@ -906,6 +906,20 @@ const EmailManagement = () => {
     queryKey: ["/api/email/configs"],
     queryFn: getEmailConfigs
   });
+  
+  // Query for checking IMAP connection status
+  const { 
+    data: imapStatus, 
+    isLoading: isCheckingImapStatus,
+    refetch: checkImapConnection
+  } = useQuery({
+    queryKey: ["/api/email/imap-status"],
+    queryFn: checkImapStatus,
+    refetchOnWindowFocus: false,
+    refetchInterval: 120000, // Check IMAP status every 2 minutes
+  });
+  
+
 
   // Query for fetching email logs
   const { 
@@ -916,7 +930,9 @@ const EmailManagement = () => {
   } = useQuery({
     queryKey: ["/api/email/logs"],
     queryFn: () => getEmailLogs(10),
-    refetchInterval: 10000, // Auto-refresh every 10 seconds
+    refetchInterval: 20000, // Auto-refresh every 20 seconds
+    // Enable refetch only when IMAP is connected
+    enabled: imapStatus?.connected !== false,
   });
   
   // Query for fetching email templates
@@ -1076,17 +1092,7 @@ const EmailManagement = () => {
     }
   });
   
-  // Query for checking IMAP connection status
-  const { 
-    data: imapStatus, 
-    isLoading: isCheckingImapStatus,
-    refetch: checkImapConnection
-  } = useQuery({
-    queryKey: ["/api/email/imap-status"],
-    queryFn: checkImapStatus,
-    refetchOnWindowFocus: false,
-    refetchInterval: false, // Don't auto-refresh
-  });
+
   
   // Mutation for syncing emails from IMAP server
   const syncEmailsMutation = useMutation({
