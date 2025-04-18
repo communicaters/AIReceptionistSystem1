@@ -70,16 +70,15 @@ export function ChatWidget({
     setUserProfile(data);
     setShowPreChatForm(false);
     
-    // Send user info to the server in a special message format
-    const userInfoMessage = JSON.stringify({
-      userInfo: {
-        fullName: data.fullName,
-        mobileNumber: data.mobileNumber,
-        emailAddress: data.emailAddress
-      }
-    });
+    // Send user info to the server
+    const userInfo = {
+      fullName: data.fullName,
+      mobileNumber: data.mobileNumber,
+      emailAddress: data.emailAddress
+    };
     
-    sendChatMessage(userInfoMessage, 'user_info');
+    // Use the specialized user_info message type
+    sendChatMessage(JSON.stringify(userInfo), 'user_info');
     
     // Add personalized welcome message
     setChatHistory([{

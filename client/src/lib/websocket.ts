@@ -385,6 +385,10 @@ class WebSocketService {
   public sendChatMessage(message: string): boolean {
     return this.sendMessage('chat', { message });
   }
+  
+  public sendUserInfo(userInfo: any): boolean {
+    return this.sendMessage('user_info', { userInfo });
+  }
 
   public sendStatusUpdate(moduleId: string, status: string): boolean {
     return this.sendMessage('status', { moduleId, status });

@@ -1,14 +1,15 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { WebSocketMessage, websocketService } from '@/lib/websocket';
+import { WebSocketMessage, websocketService, MessageType } from '@/lib/websocket';
 
 interface WebSocketContextType {
   connected: boolean;
   sessionId: string | null;
   messages: WebSocketMessage[];
-  sendChatMessage: (message: string) => boolean;
+  sendChatMessage: (message: string, type?: MessageType) => boolean;
   sendStatusUpdate: (moduleId: string, status: string) => boolean;
   clearMessages: () => void;
+  getSessionId: () => string | null;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | null>(null);
@@ -79,8 +80,12 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   }, [handleMessage, handleConnectionStatus]);
 
   // Convenience method to send a chat message
-  const sendChatMessage = useCallback((message: string): boolean => {
-    return websocketService.sendChatMessage(message);
+  const sendChatMessage = useCallback((message: string, type: MessageType = 'chat'): boolean => {
+    if (type === 'chat') {
+      return websocketService.sendChatMessage(message);
+    } else {
+      return websocketService.sendMessage(type, { message });
+    }
   }, []);
   
   // Convenience method to send a status update
@@ -92,6 +97,11 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   const clearMessages = useCallback(() => {
     setMessages([]);
   }, []);
+  
+  // Get current session ID method
+  const getSessionId = useCallback(() => {
+    return websocketService.getSessionId();
+  }, []);
 
   return (
     <WebSocketContext.Provider
@@ -102,6 +112,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         sendChatMessage,
         sendStatusUpdate,
         clearMessages,
+        getSessionId
       }}
     >
       {children}
