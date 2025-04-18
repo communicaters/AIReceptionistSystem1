@@ -712,12 +712,34 @@ export class UserProfileAssistant {
         description?: string;
       }
       
-      // Special case for WhatsApp: Check for explicit company name denial responses
-      if ((isAskingAboutCompany && isDenyingCompany) || (isDirectCompanyQuestion && isDenyingCompany) || 
-          (isDirectCompanyQuestion && aiResponse.toLowerCase().includes("openai")) ||
-          (aiResponse.toLowerCase().includes("don't work for") && aiResponse.toLowerCase().includes("company")) ||
-          (aiResponse.toLowerCase().includes("don't have a company")) ||
-          (aiResponse.toLowerCase().includes("i apologize") && aiResponse.toLowerCase().includes("don't represent"))
+      // Expanded detection for incorrect company responses - check much more aggressively
+      const aiResponseLower = aiResponse.toLowerCase();
+      
+      // Check for any indication of AI identification, especially in WhatsApp & Chat
+      const containsAIIdentifiers = 
+        aiResponseLower.includes("ai") || 
+        aiResponseLower.includes("artificial intelligence") || 
+        aiResponseLower.includes("assistant") || 
+        aiResponseLower.includes("chatbot") || 
+        aiResponseLower.includes("virtual") || 
+        aiResponseLower.includes("openai") || 
+        aiResponseLower.includes("gpt") || 
+        aiResponseLower.includes("model") || 
+        aiResponseLower.includes("language model") || 
+        aiResponseLower.includes("trained");
+      
+      // If in WhatsApp or Chat, check much more aggressively for incorrect company references
+      const needsStrictCompanyCheck = ['whatsapp', 'chat'].includes(channel) && containsAIIdentifiers;
+      
+      // Special case for WhatsApp and Chat: Check for explicit company name denial responses
+      // or any responses containing AI identification language
+      if ((isAskingAboutCompany && isDenyingCompany) || 
+          (isDirectCompanyQuestion && isDenyingCompany) || 
+          (isDirectCompanyQuestion && aiResponseLower.includes("openai")) ||
+          (aiResponseLower.includes("don't work for") && aiResponseLower.includes("company")) ||
+          (aiResponseLower.includes("don't have a company")) ||
+          (aiResponseLower.includes("i apologize") && aiResponseLower.includes("don't represent")) ||
+          (needsStrictCompanyCheck) // Much more aggressive check for WhatsApp and Chat
          ) {
         console.log("Detected company question with incorrect response - overriding with company information");
         
@@ -804,16 +826,42 @@ export class UserProfileAssistant {
       ];
       
       // Check for queries about the AI itself - use a more comprehensive approach
-      const isAboutAI = aiPhrases.some(phrase => aiResponse.toLowerCase().includes(phrase)) ||
-                        aiResponseContainsMultipleAIKeywords(aiResponse, aiInfoKeywords);
+      // For WhatsApp and Chat, use a more aggressive check to catch any AI-related statements
+      let isAboutAI = false;
+      
+      if (['whatsapp', 'chat'].includes(channel)) {
+        // For problematic channels, use a more aggressive detection
+        isAboutAI = aiPhrases.some(phrase => aiResponseLower.includes(phrase)) ||
+                    aiResponseLower.includes('ai') ||
+                    aiResponseLower.includes('assistant') ||
+                    aiResponseLower.includes('model') ||
+                    aiResponseLower.includes('virtual') ||
+                    aiResponseLower.includes('chatbot') ||
+                    aiResponseLower.includes('trained') ||
+                    aiResponseLower.includes('openai') ||
+                    aiResponseLower.includes('gpt') ||
+                    aiResponseContainsMultipleAIKeywords(aiResponse, aiInfoKeywords);
+      } else {
+        // For other channels (email, call), use the standard detection
+        isAboutAI = aiPhrases.some(phrase => aiResponseLower.includes(phrase)) ||
+                    aiResponseContainsMultipleAIKeywords(aiResponse, aiInfoKeywords);
+      }
                         
       // Check if the response is deflecting actions the agent should perform
-      const isDeflecting = deflectionPhrases.some(phrase => aiResponse.toLowerCase().includes(phrase));
+      const isDeflecting = deflectionPhrases.some(phrase => aiResponseLower.includes(phrase));
       
       // If the response is about AI, replace with company-specific redirection
       // Use a more personal, warm response that redirects to company information
       if (isAboutAI) {
-        enhancedResponse = "I'm Jamie, the company receptionist. I'm here to help with information about our products, services, and scheduling meetings. If you'd like to know more about our company specifically, I'd be happy to share that information with you. Is there something specific about our business that I can help you with today?";
+        // Log when we detect AI-related responses that need to be redirected
+        console.log(`Detected AI-related response in ${channel} channel - using human receptionist redirection`);
+        
+        if (channel === 'whatsapp') {
+          // Even more conversational for WhatsApp
+          enhancedResponse = "Hi there! I'm Jamie, the receptionist at TechSolutions Inc. I'm here to help with any questions about our products, schedule meetings with our team, or provide information about our services. What can I help you with today?";
+        } else {
+          enhancedResponse = "I'm Jamie, the receptionist at TechSolutions Inc. I'm here to help with information about our products, services, and scheduling meetings. If you'd like to know more about our company specifically, I'd be happy to share that information with you. Is there something specific about our business that I can help you with today?";
+        }
       }
       
       // If the response is deflecting actions it should perform (especially scheduling)
