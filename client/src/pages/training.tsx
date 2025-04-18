@@ -50,14 +50,6 @@ const createTrainingData = async (data: Omit<TrainingData, 'id' | 'userId' | 'cr
   return response.json();
 };
 
-const updateTrainingDataItem = async ({ id, data }: { 
-  id: number, 
-  data: Partial<Omit<TrainingData, 'id' | 'userId' | 'createdAt' | 'metadata'>> 
-}) => {
-  const response = await apiRequest('PATCH', `/api/training/data/${id}`, data);
-  return response.json();
-};;
-
 const updateTrainingData = async (id: number, data: Partial<Omit<TrainingData, 'id' | 'userId' | 'createdAt' | 'metadata'>>) => {
   const response = await apiRequest('PATCH', `/api/training/data/${id}`, data);
   return response.json();
@@ -78,6 +70,16 @@ const createIntent = async (data: Omit<Intent, 'id' | 'userId'>) => {
     ...data, 
     userId: 1 // Fixed user ID for demo
   });
+  return response.json();
+};
+
+const updateIntent = async (id: number, data: Partial<Omit<Intent, 'id' | 'userId'>>) => {
+  const response = await apiRequest('PUT', `/api/training/intents/${id}`, data);
+  return response.json();
+};
+
+const deleteIntent = async (id: number) => {
+  const response = await apiRequest('DELETE', `/api/training/intents/${id}`);
   return response.json();
 };
 
@@ -110,7 +112,9 @@ const TrainingPage = () => {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showIntentDialog, setShowIntentDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showEditIntentDialog, setShowEditIntentDialog] = useState(false);
   const [editingTrainingData, setEditingTrainingData] = useState<TrainingData | null>(null);
+  const [editingIntent, setEditingIntent] = useState<Intent | null>(null);
   const [allCategories, setAllCategories] = useState<string[]>([]);
   
   // Training data queries and mutations
@@ -211,7 +215,7 @@ const TrainingPage = () => {
     },
   });
 
-  // Intent mutation
+  // Intent mutations
   const addIntentMutation = useMutation({
     mutationFn: createIntent,
     onSuccess: () => {
@@ -225,6 +229,47 @@ const TrainingPage = () => {
     onError: (error: Error) => {
       toast({
         title: "Failed to add intent",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+  
+  // Update intent mutation
+  const updateIntentMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number, data: Partial<Omit<Intent, 'id' | 'userId'>> }) => 
+      updateIntent(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/training/intents'] });
+      toast({
+        title: "Intent updated",
+        description: "Your intent mapping has been successfully updated.",
+      });
+      setShowEditIntentDialog(false);
+      setEditingIntent(null);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to update intent",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+  
+  // Delete intent mutation
+  const deleteIntentMutation = useMutation({
+    mutationFn: deleteIntent,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/training/intents'] });
+      toast({
+        title: "Intent deleted",
+        description: "Your intent mapping has been removed.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to delete intent",
         description: error.message,
         variant: "destructive",
       });
