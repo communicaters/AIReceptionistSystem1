@@ -368,13 +368,13 @@ async function resetIntentMap() {
     console.log(`Preparing to insert ${newIntentMap.length} new intents...`);
     
     for (const item of newIntentMap) {
-      // Convert each pattern to an array of examples as required by the schema
-      const examples = [item.pattern];
+      // Format the examples array with PostgreSQL array syntax (requires curly braces)
+      const pgArrayString = `{${JSON.stringify(item.pattern)}}`;
       
-      // Use raw SQL to match actual DB schema
+      // Use raw SQL to match actual DB schema with properly formatted PostgreSQL array
       await db.execute(sql`
         INSERT INTO intent_map (user_id, intent, examples)
-        VALUES (${userId}, ${item.intent}, ${examples})
+        VALUES (${userId}, ${item.intent}, ${pgArrayString}::text[])
       `);
       
       console.log(`Added intent: ${item.intent}`);
