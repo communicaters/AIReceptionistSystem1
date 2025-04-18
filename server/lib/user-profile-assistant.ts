@@ -402,25 +402,36 @@ export class UserProfileAssistant {
     aiResponse: string,
     channel: 'whatsapp' | 'email' | 'chat' | 'call'
   ): Promise<string> {
-    // Record the AI's response as an interaction
-    await userProfileManager.recordInteraction(
-      profileId,
-      channel,
-      'outbound',
-      aiResponse,
-      {
-        timestamp: new Date().toISOString(),
-        aiGenerated: true
+    try {
+      // Record the AI's response as an interaction
+      await userProfileManager.recordInteraction(
+        profileId,
+        channel,
+        'outbound',
+        aiResponse,
+        {
+          timestamp: new Date().toISOString(),
+          aiGenerated: true
+        }
+      );
+      
+      // Update the profile's last interaction time and source
+      try {
+        await userProfileManager.updateProfile(profileId, {
+          lastSeen: new Date(),
+          lastInteractionSource: channel
+        });
+      } catch (updateError) {
+        console.error(`Error updating profile last interaction time for ID ${profileId}:`, updateError);
+        // Continue - this error shouldn't prevent the response from being sent
       }
-    );
-    
-    // Update the profile's last interaction time and source
-    await userProfileManager.updateProfile(profileId, {
-      lastSeen: new Date(),
-      lastInteractionSource: channel
-    });
-    
-    return aiResponse;
+      
+      return aiResponse;
+    } catch (error) {
+      console.error(`Error recording AI response for profile ${profileId}:`, error);
+      // Still return the AI response even if we couldn't record it
+      return aiResponse;
+    }
   }
   
   /**
@@ -458,17 +469,22 @@ export class UserProfileAssistant {
       }
       
       // Record the inbound message
-      await userProfileManager.recordInteraction(
-        profileId,
-        channel,
-        'inbound',
-        messageContent,
-        {
-          timestamp: new Date().toISOString(),
-          mediaUrl: null,
-          phoneNumber: channel === 'whatsapp' ? contactIdentifier : undefined
-        }
-      );
+      try {
+        await userProfileManager.recordInteraction(
+          profileId,
+          channel,
+          'inbound',
+          messageContent,
+          {
+            timestamp: new Date().toISOString(),
+            mediaUrl: null,
+            phoneNumber: channel === 'whatsapp' ? contactIdentifier : undefined
+          }
+        );
+      } catch (error) {
+        // Log the error but continue processing - don't let recording failure block the response
+        console.error(`Error recording user message for profile ${profileId}:`, error);
+      }
       
       // Create the message history for the API call
       const messages: any[] = [
