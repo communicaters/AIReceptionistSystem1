@@ -309,89 +309,42 @@ export class UserProfileAssistant {
   /**
    * Create an enhanced prompt that includes profile information
    */
-  private createEnhancedPrompt(
+  private async createEnhancedPrompt(
     context: ConversationContext,
     currentMessage: string,
     channel: string,
     newInfoExtracted: boolean
-  ): string {
+  ): Promise<string> {
+    // Import the unified prompt generator
+    const { generateUnifiedSystemPrompt } = require('./unified-agent-prompt');
+    
+    // Get the user profile and other context
     const profile = context.userProfile;
     const missingFields = context.missingFields || [];
     const previouslyAskedFor = context.previouslyAskedFor || [];
     
-    // Base system instructions
-    let prompt = `You are an AI Receptionist providing customer service via ${channel}.`;
+    // Detect if this might be a scheduling request
+    const scheduleKeywords = ['schedule', 'meeting', 'appointment', 'calendar', 'book', 'meet', 'talk', 'call', 'zoom', 'teams'];
+    const messageHasScheduleKeywords = scheduleKeywords.some(keyword => 
+      currentMessage.toLowerCase().includes(keyword)
+    );
     
-    // Add user profile context
-    prompt += `\n\nCUSTOMER PROFILE:`;
-    if (profile?.name) {
-      prompt += `\nName: ${profile.name}`;
-    } else {
-      prompt += `\nName: Unknown`;
-    }
+    // Generate unified prompt that's consistent across all channels
+    const userId = profile?.userId || 1; // Default to user 1 if not found
     
-    if (profile?.email) {
-      prompt += `\nEmail: ${profile.email}`;
-    } else {
-      prompt += `\nEmail: Unknown`;
-    }
-    
-    if (profile?.phone) {
-      prompt += `\nPhone: ${profile.phone}`;
-    } else {
-      prompt += `\nPhone: Unknown`;
-    }
-    
-    // Add instructions about gathering missing information
-    if (missingFields.length > 0) {
-      prompt += `\n\nMISSING INFORMATION:`;
-      if (missingFields.includes('name')) {
-        prompt += `\n- Customer's full name is unknown`;
+    // Use the unified prompt generator with the same parameters
+    return await generateUnifiedSystemPrompt(
+      userId,
+      channel as 'whatsapp' | 'email' | 'chat' | 'call',
+      profile,
+      {
+        missingFields,
+        previouslyAskedFor,
+        newInfoExtracted,
+        conversationHistory: context.chatHistory,
+        scheduleKeywords: messageHasScheduleKeywords
       }
-      if (missingFields.includes('email')) {
-        prompt += `\n- Customer's email address is unknown`;
-      }
-      if (missingFields.includes('phone')) {
-        prompt += `\n- Customer's phone number is unknown`;
-      }
-      
-      // If we just extracted some new info, acknowledge it 
-      if (newInfoExtracted) {
-        prompt += `\n\nNOTE: Some new information was just extracted from the user's message. Thank the user for providing this information.`;
-      }
-      
-      // Determine if we need to ask for information
-      const shouldAskFor = missingFields.filter(field => !previouslyAskedFor.includes(field));
-      
-      if (shouldAskFor.length > 0) {
-        // Don't ask for more than one piece of information at a time
-        const fieldToAskFor = shouldAskFor[0];
-        
-        prompt += `\n\nACTION REQUIRED:`;
-        prompt += `\nPolitely ask for the customer's ${fieldToAskFor} if it makes sense in the conversation flow.`;
-        prompt += `\nDon't ask this as a separate question - integrate it naturally into your response.`;
-        prompt += `\nIf the current interaction doesn't allow for this naturally, address their message first.`;
-      }
-    }
-    
-    // Personalization instructions
-    if (profile?.name) {
-      prompt += `\n\nPERSONALIZATION:`;
-      prompt += `\nAddress the customer by name (${profile.name}) to personalize your interactions.`;
-      prompt += `\nYou can use phrases like "Thank you, ${profile.name}" or "Hello ${profile.name}".`;
-    }
-    
-    // General behavior instructions
-    prompt += `\n\nBEHAVIOR GUIDELINES:`;
-    prompt += `\n- Be professional, helpful, and friendly.`;
-    prompt += `\n- Keep responses concise and to the point.`;
-    prompt += `\n- Use appropriate context from previous messages.`;
-    prompt += `\n- Avoid asking for information the customer has already provided.`;
-    prompt += `\n- Be casual but professional in tone.`;
-    prompt += `\n- Do not mention that you are collecting user information.`;
-    prompt += `\n- Focus on addressing their needs first, information collection is secondary.`;
-    
-    return prompt;
+    );
   }
   
   /**
