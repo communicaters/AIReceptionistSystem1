@@ -177,6 +177,8 @@ export function setupWebsocketHandlers(wss: WebSocketServer) {
           await handleChatMessage(clientId, data.message);
         } else if (data.type === 'status' && data.moduleId && data.status) {
           await handleStatusUpdate(clientId, data.moduleId, data.status);
+        } else if (data.type === 'user_info' && data.userInfo) {
+          await handleUserInfo(clientId, data.userInfo);
         } else if (data.type === 'ping') {
           // Handle explicit ping messages from client
           sendToClient(ws, {
@@ -950,5 +952,157 @@ async function handleStatusUpdate(clientId: string, moduleId: string, status: st
       timestamp: new Date(),
       details: { moduleId, newStatus: status }
     });
+  }
+}
+
+// Handle user info submissions from pre-chat form
+async function handleUserInfo(clientId: string, userInfo: any) {
+  const client = connectedClients.get(clientId);
+  if (!client) return;
+  
+  const { ws, userId, sessionId } = client;
+  
+  console.log(`Received user info from ${clientId} for session ${sessionId}`);
+  
+  try {
+    // Validate the userInfo object
+    if (!userInfo.fullName || !userInfo.mobileNumber || !userInfo.emailAddress) {
+      console.error(`Invalid user info received: missing required fields`);
+      return sendToClient(ws, {
+        type: 'error',
+        message: 'User info is missing required fields',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    // Check if a profile already exists with this email
+    let existingProfile = null;
+    try {
+      existingProfile = await storage.getUserProfileByEmail(userInfo.emailAddress);
+      if (existingProfile) {
+        console.log(`Found existing profile with email ${userInfo.emailAddress}, profile ID: ${existingProfile.id}`);
+      }
+    } catch (error) {
+      console.error("Error checking for existing profile by email:", error);
+    }
+    
+    // If profile exists, update it with any new information
+    let profileId;
+    if (existingProfile) {
+      profileId = existingProfile.id;
+      
+      // Update the existing profile with new information
+      const updates: any = {};
+      let profileUpdated = false;
+      
+      // Always update lastSeen and lastInteractionSource
+      updates.lastSeen = new Date();
+      updates.lastInteractionSource = 'livechat';
+      profileUpdated = true;
+      
+      // Update name if it's not already set
+      if (!existingProfile.name) {
+        updates.name = userInfo.fullName;
+        profileUpdated = true;
+      }
+      
+      // Update phone if it's not already set
+      if (!existingProfile.phone) {
+        updates.phone = userInfo.mobileNumber;
+        profileUpdated = true;
+      }
+      
+      if (profileUpdated) {
+        await userProfileManager.updateProfile(profileId, updates);
+        console.log(`Updated existing profile ${profileId} with pre-chat form information`);
+      }
+    } else {
+      // Create a new profile with the user info
+      const newProfile = await userProfileManager.createProfile({
+        userId,
+        name: userInfo.fullName,
+        email: userInfo.emailAddress,
+        phone: userInfo.mobileNumber,
+        lastInteractionSource: 'livechat',
+        lastSeen: new Date(),
+        metadata: {
+          sessionId,
+          source: 'pre-chat-form'
+        }
+      });
+      
+      profileId = newProfile.id;
+      console.log(`Created new profile from pre-chat form, profile ID: ${profileId}`);
+    }
+    
+    // Record this form submission as an interaction
+    if (profileId) {
+      await userProfileManager.recordInteraction(
+        profileId,
+        'livechat',
+        'inbound',
+        `Pre-chat form submitted: ${userInfo.fullName}, ${userInfo.emailAddress}, ${userInfo.mobileNumber}`,
+        {
+          sessionId,
+          timestamp: new Date(),
+          formData: true
+        }
+      );
+      
+      // Store the profile ID in the client information for future reference
+      client.profileId = profileId;
+      connectedClients.set(clientId, client);
+      
+      console.log(`Recorded user info as interaction and associated profile ${profileId} with session ${sessionId}`);
+    }
+    
+    // Send confirmation to the client
+    sendToClient(ws, {
+      type: 'user_info_received',
+      timestamp: new Date().toISOString(),
+      message: 'User information received successfully'
+    });
+    
+    // Create system activity record
+    await storage.createSystemActivity({
+      module: 'Live Chat',
+      event: 'User Info Submitted',
+      status: 'Completed',
+      timestamp: new Date(),
+      details: { 
+        sessionId,
+        clientId,
+        profileId: profileId || null,
+        name: userInfo.fullName,
+        email: userInfo.emailAddress.substring(0, 3) + '***@' + userInfo.emailAddress.split('@')[1] // Redact email for logs
+      }
+    });
+    
+  } catch (error) {
+    console.error(`Error processing user info for ${clientId}:`, error);
+    
+    // Send error to client
+    sendToClient(ws, {
+      type: 'error',
+      message: 'Failed to process user information',
+      timestamp: new Date().toISOString()
+    });
+    
+    // Create system activity record for error
+    try {
+      await storage.createSystemActivity({
+        module: 'Live Chat',
+        event: 'User Info Processing Error',
+        status: 'Error',
+        timestamp: new Date(),
+        details: { 
+          clientId,
+          sessionId,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        }
+      });
+    } catch (err) {
+      console.error('Failed to create system activity for user info error:', err);
+    }
   }
 }

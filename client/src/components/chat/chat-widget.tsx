@@ -70,15 +70,25 @@ export function ChatWidget({
     setUserProfile(data);
     setShowPreChatForm(false);
     
-    // Send user info to the server
+    // Prepare user info to send to the server
     const userInfo = {
       fullName: data.fullName,
       mobileNumber: data.mobileNumber,
       emailAddress: data.emailAddress
     };
     
-    // Use the specialized user_info message type
-    sendChatMessage(JSON.stringify(userInfo), 'user_info');
+    // Send user info to the server via the WebSocket
+    if (connected) {
+      sendUserInfo(userInfo);
+      console.log('Sent user info to server:', userInfo);
+    } else {
+      console.error('Cannot send user info: WebSocket not connected');
+      toast({
+        title: "Connection Error",
+        description: "Unable to send your information. Please try again.",
+        variant: "destructive",
+      });
+    }
     
     // Add personalized welcome message
     setChatHistory([{

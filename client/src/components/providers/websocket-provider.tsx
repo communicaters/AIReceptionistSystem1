@@ -7,6 +7,7 @@ interface WebSocketContextType {
   sessionId: string | null;
   messages: WebSocketMessage[];
   sendChatMessage: (message: string, type?: MessageType) => boolean;
+  sendUserInfo: (userInfo: any) => boolean;  
   sendStatusUpdate: (moduleId: string, status: string) => boolean;
   clearMessages: () => void;
   getSessionId: () => string | null;
@@ -98,6 +99,11 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     setMessages([]);
   }, []);
   
+  // Convenience method to send user info data
+  const sendUserInfo = useCallback((userInfo: any): boolean => {
+    return websocketService.sendUserInfo(userInfo);
+  }, []);
+  
   // Get current session ID method
   const getSessionId = useCallback(() => {
     return websocketService.getSessionId();
@@ -110,6 +116,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         sessionId,
         messages,
         sendChatMessage,
+        sendUserInfo,
         sendStatusUpdate,
         clearMessages,
         getSessionId
