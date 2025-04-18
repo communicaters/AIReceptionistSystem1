@@ -333,7 +333,7 @@ export function broadcastMessage(data: any): number {
   return successCount;
 }
 
-// Handle chat messages
+// Handle chat messages with user profile integration
 async function handleChatMessage(clientId: string, message: string) {
   const client = connectedClients.get(clientId);
   if (!client) return;
@@ -349,102 +349,228 @@ async function handleChatMessage(clientId: string, message: string) {
     timestamp: new Date()
   });
   
-  // Identify the intent of the message using our AI
-  // Include schedule_meeting to detect calendar-related requests
-  const possibleIntents = ["inquiry", "complaint", "support", "order", "general", "schedule_meeting"];
-  const intentResult = await classifyIntent(message, possibleIntents);
+  // Get the UserProfileAssistant instance
+  const userProfileAssistant = getUserProfileAssistant();
   
-  // Get chat history for context
-  const chatHistory = await storage.getChatLogsBySessionId(sessionId);
-  const context = chatHistory
-    .slice(-5) // Get the last 5 messages for context
-    .map(log => log.message);
-  
-  let aiResponse = "";
-  
-  // Check if this is a meeting scheduling intent
-  if (intentResult.intent === "schedule_meeting" && intentResult.confidence > 0.7) {
-    try {
-      // Try to handle scheduling request
-      const schedulingResult = await handleMeetingScheduling(message, userId, sessionId);
-      
-      if (schedulingResult.success) {
-        aiResponse = schedulingResult.response;
-        
-        // Inform the client that a meeting was scheduled
-        sendToClient(ws, {
-          type: 'meeting_scheduled',
-          message: schedulingResult.meetingDetails,
-          timestamp: new Date().toISOString()
-        });
-      } else {
-        // If scheduling failed, fall back to regular chat
-        aiResponse = schedulingResult.response;
-      }
-    } catch (error) {
-      console.error("Error handling meeting scheduling:", error);
-      // Fall back to regular chat if scheduling fails
-      aiResponse = "I'm having trouble with the calendar system right now. Can you please provide more details about when you'd like to schedule a meeting?";
-    }
-  } else {
-    // Process regular chat message
-    // Create a messages array with system instruction, context, and user message
-    const messages = [
-      { 
-        role: "system", 
-        content: "You are an AI Receptionist responding to a chat message. Use context from previous messages when available. Be helpful, concise, and professional."
-      }
-    ];
+  try {
+    // Extract any potential user information from the message using regex
+    // Later we'll use this to associate the chat session with a user profile
+    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+    const phoneRegex = /(\+\d{1,3}[ -]?)?\(?\d{3}\)?[ -]?\d{3}[ -]?\d{4}/g; // Basic phone pattern
+    const nameRegex = /(?:my name is|i am|this is) ([a-zA-Z]+(?: [a-zA-Z]+){1,2})/i;
     
-    // Add context messages
-    if (context.length > 0) {
-      messages.push({ 
-        role: "system", 
-        content: `Previous conversation context: ${context.join(' | ')}`
+    const emailMatches = message.match(emailRegex);
+    const phoneMatches = message.match(phoneRegex);
+    const nameMatches = message.match(nameRegex);
+    
+    const email = emailMatches ? emailMatches[0] : null;
+    const phone = phoneMatches ? phoneMatches[0] : null;
+    const name = nameMatches ? nameMatches[1] : null;
+    
+    // Find or create a user profile based on session ID
+    // We use this for tracking purposes since we might not have real contact info yet
+    const sessionProfile = await userProfileManager.findOrCreateProfile({
+      userId,
+      sessionId, // We use the session ID as a temporary identifier
+      channel: 'livechat'
+    });
+
+    // If we found user information in this message, update the profile
+    let profileUpdated = false;
+    if (sessionProfile) {
+      const updates: any = {};
+      
+      if (email && !sessionProfile.email) {
+        updates.email = email;
+        profileUpdated = true;
+      }
+      
+      if (phone && !sessionProfile.phone) {
+        updates.phone = phone;
+        profileUpdated = true;
+      }
+      
+      if (name && !sessionProfile.name) {
+        updates.name = name;
+        profileUpdated = true;
+      }
+      
+      if (profileUpdated) {
+        await userProfileManager.updateProfile(sessionProfile.id, updates);
+        console.log(`Updated profile for session ${sessionId} with extracted information`);
+      }
+      
+      // Record this incoming message as an interaction
+      await userProfileManager.recordInteraction(
+        sessionProfile.id,
+        'livechat',
+        'inbound',
+        message.substring(0, 100) + (message.length > 100 ? '...' : ''),
+        {
+          sessionId,
+          timestamp: new Date()
+        }
+      );
+    }
+
+    // Use the profile-aware assistant to generate a response that considers user profile info
+    const { response: profileAwareResponse, profileId } = await userProfileAssistant.generateResponse(
+      userId,
+      sessionId, // We use sessionId as the identifier since we may not have phone/email yet
+      message,
+      'livechat'
+    );
+    
+    // Identify the intent of the message using our AI
+    // Include schedule_meeting to detect calendar-related requests
+    const possibleIntents = ["inquiry", "complaint", "support", "order", "general", "schedule_meeting"];
+    const intentResult = await classifyIntent(message, possibleIntents);
+    
+    let aiResponse = profileAwareResponse;
+    
+    // Check if this is a meeting scheduling intent
+    if (intentResult.intent === "schedule_meeting" && intentResult.confidence > 0.7) {
+      try {
+        // First, make sure we have required user information for scheduling a meeting
+        const profile = await userProfileManager.getProfile(profileId);
+        
+        // If we're missing information, ask for it before attempting scheduling
+        if (!profile || !profile.email || !profile.name) {
+          // Build a response that asks for the missing information
+          let missingInfoResponse = "I'd be happy to schedule a meeting for you, but I need a few details first.\n\n";
+          
+          if (!profile || !profile.name) {
+            missingInfoResponse += "What is your full name?\n";
+          }
+          
+          if (!profile || !profile.email) {
+            missingInfoResponse += "What email address should I use for the meeting invitation?\n";
+          }
+          
+          if (!profile?.phone) {
+            missingInfoResponse += "Could you provide a phone number in case there are any issues with the meeting?\n";
+          }
+          
+          aiResponse = missingInfoResponse;
+        } else {
+          // We have the necessary information, proceed with scheduling
+          // Enhance the meeting request with the user's information
+          const schedulingResult = await handleMeetingScheduling(message, userId, sessionId, profile);
+          
+          if (schedulingResult.success) {
+            aiResponse = schedulingResult.response;
+            
+            // Inform the client that a meeting was scheduled
+            sendToClient(ws, {
+              type: 'meeting_scheduled',
+              message: schedulingResult.meetingDetails,
+              timestamp: new Date().toISOString()
+            });
+          } else {
+            // If scheduling failed, use the response from the scheduling handler
+            aiResponse = schedulingResult.response;
+          }
+        }
+      } catch (error) {
+        console.error("Error handling meeting scheduling:", error);
+        // Fall back to regular chat if scheduling fails
+        aiResponse = "I'm having trouble with the calendar system right now. Can you please provide more details about when you'd like to schedule a meeting?";
+      }
+    }
+    
+    // Record the outgoing message as an interaction
+    if (profileId) {
+      await userProfileManager.recordInteraction(
+        profileId,
+        'livechat',
+        'outbound',
+        aiResponse.substring(0, 100) + (aiResponse.length > 100 ? '...' : ''),
+        {
+          sessionId,
+          timestamp: new Date(),
+          aiGenerated: true
+        }
+      );
+      
+      // Update last interaction source in profile
+      await userProfileManager.updateProfile(profileId, {
+        lastInteractionSource: 'livechat'
       });
     }
     
-    // Add the current user message
-    messages.push({
-      role: "user",
-      content: message
+    // Log the AI response
+    await storage.createChatLog({
+      userId,
+      sessionId,
+      message: aiResponse,
+      sender: 'ai',
+      timestamp: new Date()
     });
     
-    // Generate AI response using chat completion
-    const response = await createChatCompletion(messages);
-    aiResponse = response.success ? response.content : "I'm sorry, I'm having trouble processing your request at the moment.";
+    // Send response back to client
+    sendToClient(ws, {
+      type: 'chat',
+      message: aiResponse,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Create system activity record
+    await storage.createSystemActivity({
+      module: 'Live Chat',
+      event: 'Chat Message Processed',
+      status: 'Completed',
+      timestamp: new Date(),
+      details: { 
+        sessionId, 
+        intent: intentResult.intent,
+        profileId: profileId || null
+      }
+    });
+  } catch (error) {
+    console.error("Error processing chat message with user profile:", error);
+    
+    // Fallback to simple response if profile handling fails
+    const fallbackResponse = "I'm sorry, I'm having trouble processing your request right now. Please try again in a moment.";
+    
+    // Log the fallback response
+    await storage.createChatLog({
+      userId,
+      sessionId,
+      message: fallbackResponse,
+      sender: 'ai',
+      timestamp: new Date()
+    });
+    
+    // Send fallback response to client
+    sendToClient(ws, {
+      type: 'chat',
+      message: fallbackResponse,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Log the error
+    await storage.createSystemActivity({
+      module: 'Live Chat',
+      event: 'Profile Processing Error',
+      status: 'Error',
+      timestamp: new Date(),
+      details: { 
+        sessionId, 
+        error: error instanceof Error ? error.message : String(error)
+      }
+    });
   }
-  
-  // Log the AI response
-  await storage.createChatLog({
-    userId,
-    sessionId,
-    message: aiResponse,
-    sender: 'ai',
-    timestamp: new Date()
-  });
-  
-  // Send response back to client
-  sendToClient(ws, {
-    type: 'chat',
-    message: aiResponse,
-    timestamp: new Date().toISOString()
-  });
-  
-  // Create system activity record
-  await storage.createSystemActivity({
-    module: 'Live Chat',
-    event: 'Chat Message Processed',
-    status: 'Completed',
-    timestamp: new Date(),
-    details: { sessionId, intent: intentResult.intent }
-  });
 }
 
 /**
  * Handle meeting scheduling requests through chat
  */
-async function handleMeetingScheduling(message: string, userId: number, sessionId: string): Promise<{
+async function handleMeetingScheduling(
+  message: string, 
+  userId: number, 
+  sessionId: string, 
+  userProfile?: any
+): Promise<{
   success: boolean,
   response: string,
   meetingDetails?: any
@@ -460,6 +586,11 @@ async function handleMeetingScheduling(message: string, userId: number, sessionI
     }
     
     // Use AI to extract meeting details from user message
+    // Include user profile information if available
+    const userInfo = userProfile ? 
+      `The message is from a user named "${userProfile.name}" with email "${userProfile.email}" and phone "${userProfile.phone || 'not provided'}".` : 
+      '';
+      
     const extractionPrompt = `
       Extract meeting details from the following message. If any information is missing or unclear, indicate that it's unknown.
       Return a JSON object with: 
@@ -471,6 +602,7 @@ async function handleMeetingScheduling(message: string, userId: number, sessionI
       - description (string, additional notes or empty string if none)
       - timezone (string, extract any mentioned timezone using IANA timezone format like "America/New_York", "Europe/London", "Asia/Tokyo", etc. When only abbreviations like EST, PST, UTC are mentioned, convert them to proper IANA format. Use "unknown" if not specified.)
       
+      ${userInfo}
       Message: ${message}
     `;
     
@@ -570,13 +702,23 @@ async function handleMeetingScheduling(message: string, userId: number, sessionI
     console.log(`Creating meeting with timezone: ${timezone}`);
       
     // Create the meeting
+    // Use user profile information for attendees if available
+    let attendees = meetingData.attendees || [];
+    
+    // If we have user profile with email but it's not already in attendees list, add it
+    if (userProfile && userProfile.email && !attendees.includes(userProfile.email)) {
+      attendees.push(userProfile.email);
+    }
+    
+    // Create meeting object with assembled data
     const meeting = {
       userId,
       subject: meetingData.subject,
-      description: meetingData.description || `Meeting scheduled via chat (Session ${sessionId})`,
+      description: meetingData.description || 
+        `Meeting scheduled via chat with ${userProfile?.name || 'user'} (Session ${sessionId})`,
       startTime: startTime,
       endTime: endTime,
-      attendees: meetingData.attendees || [],
+      attendees: attendees,
       status: "scheduled",
       googleEventId: null,
       timezone: timezone // Add timezone information
@@ -628,9 +770,47 @@ async function handleMeetingScheduling(message: string, userId: number, sessionI
       details: { 
         meetingId: savedMeeting.id, 
         subject: meeting.subject,
-        chatSessionId: sessionId
+        chatSessionId: sessionId,
+        profileId: userProfile?.id || null
       }
     });
+    
+    // If we have a user profile, record this as an interaction
+    if (userProfile && userProfile.id) {
+      await userProfileManager.recordInteraction(
+        userProfile.id,
+        'calendar',
+        'created',
+        `Meeting scheduled: ${meeting.subject}`,
+        {
+          meetingId: savedMeeting.id,
+          timestamp: new Date(),
+          startTime: startTime.toISOString(),
+          source: 'livechat'
+        }
+      );
+      
+      // Update the user profile metadata with meeting information
+      try {
+        const currentMetadata = userProfile.metadata || {};
+        const updatedMetadata = {
+          ...currentMetadata,
+          lastMeetingScheduled: {
+            id: savedMeeting.id,
+            subject: meeting.subject,
+            time: startTime.toISOString(),
+            scheduledVia: 'livechat'
+          }
+        };
+        
+        await userProfileManager.updateProfile(userProfile.id, {
+          metadata: updatedMetadata
+        });
+      } catch (metadataError) {
+        console.error("Error updating user profile metadata with meeting info:", metadataError);
+        // Non-critical error, continue with meeting scheduling process
+      }
+    }
     
     // Format meeting details for display with timezone awareness
     const timeString = new Intl.DateTimeFormat('en', { 
