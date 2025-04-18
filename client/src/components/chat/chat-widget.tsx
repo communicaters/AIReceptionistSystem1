@@ -4,9 +4,13 @@ import { useChatContext } from "@/components/providers/chat-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Send, X, Minimize2, Maximize2 } from "lucide-react";
+import { Send, X, Minimize2, Maximize2, User, Phone, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 
 // Define chat message types directly to avoid any potential issues with imports
 interface ChatMessage {
@@ -17,6 +21,16 @@ interface ChatMessage {
   timestamp: string;
   sessionId?: string;
 }
+
+// Define pre-chat form schema for validation
+const preChatFormSchema = z.object({
+  fullName: z.string().min(2, { message: "Full name is required" }),
+  mobileNumber: z.string().min(5, { message: "Mobile number is required" }),
+  emailAddress: z.string().email({ message: "Valid email address is required" })
+});
+
+// Type for our form values
+type PreChatFormValues = z.infer<typeof preChatFormSchema>;
 
 interface ChatWidgetProps {
   title?: string;
@@ -34,22 +48,59 @@ export function ChatWidget({
   const [message, setMessage] = useState("");
   const [minimized, setMinimized] = useState(false);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  const [showPreChatForm, setShowPreChatForm] = useState(true); // Start with the pre-chat form shown
+  const [userProfile, setUserProfile] = useState<PreChatFormValues | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { sessionId, connected, messages, sendChatMessage } = useWebSocketContext();
   const { chatConfig, getCurrentSessionId } = useChatContext();
   const { toast } = useToast();
   
-  // Initialize with greeting message if no messages exist
+  // Define form
+  const form = useForm<PreChatFormValues>({
+    resolver: zodResolver(preChatFormSchema),
+    defaultValues: {
+      fullName: "",
+      mobileNumber: "",
+      emailAddress: ""
+    }
+  });
+  
+  // Handle form submission
+  const onSubmitPreChatForm = (data: PreChatFormValues) => {
+    setUserProfile(data);
+    setShowPreChatForm(false);
+    
+    // Send user info to the server in a special message format
+    const userInfoMessage = JSON.stringify({
+      userInfo: {
+        fullName: data.fullName,
+        mobileNumber: data.mobileNumber,
+        emailAddress: data.emailAddress
+      }
+    });
+    
+    sendChatMessage(userInfoMessage, 'user_info');
+    
+    // Add personalized welcome message
+    setChatHistory([{
+      type: 'welcome',
+      message: `Hello ${data.fullName}! ${greetingMessage}`,
+      timestamp: new Date().toISOString(),
+      sender: 'ai'
+    }]);
+  };
+  
+  // Initialize with greeting message if no messages exist, but only after form is submitted
   useEffect(() => {
-    if (chatHistory.length === 0) {
+    if (!showPreChatForm && chatHistory.length === 0 && userProfile) {
       setChatHistory([{
         type: 'welcome',
-        message: greetingMessage,
+        message: `Hello ${userProfile.fullName}! ${greetingMessage}`,
         timestamp: new Date().toISOString(),
         sender: 'ai'
       }]);
     }
-  }, [greetingMessage]);
+  }, [greetingMessage, showPreChatForm, userProfile]);
   
   // Listen for incoming messages from WebSocket
   useEffect(() => {
@@ -179,62 +230,140 @@ export function ChatWidget({
         </div>
       </CardHeader>
       
-      <CardContent className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* No need for separate welcome message as we add it to chatHistory on initial load */}
-        
-        {/* Chat Messages */}
-        {chatHistory.map((msg: ChatMessage, index: number) => (
-          <div
-            key={index}
-            className={`max-w-[80%] p-3 rounded-lg ${
-              msg.type === 'welcome' || (msg.sender && msg.sender === 'ai')
-                ? 'bg-primary/10 text-foreground'
-                : 'bg-primary text-primary-foreground ml-auto'
-            }`}
-          >
-            <p className="text-sm break-words">{msg.message}</p>
-            <p
-              className={`text-xs mt-1 ${
-                msg.type === 'welcome' || (msg.sender && msg.sender === 'ai')
-                  ? 'text-muted-foreground'
-                  : 'text-primary-foreground/70'
-              }`}
-            >
-              {format(new Date(msg.timestamp || new Date()), 'HH:mm')}
-            </p>
+      {showPreChatForm ? (
+        <CardContent className="flex-1 overflow-y-auto p-4">
+          <div className="h-full flex flex-col">
+            <h3 className="text-lg font-semibold mb-4">Please provide your details to start chatting</h3>
+            
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmitPreChatForm)} className="space-y-4 flex-1">
+                <FormField
+                  control={form.control}
+                  name="fullName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Full Name</FormLabel>
+                      <FormControl>
+                        <div className="flex items-center space-x-2">
+                          <User className="h-4 w-4 text-muted-foreground" />
+                          <Input placeholder="Enter your full name" {...field} />
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="mobileNumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Mobile Number</FormLabel>
+                      <FormControl>
+                        <div className="flex items-center space-x-2">
+                          <Phone className="h-4 w-4 text-muted-foreground" />
+                          <Input placeholder="Enter your mobile number" {...field} />
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="emailAddress"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email Address</FormLabel>
+                      <FormControl>
+                        <div className="flex items-center space-x-2">
+                          <Mail className="h-4 w-4 text-muted-foreground" />
+                          <Input placeholder="Enter your email address" {...field} />
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <Button
+                  type="submit"
+                  className="w-full mt-6"
+                  style={{ backgroundColor: primaryColor }}
+                  disabled={!connected}
+                >
+                  Start Chat
+                </Button>
+              </form>
+            </Form>
+            
+            {!connected && (
+              <div className="bg-destructive/10 text-destructive mt-4 p-2 rounded text-xs text-center">
+                Connecting to server...
+              </div>
+            )}
           </div>
-        ))}
-        
-        {/* Connection Status Indicator - only show when disconnected */}
-        {!connected && (
-          <div className="bg-destructive/10 text-destructive p-2 rounded text-xs text-center">
-            Connecting to server...
-          </div>
-        )}
-        
-        <div ref={messagesEndRef} />
-      </CardContent>
-      
-      <CardFooter className="p-2 border-t">
-        <div className="flex w-full space-x-2">
-          <Input
-            placeholder="Type your message..."
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyDown={handleKeyDown}
-            className="flex-1"
-            disabled={!connected}
-          />
-          <Button 
-            onClick={handleSendMessage} 
-            size="icon"
-            disabled={!connected || !message.trim()}
-            style={{ backgroundColor: primaryColor }}
-          >
-            <Send className="h-4 w-4" />
-          </Button>
-        </div>
-      </CardFooter>
+        </CardContent>
+      ) : (
+        <>
+          <CardContent className="flex-1 overflow-y-auto p-4 space-y-4">
+            {/* Chat Messages */}
+            {chatHistory.map((msg: ChatMessage, index: number) => (
+              <div
+                key={index}
+                className={`max-w-[80%] p-3 rounded-lg ${
+                  msg.type === 'welcome' || (msg.sender && msg.sender === 'ai')
+                    ? 'bg-primary/10 text-foreground'
+                    : 'bg-primary text-primary-foreground ml-auto'
+                }`}
+              >
+                <p className="text-sm break-words">{msg.message}</p>
+                <p
+                  className={`text-xs mt-1 ${
+                    msg.type === 'welcome' || (msg.sender && msg.sender === 'ai')
+                      ? 'text-muted-foreground'
+                      : 'text-primary-foreground/70'
+                  }`}
+                >
+                  {format(new Date(msg.timestamp || new Date()), 'HH:mm')}
+                </p>
+              </div>
+            ))}
+            
+            {/* Connection Status Indicator - only show when disconnected */}
+            {!connected && (
+              <div className="bg-destructive/10 text-destructive p-2 rounded text-xs text-center">
+                Connecting to server...
+              </div>
+            )}
+            
+            <div ref={messagesEndRef} />
+          </CardContent>
+          
+          <CardFooter className="p-2 border-t">
+            <div className="flex w-full space-x-2">
+              <Input
+                placeholder="Type your message..."
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                onKeyDown={handleKeyDown}
+                className="flex-1"
+                disabled={!connected}
+              />
+              <Button 
+                onClick={handleSendMessage} 
+                size="icon"
+                disabled={!connected || !message.trim()}
+                style={{ backgroundColor: primaryColor }}
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardFooter>
+        </>
+      )}
     </Card>
   );
 }

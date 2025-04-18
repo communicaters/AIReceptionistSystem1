@@ -1,7 +1,7 @@
 import { toast } from "@/hooks/use-toast";
 import { RetryStrategy } from "./retry-strategy";
 
-export type MessageType = 'chat' | 'status' | 'welcome' | 'error' | 'moduleStatus' | 'ping' | 'pong';
+export type MessageType = 'chat' | 'status' | 'welcome' | 'error' | 'moduleStatus' | 'ping' | 'pong' | 'user_info';
 
 export interface WebSocketMessage {
   type: MessageType;
