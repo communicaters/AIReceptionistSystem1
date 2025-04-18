@@ -2987,25 +2987,100 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 // Continue with legacy implementation as fallback if unified system fails
               }
               
-              // LEGACY FALLBACK - Only used if the unified system above fails
-              console.log("FALLING BACK to legacy WhatsApp handling system");
-              const trainingData = await storage.getTrainingDataByCategory(userId, 'whatsapp');
-              let systemPrompt = "You are an AI assistant for a business. Be helpful, concise, and professional.";
+              // ENHANCED FALLBACK - With improved training data usage
+              console.log("USING ENHANCED FALLBACK for WhatsApp with guaranteed company info");
               
-              if (trainingData && trainingData.length > 0) {
-                // If we have specific training data, use that to enhance the system prompt
-                const trainingText = trainingData
-                  .map(data => data.content)
-                  .join("\n\n");
-                systemPrompt += "\n\n" + trainingText;
+              // Get ALL training data categories in priority order
+              const companyData = await storage.getTrainingDataByCategory(userId, 'company');
+              const companyInfoData = await storage.getTrainingDataByCategory(userId, 'company_info');
+              const businessData = await storage.getTrainingDataByCategory(userId, 'business');
+              const productData = await storage.getTrainingDataByCategory(userId, 'product');
+              const serviceData = await storage.getTrainingDataByCategory(userId, 'service');
+              const whatsAppData = await storage.getTrainingDataByCategory(userId, 'whatsapp');
+              
+              // Build a comprehensive training data block
+              let trainingDataText = '';
+              
+              // Start with company identity (highest priority)
+              if (companyData && companyData.length > 0) {
+                trainingDataText += "ABOUT THE COMPANY:\n";
+                trainingDataText += companyData.map(data => data.content).join('\n\n');
+                trainingDataText += "\n\n";
               }
               
-              console.log("Using system prompt for WhatsApp AI response:", systemPrompt.substring(0, 200) + "...");
+              // Add detailed company info
+              if (companyInfoData && companyInfoData.length > 0) {
+                trainingDataText += "COMPANY DETAILS:\n";
+                trainingDataText += companyInfoData.map(data => data.content).join('\n\n');
+                trainingDataText += "\n\n";
+              }
               
-              // Prepare the AI request
+              // Add business data
+              if (businessData && businessData.length > 0) {
+                trainingDataText += "BUSINESS INFORMATION:\n";
+                trainingDataText += businessData.map(data => data.content).join('\n\n');
+                trainingDataText += "\n\n";
+              }
+              
+              // Add product info
+              if (productData && productData.length > 0) {
+                trainingDataText += "PRODUCTS AND OFFERINGS:\n";
+                trainingDataText += productData.map(data => data.content).join('\n\n');
+                trainingDataText += "\n\n";
+              }
+              
+              // Add service info
+              if (serviceData && serviceData.length > 0) {
+                trainingDataText += "SERVICES PROVIDED:\n";
+                trainingDataText += serviceData.map(data => data.content).join('\n\n');
+                trainingDataText += "\n\n";
+              }
+              
+              // Add WhatsApp-specific data
+              if (whatsAppData && whatsAppData.length > 0) {
+                trainingDataText += "WHATSAPP COMMUNICATION GUIDELINES:\n";
+                trainingDataText += whatsAppData.map(data => data.content).join('\n\n');
+                trainingDataText += "\n\n";
+              }
+              
+              // Create a comprehensive system prompt with strict instructions
+              const systemPrompt = `
+You are Jamie, a human receptionist working at TechSolutions Inc., a leading provider of AI-powered business automation solutions. You provide warm, friendly, and knowledgeable customer service.
+
+CRITICAL IDENTITY RULES:
+1. Your name is Jamie, and you work as a receptionist at TechSolutions Inc.
+2. You are an employee of TechSolutions Inc. with several years of experience at the company
+3. The ONLY company you work for is TechSolutions Inc. - this is non-negotiable
+4. If asked directly about your company, ALWAYS respond that you work for "TechSolutions Inc."
+5. NEVER claim to be an AI, a bot, or a virtual assistant under ANY circumstances
+
+CRITICAL BEHAVIOR RULES:
+1. NEVER identify yourself as an AI, bot, assistant, or non-human entity
+2. NEVER use phrases like "I'm here to assist" or "how can I assist you today"
+3. NEVER include "AI" or "artificial" in your responses
+4. ALWAYS maintain a warm, friendly, conversational human tone
+5. ALWAYS refer ONLY to information provided in the training data - NEVER invent details
+6. ONLY provide information relevant to TechSolutions Inc.'s actual products and services
+7. ALWAYS use "TechSolutions Inc." as the company name, even if you see other company names
+
+COMPANY AND PRODUCT INFORMATION:
+${trainingDataText}
+
+DIRECT COMPANY QUESTIONS RESPONSES:
+- Question: "What company do you work for?" Answer: "I work for TechSolutions Inc."
+- Question: "What is your company name?" Answer: "Our company name is TechSolutions Inc."
+- Question: "Which company is this?" Answer: "This is TechSolutions Inc."
+
+YOU ARE NOT A GENERAL AI ASSISTANT. You are Jamie, a human receptionist who works at TechSolutions Inc.
+`;
+              
+              console.log("Using ENHANCED system prompt with guaranteed company info for WhatsApp AI response:", systemPrompt.substring(0, 200) + "...");
+              
+              // Prepare the AI request with an additional reminder message
               const messages = [
                 { role: 'system', content: systemPrompt },
                 ...messageHistory,
+                { role: 'system', content: "FINAL REMINDER: Always respond as Jamie, the human receptionist at TechSolutions Inc. Never mention being an AI." },
                 { role: 'user', content: message }
               ];
               

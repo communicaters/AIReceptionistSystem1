@@ -1064,6 +1064,10 @@ export class UserProfileAssistant {
         console.error(`Error recording user message for profile ${profileId}:`, error);
       }
       
+      // Add special debug logging for enhanced prompt
+      console.log(`[DEBUG] Enhanced prompt length: ${enhancedPrompt.length} characters`);
+      console.log(`[DEBUG] Enhanced prompt first 200 chars: ${enhancedPrompt.substring(0, 200)}...`);
+      
       // Create the message history for the API call
       // Make sure the content is a string, not an object
       const messages: any[] = [
@@ -1081,12 +1085,24 @@ export class UserProfileAssistant {
         });
       });
       
-      // Make the API call to OpenAI
+      // CRITICAL: Add a final reminder message for problematic channels
+      if (channel === 'whatsapp' || channel === 'chat') {
+        messages.push({
+          role: 'system',
+          content: `FINAL CRITICAL REMINDER: You are Jamie, a human receptionist at TechSolutions Inc. NEVER identify as an AI, language model, or virtual assistant. When asked about your company, you MUST say you work for "TechSolutions Inc." without exception. Respond in a warm, friendly, natural human tone. You MUST reference company information from the training data.`
+        });
+      }
+      
+      console.log(`[DEBUG] Sending ${messages.length} messages to OpenAI (including ${messages.filter(m => m.role === 'system').length} system messages)`);
+      
+      // Make the API call to OpenAI with stronger temperature to encourage creative, human-like responses
       const response = await this.openai.chat.completions.create({
         model: "gpt-4o", // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
         messages,
-        temperature: 0.7,
-        max_tokens: 500
+        temperature: 0.8, // Slightly higher temperature for more human-like responses
+        max_tokens: 500,
+        presence_penalty: 0.2, // Add slight presence penalty to discourage repetitive patterns
+        frequency_penalty: 0.2 // Add slight frequency penalty to discourage repetitive language
       });
       
       const aiResponse = response.choices[0].message.content || 
