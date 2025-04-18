@@ -28,6 +28,7 @@ import authRouter from "./routes/auth-routes";
 import usersRouter from "./routes/users-routes";
 import packagesRouter from "./routes/packages-routes";
 import reportsRouter from "./routes/reports-routes";
+import userProfilesRouter from "./routes/user-profiles-routes";
 import { authenticate } from "./middleware/auth";
 import express from "express";
 import path from "path";
@@ -493,6 +494,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use("/api/users", usersRouter);
   app.use("/api/packages", packagesRouter);
   app.use("/api/reports", reportsRouter);
+  app.use("/api/user-profiles", userProfilesRouter);
   
   // API routes
   app.get("/api/health", (req, res) => {
