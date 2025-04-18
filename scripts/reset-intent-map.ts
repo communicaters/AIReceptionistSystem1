@@ -367,17 +367,14 @@ async function resetIntentMap() {
     console.log(`Preparing to insert ${newIntentMap.length} new intents...`);
     
     for (const item of newIntentMap) {
+      // Convert the pattern to an array of examples
+      const examples = [item.pattern];
+      
+      // Insert using the correct column names from the database
       await db.insert(intentMap).values({
-        userId,
+        user_id: userId,
         intent: item.intent,
-        pattern: item.pattern,
-        description: item.description || null,
-        isRegex: item.isRegex !== undefined ? item.isRegex : true,
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        priority: item.priority || 0,
-        actions: item.actions ? JSON.stringify(item.actions) : null
+        examples: examples
       });
       
       console.log(`Added intent: ${item.intent}`);

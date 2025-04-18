@@ -621,13 +621,11 @@ async function resetTrainingData() {
       
       for (const item of newTrainingData[category]) {
         await db.insert(trainingData).values({
-          userId,
+          user_id: userId,
           category: item.category,
           content: item.content,
-          isActive: item.isActive !== undefined ? item.isActive : true,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          priority: item.priority || 0
+          created_at: new Date(),
+          metadata: {}
         });
       }
     }
