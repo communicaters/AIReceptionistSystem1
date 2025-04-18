@@ -16,14 +16,8 @@ import { scheduleMeeting } from './google-calendar';
 import { userProfileManager } from './user-profile-manager';
 import { storage } from '../database-storage';
 import { getUserProfileAssistant } from './user-profile-assistant';
-import { AIResponseEnhancement } from './types';
 
-// Keywords that indicate a scheduling request across all channels
-const SCHEDULE_KEYWORDS = [
-  'schedule', 'meeting', 'appointment', 'calendar', 'book', 
-  'meet', 'talk', 'call', 'zoom', 'teams', 'google meet'
-];
-
+// Define types here to avoid circular dependencies
 export type Channel = 'whatsapp' | 'email' | 'chat' | 'call';
 
 export interface AgentProcessingOptions {
@@ -32,22 +26,32 @@ export interface AgentProcessingOptions {
   message: string;
   channel: Channel;
   existingProfileId?: number;
+  enhancements?: any;
+}
+
+export interface SchedulingResult {
+  isSchedulingRequest: boolean;
+  scheduled: boolean;
+  meetingLink?: string;
+  dateTime?: string;
+  subject?: string;
+  duration?: number;
+  error?: string;
 }
 
 export interface AgentProcessingResult {
   success: boolean;
   response: string;
   profileId?: number;
-  schedulingResult?: {
-    isSchedulingRequest: boolean;
-    scheduled: boolean;
-    meetingLink?: string;
-    dateTime?: string;
-    subject?: string;
-    error?: string;
-  };
+  schedulingResult?: SchedulingResult;
   error?: string;
 }
+
+// Keywords that indicate a scheduling request across all channels
+const SCHEDULE_KEYWORDS = [
+  'schedule', 'meeting', 'appointment', 'calendar', 'book', 
+  'meet', 'talk', 'call', 'zoom', 'teams', 'google meet'
+];
 
 /**
  * Process a user message with consistent handling across all communication channels
