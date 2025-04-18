@@ -29,7 +29,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     // Check if we have a token and user data in localStorage on initial load
-    const checkAuth = () => {
+    const checkAuth = async () => {
       const token = localStorage.getItem("authToken");
       const userInfo = localStorage.getItem("userInfo");
 
@@ -38,15 +38,57 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           const userData = JSON.parse(userInfo);
           setUser(userData);
           setIsAuthenticated(true);
+          setIsLoading(false);
         } catch (error) {
           console.error("Error parsing user data:", error);
           // Clear invalid data
           localStorage.removeItem("authToken");
           localStorage.removeItem("userInfo");
+          
+          // Auto-login functionality for development
+          await autoLoginForDevelopment();
         }
+      } else {
+        // Auto-login functionality for development
+        await autoLoginForDevelopment();
       }
-      
-      setIsLoading(false);
+    };
+
+    // Auto-login function with demo credentials for development only
+    const autoLoginForDevelopment = async () => {
+      try {
+        console.log("Attempting auto-login with demo credentials...");
+        
+        // Demo credentials for development only
+        const demoCredentials = {
+          usernameOrEmail: "admin",
+          password: "admin123"
+        };
+        
+        const response = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(demoCredentials)
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.token && data.user) {
+          console.log("Auto-login successful");
+          localStorage.setItem("authToken", data.token);
+          localStorage.setItem("userInfo", JSON.stringify(data.user));
+          setUser(data.user);
+          setIsAuthenticated(true);
+        } else {
+          console.error("Auto-login failed:", data.message);
+        }
+      } catch (error) {
+        console.error("Auto-login error:", error);
+      } finally {
+        setIsLoading(false);
+      }
     };
 
     checkAuth();
