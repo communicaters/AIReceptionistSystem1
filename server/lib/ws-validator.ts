@@ -13,7 +13,8 @@ const ALLOWED_MESSAGE_TYPES = [
   'error',     // Error messages
   'moduleStatus', // Status broadcast message
   'notification', // User notification
-  'reconnect'     // Reconnection request
+  'reconnect',    // Reconnection request
+  'user_info'     // User profile information
 ];
 
 // Define allowed module IDs
@@ -239,6 +240,19 @@ export function validateWebSocketMessage(message: any): ValidationResult {
       
     case 'reconnect':
       // No additional validation needed for reconnect messages
+      break;
+      
+    case 'user_info':
+      // Validate user_info message
+      if (message.userInfo && typeof message.userInfo === 'object') {
+        // Sanitize the userInfo object
+        sanitizedMessage.userInfo = safeParse(safeStringify(message.userInfo));
+      } else {
+        return {
+          isValid: false,
+          error: 'User info message must have a userInfo object'
+        };
+      }
       break;
       
     default:
