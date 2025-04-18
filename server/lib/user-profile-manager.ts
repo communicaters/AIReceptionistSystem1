@@ -51,15 +51,65 @@ export class UserProfileManager {
    * This is a critical method for maintaining cross-channel continuity
    * @param profileId The profile ID
    * @param source The communication channel (whatsapp, email, chat, call)
+   * @param metadata Optional additional metadata about the interaction
    */
-  async updateLastInteraction(profileId: number, source: string): Promise<boolean> {
+  async updateLastInteraction(
+    profileId: number, 
+    source: string,
+    metadata: Record<string, any> = {}
+  ): Promise<boolean> {
     try {
+      const now = new Date();
+      
+      // Get existing profile data first
+      const existingProfile = await this.getProfile(profileId);
+      if (!existingProfile) {
+        console.warn(`Profile ${profileId} not found for updating last interaction`);
+        return false;
+      }
+      
+      // Track channel-switching behavior
+      const previousSource = existingProfile.lastInteractionSource;
+      const isChannelSwitch = previousSource && previousSource !== source;
+      
+      // Prepare updated metadata
+      const existingMetadata = existingProfile.metadata || {};
+      const updatedMetadata = {
+        ...existingMetadata,
+        lastInteractions: {
+          ...((existingMetadata.lastInteractions as Record<string, any>) || {}),
+          [source]: now.toISOString()
+        },
+        channelSwitches: isChannelSwitch ? 
+          ((existingMetadata.channelSwitches as number) || 0) + 1 : 
+          (existingMetadata.channelSwitches as number) || 0,
+        ...(isChannelSwitch ? {
+          lastChannelSwitch: {
+            from: previousSource,
+            to: source,
+            timestamp: now.toISOString()
+          }
+        } : {})
+      };
+      
+      // Add any custom metadata passed in
+      if (Object.keys(metadata).length > 0) {
+        Object.assign(updatedMetadata, metadata);
+      }
+      
+      // Update the profile
       const updates = {
         lastInteractionSource: source,
-        lastSeen: new Date()
+        lastSeen: now,
+        metadata: updatedMetadata
       };
       
       const updatedProfile = await this.updateProfile(profileId, updates);
+      
+      if (isChannelSwitch) {
+        console.log(`User ${profileId} switched channels from ${previousSource} to ${source}`);
+      }
+      
       return !!updatedProfile;
     } catch (err) {
       console.error(`Failed to update last interaction for profile ${profileId}:`, err);
@@ -286,25 +336,82 @@ export class UserProfileManager {
    * Get unified conversation history in a format suitable for AI context
    * @param profileId The user profile ID 
    * @param limit Maximum number of messages to include
+   * @param options Additional options for history retrieval
    */
   async getUnifiedConversationHistory(
     profileId: number,
-    limit: number = 10
-  ): Promise<Array<{ role: string; content: string; timestamp: Date; source: string }>> {
+    limit: number = 10,
+    options: {
+      includePreviousSession?: boolean;
+      includeMetadata?: boolean;
+      filterBySource?: string;
+    } = {}
+  ): Promise<Array<{ 
+    role: string; 
+    content: string; 
+    timestamp: Date; 
+    source: string;
+    metadata?: any;
+  }>> {
     try {
-      // Get recent interactions across all channels
-      const interactions = await storage.getUserInteractionsByProfileId(profileId, limit);
+      // Get profile to check last interaction times
+      const profile = await this.getProfile(profileId);
+      if (!profile) {
+        console.warn(`Profile ${profileId} not found when retrieving conversation history`);
+        return [];
+      }
+      
+      // Determine how many interactions to fetch based on options
+      const fetchLimit = options.includePreviousSession ? limit * 2 : limit;
+      
+      // Get recent interactions across all channels or filtered by source
+      let interactions;
+      if (options.filterBySource) {
+        interactions = await storage.getUserInteractionsBySource(profileId, options.filterBySource, fetchLimit);
+      } else {
+        interactions = await storage.getUserInteractionsByProfileId(profileId, fetchLimit);
+      }
       
       // Format into a conversation history array
-      const history = interactions.map(interaction => ({
-        role: interaction.interactionType === 'inbound' ? 'user' : 'assistant',
-        content: interaction.content || '',
-        timestamp: interaction.timestamp || new Date(),
-        source: interaction.interactionSource || 'unknown'
-      }));
+      const history = interactions.map(interaction => {
+        const historyItem: any = {
+          role: interaction.interactionType === 'inbound' ? 'user' : 'assistant',
+          content: interaction.content || '',
+          timestamp: interaction.timestamp || new Date(),
+          source: interaction.interactionSource || 'unknown'
+        };
+        
+        // Include metadata if requested
+        if (options.includeMetadata && interaction.metadata) {
+          historyItem.metadata = interaction.metadata;
+        }
+        
+        return historyItem;
+      });
       
       // Sort by timestamp, newest last
-      return history.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+      const sortedHistory = history.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+      
+      // Check if we need to analyze session boundaries
+      if (!options.includePreviousSession && profile.metadata?.lastInteractions) {
+        // Get the timestamp of the current user session
+        const lastInteractions = profile.metadata.lastInteractions as Record<string, string>;
+        const currentSessionStart = new Date();
+        
+        // If we have channel-specific timestamps, use them to define session boundaries
+        if (Object.keys(lastInteractions).length > 0) {
+          // Set session boundary to 24 hours
+          const SESSION_BOUNDARY_MS = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+          
+          // Filter history to only include current session (last 24 hours)
+          const currentTime = new Date().getTime();
+          return sortedHistory.filter(item => {
+            return currentTime - item.timestamp.getTime() < SESSION_BOUNDARY_MS;
+          });
+        }
+      }
+      
+      return sortedHistory;
     } catch (err) {
       console.error(`Error creating unified conversation history for profile ${profileId}:`, err);
       return [];

@@ -179,17 +179,31 @@ export class UserProfileAssistant {
     }
     
     // Step 2: Get recent interactions across ALL channels for context
-    // Use the new cross-channel history feature to get unified conversation history
+    // Use the enhanced cross-channel history feature with additional options
     let unifiedHistory = [];
     try {
-      // Use our new method to get cross-channel conversation history
-      unifiedHistory = await userProfileManager.getUnifiedConversationHistory(profileId, 15);
+      // Use our enhanced method to get cross-channel conversation history with more context
+      // Include metadata and check previous session interactions too for better context
+      unifiedHistory = await userProfileManager.getUnifiedConversationHistory(
+        profileId, 
+        15, 
+        {
+          includePreviousSession: true,
+          includeMetadata: true
+        }
+      );
+      
       console.log(`Fetched ${unifiedHistory.length} cross-channel interactions for profile ${profileId}`);
       
       // Output some debug info about the sources of these messages
       const sources = unifiedHistory.map(msg => msg.source);
       const uniqueSources = [...new Set(sources)];
       console.log(`Message sources across channels: ${uniqueSources.join(', ')}`);
+      
+      // Add insights about cross-channel behavior if we have it
+      if (uniqueSources.length > 1) {
+        console.log(`Cross-channel user identified! Using unified history across: ${uniqueSources.join(', ')}`);
+      }
     } catch (error) {
       console.error('Error retrieving unified conversation history:', error);
       // Fall back to regular recent interactions if unified history fails
@@ -198,13 +212,20 @@ export class UserProfileAssistant {
         role: interaction.interactionType === 'inbound' ? 'user' : 'assistant',
         content: interaction.content || '',
         timestamp: interaction.timestamp || new Date(),
-        source: interaction.interactionSource || channel
+        source: interaction.interactionSource || channel,
+        metadata: interaction.metadata
       }));
       console.log(`Falling back to ${unifiedHistory.length} single-channel interactions for profile ${profileId}`);
     }
     
     // After getting unified history, update the user's last interaction source to this channel
-    await userProfileManager.updateLastInteraction(profileId, channel);
+    // Include additional metadata about this interaction for better cross-channel tracking
+    await userProfileManager.updateLastInteraction(profileId, channel, {
+      messageContent: messageContent.substring(0, 100), // First 100 chars of message for reference
+      messageTime: new Date().toISOString(),
+      containsPersonalInfo: !!extractedInfo.name || !!extractedInfo.email || !!extractedInfo.phone,
+      newInfoExtracted: newInfoExtracted
+    });
     
     // Extract chat history in the proper format for context
     const chatHistory = unifiedHistory.map(interaction => {
@@ -494,8 +515,13 @@ export class UserProfileAssistant {
       try {
         profile = await userProfileManager.getProfile(profileId);
         
-        // Update the last interaction source and timestamp
-        await userProfileManager.updateLastInteraction(profileId, channel);
+        // Update the last interaction source and timestamp with more metadata
+        await userProfileManager.updateLastInteraction(profileId, channel, {
+          responseType: 'ai',
+          responseTime: new Date().toISOString(),
+          responseLength: aiResponse.length,
+          isProcessedResponse: true
+        });
         console.log(`Updated last interaction for profile ${profileId} to ${channel}`);
       } catch (profileError) {
         console.error(`Error fetching profile for ID ${profileId}:`, profileError);
