@@ -178,22 +178,53 @@ export class UserProfileAssistant {
       }
     }
     
-    // Step 2: Get recent interactions for context
-    const recentInteractions = await userProfileManager.getRecentInteractions(profileId, 10);
+    // Step 2: Get recent interactions across ALL channels for context
+    // Use the new cross-channel history feature to get unified conversation history
+    let unifiedHistory = [];
+    try {
+      // Use our new method to get cross-channel conversation history
+      unifiedHistory = await userProfileManager.getUnifiedConversationHistory(profileId, 15);
+      console.log(`Fetched ${unifiedHistory.length} cross-channel interactions for profile ${profileId}`);
+      
+      // Output some debug info about the sources of these messages
+      const sources = unifiedHistory.map(msg => msg.source);
+      const uniqueSources = [...new Set(sources)];
+      console.log(`Message sources across channels: ${uniqueSources.join(', ')}`);
+    } catch (error) {
+      console.error('Error retrieving unified conversation history:', error);
+      // Fall back to regular recent interactions if unified history fails
+      const recentInteractions = await userProfileManager.getRecentInteractions(profileId, 10);
+      unifiedHistory = recentInteractions.map(interaction => ({
+        role: interaction.interactionType === 'inbound' ? 'user' : 'assistant',
+        content: interaction.content || '',
+        timestamp: interaction.timestamp || new Date(),
+        source: interaction.interactionSource || channel
+      }));
+      console.log(`Falling back to ${unifiedHistory.length} single-channel interactions for profile ${profileId}`);
+    }
+    
+    // After getting unified history, update the user's last interaction source to this channel
+    await userProfileManager.updateLastInteraction(profileId, channel);
     
     // Extract chat history in the proper format for context
-    const chatHistory = recentInteractions.map(interaction => {
+    const chatHistory = unifiedHistory.map(interaction => {
       return {
-        role: interaction.interactionType === 'inbound' ? 'user' : 'assistant',
-        content: interaction.content || ''
+        role: interaction.role,
+        content: interaction.content
       };
-    }).reverse(); // Most recent last
-    
-    // Add the current message
-    chatHistory.push({
-      role: 'user',
-      content: messageContent
     });
+    
+    // Add the current message if it's not already included
+    const currentMessageExists = chatHistory.some(
+      entry => entry.role === 'user' && entry.content === messageContent
+    );
+    
+    if (!currentMessageExists) {
+      chatHistory.push({
+        role: 'user',
+        content: messageContent
+      });
+    }
     
     // Step 3: Update profile with extracted information if needed
     // We already extracted the info earlier, so reuse that
@@ -458,10 +489,14 @@ export class UserProfileAssistant {
     channel: 'whatsapp' | 'email' | 'chat' | 'call'
   ): Promise<string> {
     try {
-      // Get the user profile information to personalize responses 
+      // Get the user profile information to personalize responses
       let profile = null;
       try {
         profile = await userProfileManager.getProfile(profileId);
+        
+        // Update the last interaction source and timestamp
+        await userProfileManager.updateLastInteraction(profileId, channel);
+        console.log(`Updated last interaction for profile ${profileId} to ${channel}`);
       } catch (profileError) {
         console.error(`Error fetching profile for ID ${profileId}:`, profileError);
         // Continue without profile data if unavailable
@@ -904,7 +939,7 @@ export class UserProfileAssistant {
         return false;
       }
       
-      // Record the enhanced response as an interaction
+      // Record the enhanced response as an interaction with more detailed metadata
       await userProfileManager.recordInteraction(
         profileId,
         channel,
@@ -912,16 +947,21 @@ export class UserProfileAssistant {
         enhancedResponse,
         {
           timestamp: new Date().toISOString(),
-          aiGenerated: true
+          aiGenerated: true,
+          channel: channel,
+          processedResponse: true,
+          containsCompanyName: enhancedResponse.includes(companyName),
+          containedAIIdentifiers: isAboutAI,
+          wasRedirected: isAboutAI || isDeflecting
         }
       );
       
-      // Update the profile's last interaction time and source
+      console.log(`Successfully recorded outbound interaction for profile ${profileId} in channel ${channel}`);
+      
+      // Update the profile's last interaction time and source using our central method
       try {
-        await userProfileManager.updateProfile(profileId, {
-          lastSeen: new Date(),
-          lastInteractionSource: channel
-        });
+        // Use the updateLastInteraction method to ensure consistent updates
+        await userProfileManager.updateLastInteraction(profileId, channel);
       } catch (updateError) {
         console.error(`Error updating profile last interaction time for ID ${profileId}:`, updateError);
         // Continue - this error shouldn't prevent the response from being sent
@@ -969,8 +1009,12 @@ export class UserProfileAssistant {
         throw new Error('No profile ID found after processing message');
       }
       
-      // Record the inbound message
+      // Record the inbound message with enhanced metadata for cross-channel tracking
       try {
+        // First update the last interaction source and timestamp
+        await userProfileManager.updateLastInteraction(profileId, channel);
+        
+        // Then record the interaction with better metadata
         await userProfileManager.recordInteraction(
           profileId,
           channel,
@@ -979,9 +1023,16 @@ export class UserProfileAssistant {
           {
             timestamp: new Date().toISOString(),
             mediaUrl: null,
-            phoneNumber: channel === 'whatsapp' ? contactIdentifier : undefined
+            phoneNumber: channel === 'whatsapp' ? contactIdentifier : undefined,
+            email: channel === 'email' ? contactIdentifier : undefined,
+            channelId: contactIdentifier,
+            channel: channel,
+            // Track if this message contains any scheduling keywords
+            containsSchedulingKeywords: /\b(schedule|meeting|appointment|calendar|book|meet|talk|call|zoom|teams)\b/i.test(messageContent)
           }
         );
+        
+        console.log(`Successfully recorded inbound interaction for profile ${profileId} from channel ${channel}`);
       } catch (error) {
         // Log the error but continue processing - don't let recording failure block the response
         console.error(`Error recording user message for profile ${profileId}:`, error);
