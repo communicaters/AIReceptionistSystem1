@@ -17,6 +17,76 @@ export interface ProfileSearchParams {
 
 export class UserProfileManager {
   /**
+   * Get a user profile by ID
+   * @param profileId The profile ID
+   */
+  async getProfile(profileId: number): Promise<UserProfileData | null> {
+    const profile = await storage.getUserProfile(profileId);
+    return profile || null;
+  }
+  
+  /**
+   * Create a new user profile
+   * @param profileData Data for the new profile
+   */
+  async createProfile(profileData: Partial<InsertUserProfileData>): Promise<UserProfileData> {
+    const newProfile: InsertUserProfileData = {
+      userId: profileData.userId || null,
+      name: profileData.name || null,
+      email: profileData.email || null,
+      phone: profileData.phone || null,
+      lastInteractionSource: profileData.lastInteractionSource || null,
+      metadata: profileData.metadata || null
+      // Default values for timestamps are set at the database level
+    };
+    
+    return await storage.createUserProfile(newProfile);
+  }
+  
+  /**
+   * Find a user profile by phone number
+   * @param phone The phone number to search for
+   */
+  async findProfileByPhone(phone: string): Promise<UserProfileData | null> {
+    const profile = await storage.getUserProfileByPhone(phone);
+    return profile || null;
+  }
+  
+  /**
+   * Find a user profile by email address
+   * @param email The email address to search for
+   */
+  async findProfileByEmail(email: string): Promise<UserProfileData | null> {
+    const profile = await storage.getUserProfileByEmail(email);
+    return profile || null;
+  }
+  
+  /**
+   * Find a user profile by any identifier
+   * @param identifier The email, phone, or other identifier to search for
+   */
+  async findProfileByAny(identifier: string): Promise<UserProfileData | null> {
+    // Try email
+    let profile = await this.findProfileByEmail(identifier);
+    if (profile) return profile;
+    
+    // Try phone
+    profile = await this.findProfileByPhone(identifier);
+    if (profile) return profile;
+    
+    // Try user ID if numeric
+    if (/^\d+$/.test(identifier)) {
+      const userId = parseInt(identifier, 10);
+      const profiles = await storage.getUserProfilesByUserId(userId);
+      if (profiles.length > 0) {
+        return profiles[0];
+      }
+    }
+    
+    return null;
+  }
+  
+  /**
    * Find or create a user profile based on contact information
    * @param params Search parameters (email, phone, etc.)
    * @param createIfNotExists Whether to create a new profile if none is found

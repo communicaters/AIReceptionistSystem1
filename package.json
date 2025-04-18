@@ -78,7 +78,7 @@
     "memorystore": "^1.6.7",
     "multer": "^1.4.5-lts.2",
     "nodemailer": "^6.10.1",
-    "openai": "^4.93.0",
+    "openai": "^4.95.0",
     "passport": "^0.7.0",
     "passport-local": "^1.0.0",
     "postgres": "^3.4.5",

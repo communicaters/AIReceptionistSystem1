@@ -4,9 +4,9 @@
  * Usage: npx tsx scripts/test-user-profile-api.ts
  */
 
-import { db } from '../server/db';
+import { db, pool } from '../server/db';
 import { storage } from '../server/database-storage';
-import { users } from '@shared/schema';
+import { users } from '../shared/schema';
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcrypt';
 import fetch from 'node-fetch';
@@ -184,6 +184,7 @@ main()
     process.exit(1);
   })
   .finally(async () => {
-    await db.end();
+    // Close database connection
+    await pool.end();
     process.exit(0);
   });
