@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, jsonb, doublePrecision } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, jsonb, doublePrecision, varchar } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -146,6 +146,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   userPackages: many(userPackages),
   featureUsageLogs: many(featureUsageLogs),
   loginActivities: many(loginActivity),
+  // Customer data relations
+  customerProfiles: many(userProfileData),
 }));
 
 // Package relations
@@ -931,3 +933,64 @@ export type InsertLoginActivity = z.infer<typeof insertLoginActivitySchema>;
 
 export type AdminReportsCache = typeof adminReportsCache.$inferSelect;
 export type InsertAdminReportsCache = z.infer<typeof insertAdminReportsCacheSchema>;
+
+// Customer Profile Data for centralized user management
+export const userProfileData = pgTable("user_profile_data", {
+  id: serial("id").primaryKey(),
+  name: text("name"),
+  email: text("email").unique(),
+  phone: text("phone"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  lastSeen: timestamp("last_seen"),
+  lastInteractionSource: text("last_interaction_source"), // email, chat, call, whatsapp
+  userId: integer("user_id").references(() => users.id), // Optional link to system user if needed
+  metadata: jsonb("metadata"), // For storing additional customer data
+});
+
+export const insertUserProfileDataSchema = createInsertSchema(userProfileData).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  lastSeen: true,
+});
+
+// Customer interaction logs
+export const userInteractions = pgTable("user_interactions", {
+  id: serial("id").primaryKey(),
+  userProfileId: integer("user_profile_id").notNull().references(() => userProfileData.id, { onDelete: 'cascade' }),
+  interactionSource: text("interaction_source").notNull(), // email, chat, call, whatsapp
+  messageSummary: text("message_summary"),
+  content: text("content"),
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
+  metadata: jsonb("metadata"), // For storing additional interaction data
+});
+
+export const insertUserInteractionSchema = createInsertSchema(userInteractions).omit({
+  id: true,
+  timestamp: true,
+});
+
+// Define relationships for user profile data
+export const userProfileDataRelations = relations(userProfileData, ({ one, many }) => ({
+  systemUser: one(users, {
+    fields: [userProfileData.userId],
+    references: [users.id],
+  }),
+  interactions: many(userInteractions),
+}));
+
+// Define relationships for user interactions
+export const userInteractionsRelations = relations(userInteractions, ({ one }) => ({
+  userProfile: one(userProfileData, {
+    fields: [userInteractions.userProfileId],
+    references: [userProfileData.id],
+  }),
+}));
+
+// Export types for the new tables
+export type UserProfileData = typeof userProfileData.$inferSelect;
+export type InsertUserProfileData = z.infer<typeof insertUserProfileDataSchema>;
+
+export type UserInteraction = typeof userInteractions.$inferSelect;
+export type InsertUserInteraction = z.infer<typeof insertUserInteractionSchema>;
