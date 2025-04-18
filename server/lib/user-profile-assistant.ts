@@ -356,12 +356,108 @@ export class UserProfileAssistant {
     channel: 'whatsapp' | 'email' | 'chat' | 'call'
   ): Promise<string> {
     try {
-      // Record the AI's response as an interaction
+      // Get the user profile information to personalize responses 
+      let profile = null;
+      try {
+        profile = await userProfileManager.getProfile(profileId);
+      } catch (profileError) {
+        console.error(`Error fetching profile for ID ${profileId}:`, profileError);
+        // Continue without profile data if unavailable
+      }
+      
+      // Enhance response with human warmth if needed
+      let enhancedResponse = aiResponse;
+      
+      // Check for AI-revealing phrases and replace them
+      const revealingPhrases = [
+        { pattern: /as an ai/i, replacement: "" },
+        { pattern: /i'm an ai/i, replacement: "" },
+        { pattern: /i don't have personal/i, replacement: "" },
+        { pattern: /i'm just a/i, replacement: "" },
+        { pattern: /as a receptionist ai/i, replacement: "as a receptionist" },
+        { pattern: /i'm a virtual/i, replacement: "" },
+        { pattern: /i cannot/i, replacement: "I'm not able to" },
+        { pattern: /i do not have the ability to/i, replacement: "I can't" },
+        { pattern: /as an automated/i, replacement: "" },
+        { pattern: /i don't have access to/i, replacement: "I can't access" },
+        { pattern: /i don't have the ability to/i, replacement: "I can't" },
+        { pattern: /i'm not capable of/i, replacement: "I can't" },
+        { pattern: /as a language model/i, replacement: "" },
+        { pattern: /as an llm/i, replacement: "" },
+        { pattern: /digital assistant/i, replacement: "assistant" },
+        { pattern: /ai assistant/i, replacement: "assistant" }
+      ];
+      
+      // Add warm conversational phrases if they're missing
+      const warmPhrases = [
+        { pattern: /^(I'd be happy to help)/i, check: (text: string) => !text.includes("I'd be happy to help"), replacement: "I'd be happy to help you with that! " },
+        { pattern: /^(I'll)/i, check: (text: string) => !text.includes("let me"), replacement: "Let me help you with this. I'll" },
+        { pattern: /^(Here)/i, check: (text: string) => !text.includes("Great question"), replacement: "Great question! Here" }
+      ];
+      
+      // Channel-specific warm phrases
+      const channelSpecificPhrases: Record<string, Array<{ pattern: RegExp, check: (text: string) => boolean, replacement: string }>> = {
+        'whatsapp': [
+          { pattern: /^(Yes)/i, check: (text: string) => !text.includes("Absolutely"), replacement: "Absolutely! " },
+          { pattern: /^(No)/i, check: (text: string) => !text.includes("I'm afraid"), replacement: "I'm afraid not. " },
+          { pattern: /^(That)/i, check: (text: string) => !text.includes("Ah"), replacement: "Ah, that" },
+          { pattern: /^(Hello)/i, check: (text: string) => !text.includes("Hey there"), replacement: "Hey there! " }
+        ],
+        'chat': [
+          { pattern: /^(I can)/i, check: (text: string) => !text.includes("Of course"), replacement: "Of course, I can" },
+          { pattern: /^(Let me)/i, check: (text: string) => !text.includes("Sure thing"), replacement: "Sure thing! Let me" }
+        ],
+        'email': [
+          { pattern: /^(Thank you for)/i, check: (text: string) => !text.includes("Thanks so much"), replacement: "Thanks so much for" },
+          { pattern: /^(I'm writing)/i, check: (text: string) => !text.includes("I wanted to"), replacement: "I wanted to" }
+        ],
+        'call': [
+          { pattern: /^(Yes)/i, check: (text: string) => !text.includes("Yes, absolutely"), replacement: "Yes, absolutely! " },
+          { pattern: /^(To answer)/i, check: (text: string) => !text.includes("Well, to answer"), replacement: "Well, to answer" }
+        ]
+      };
+      
+      // Apply channel-specific warm phrases if we have any for this channel
+      if (channelSpecificPhrases[channel]) {
+        for (const { pattern, check, replacement } of channelSpecificPhrases[channel]) {
+          if (pattern.test(enhancedResponse) && check(enhancedResponse)) {
+            enhancedResponse = enhancedResponse.replace(pattern, replacement);
+            break; // Only apply one channel-specific phrase to avoid overloading
+          }
+        }
+      }
+      
+      // Process revealing phrases first
+      for (const { pattern, replacement } of revealingPhrases) {
+        enhancedResponse = enhancedResponse.replace(pattern, replacement);
+      }
+      
+      // Now potentially add warm conversational phrases if needed
+      for (const { pattern, check, replacement } of warmPhrases) {
+        if (pattern.test(enhancedResponse) && check(enhancedResponse)) {
+          enhancedResponse = enhancedResponse.replace(pattern, replacement);
+        }
+      }
+      
+      // Add personalization if we have profile data
+      if (profile?.name && channel !== 'email' && !enhancedResponse.includes(profile.name)) {
+        // Add name personalization if not already present and not in email (which should already have it)
+        const insertPos = enhancedResponse.indexOf('. ') + 2; // Insert after first sentence
+        if (insertPos > 2 && insertPos < enhancedResponse.length / 2) {
+          enhancedResponse = 
+            enhancedResponse.substring(0, insertPos) + 
+            `${profile.name}, ` + 
+            enhancedResponse.substring(insertPos, insertPos + 1).toLowerCase() + 
+            enhancedResponse.substring(insertPos + 1);
+        }
+      }
+      
+      // Record the enhanced response as an interaction
       await userProfileManager.recordInteraction(
         profileId,
         channel,
         'outbound',
-        aiResponse,
+        enhancedResponse,
         {
           timestamp: new Date().toISOString(),
           aiGenerated: true
@@ -379,7 +475,7 @@ export class UserProfileAssistant {
         // Continue - this error shouldn't prevent the response from being sent
       }
       
-      return aiResponse;
+      return enhancedResponse;
     } catch (error) {
       console.error(`Error recording AI response for profile ${profileId}:`, error);
       // Still return the AI response even if we couldn't record it
