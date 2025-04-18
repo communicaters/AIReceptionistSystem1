@@ -200,31 +200,58 @@ async function processUnrepliedEmails() {
           mailgunConfig?.fromEmail
         ].filter(Boolean) as string[];
         
-        // Check multiple loop conditions
+        // Extract clean email addresses without names/quotes for better comparison
+        const extractEmailAddress = (fullAddress: string): string => {
+          // Try to extract email from format like "Name" <email@example.com>
+          const emailMatch = fullAddress.match(/<([^>]+)>/) || 
+                            fullAddress.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+)/);
+          return emailMatch ? emailMatch[1].toLowerCase() : fullAddress.toLowerCase().trim();
+        }
+        
+        const fromEmailAddress = extractEmailAddress(email.from);
+        const toEmailAddress = extractEmailAddress(email.to);
+        
+        // Check if from email matches any system email
         const fromIsSystemEmail = systemEmails.some(sysEmail => {
-          // Check if the from email matches any system email (exact or within <> format)
           if (!sysEmail) return false;
-          const normalizedFrom = email.from.toLowerCase().trim();
-          const normalizedSys = sysEmail.toLowerCase().trim();
-          return normalizedFrom === normalizedSys || 
-                 normalizedFrom.includes(`<${normalizedSys}>`) ||
-                 normalizedFrom.includes(`"${normalizedSys}"`) ||
-                 normalizedFrom.startsWith(normalizedSys);
+          const sysEmailAddress = extractEmailAddress(sysEmail);
+          return fromEmailAddress === sysEmailAddress;
         });
         
-        // Check if email contains auto-reply headers
+        // Check if to email matches any system email
+        const toIsSystemEmail = systemEmails.some(sysEmail => {
+          if (!sysEmail) return false;
+          const sysEmailAddress = extractEmailAddress(sysEmail);
+          return toEmailAddress === sysEmailAddress;
+        });
+        
+        // Same email domain check (e.g., both @18plus.io)
+        const fromDomain = fromEmailAddress.split('@')[1];
+        const toDomain = toEmailAddress.split('@')[1];
+        const sameDomain = fromDomain && toDomain && fromDomain === toDomain;
+        
+        // Check if email contains auto-reply indicators
         const hasAutoReplyHeader = 
           email.subject.startsWith('Re:') || 
           email.subject.startsWith('RE:') ||
           (email.body && email.body.includes('AI Receptionist')) ||
-          (email.body && email.body.includes('This is an automated response'));
+          (email.body && email.body.includes('This is an automated response')) ||
+          (email.body && email.body.includes('Auto-response')) ||
+          (email.body && email.body.includes('auto-generated'));
         
-        // Extended loop detection
+        // Check if from and to are exactly the same (with proper extraction)
+        const sameExactEmail = fromEmailAddress === toEmailAddress;
+        
+        // Extended loop detection with multiple checks
         if (fromIsSystemEmail || 
-            (systemEmails.includes(email.from) && systemEmails.includes(email.to)) ||
-            (email.from === email.to && hasAutoReplyHeader)) {
-          console.log(`LOOP PREVENTION: Detected potential email loop from ${email.from}, marking as replied and skipping`);
-          console.log(`Loop detection details: fromIsSystemEmail=${fromIsSystemEmail}, sameAddresses=${email.from === email.to}, hasAutoReplyHeader=${hasAutoReplyHeader}`);
+            (fromIsSystemEmail && toIsSystemEmail) ||
+            (sameExactEmail) ||
+            (sameDomain && hasAutoReplyHeader)) {
+            
+          console.log(`LOOP PREVENTION: Detected potential email loop, marking as replied and skipping`);
+          console.log(`Loop details: From=${fromEmailAddress}, To=${toEmailAddress}`);
+          console.log(`Detection flags: fromIsSystemEmail=${fromIsSystemEmail}, toIsSystemEmail=${toIsSystemEmail}`);
+          console.log(`Additional checks: sameExactEmail=${sameExactEmail}, sameDomain=${sameDomain}, hasAutoReplyIndicators=${hasAutoReplyHeader}`);
           
           // Mark as replied to prevent future processing
           await storage.updateEmailLogIsReplied(email.id, true);

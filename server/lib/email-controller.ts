@@ -354,12 +354,98 @@ export async function processIncomingEmail(
     to: string;
     subject: string;
     body: string;
+    isAutoReply?: boolean;
+    headers?: Record<string, string>;
   },
   userId: number = 1,
   service: EmailService = 'sendgrid'
 ): Promise<boolean> {
   try {
-    // Log the received email
+    // Check for auto-reply markers to prevent loops
+    const isAutoReply = emailContent.isAutoReply || 
+      !!emailContent.headers?.['auto-submitted'] ||
+      !!emailContent.headers?.['x-auto-reply'] ||
+      !!emailContent.headers?.['x-autorespond'] ||
+      !!emailContent.headers?.['x-autoreply'] ||
+      !!emailContent.headers?.['x-ai-receptionist'];
+    
+    // Extract clean email addresses for comparison
+    const extractEmailAddress = (fullAddress: string): string => {
+      const emailMatch = fullAddress.match(/<([^>]+)>/) || 
+                       fullAddress.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+)/);
+      return emailMatch ? emailMatch[1].toLowerCase() : fullAddress.toLowerCase().trim();
+    }
+    
+    const fromEmailAddress = extractEmailAddress(emailContent.from);
+    const toEmailAddress = extractEmailAddress(emailContent.to);
+    
+    // Get all configured system emails for this user
+    const sendgridConfig = await storage.getSendgridConfigByUserId(userId);
+    const smtpConfig = await storage.getSmtpConfigByUserId(userId);
+    const mailgunConfig = await storage.getMailgunConfigByUserId(userId);
+    
+    // Create a list of system emails
+    const systemEmails = [
+      sendgridConfig?.fromEmail, 
+      smtpConfig?.fromEmail,
+      mailgunConfig?.fromEmail
+    ].filter(Boolean).map(email => extractEmailAddress(email));
+    
+    // Check if this is a self-reply or system-to-system email
+    const fromIsSystemEmail = systemEmails.includes(fromEmailAddress);
+    const toIsSystemEmail = systemEmails.includes(toEmailAddress);
+    const isSelfReply = fromIsSystemEmail || (fromEmailAddress === toEmailAddress);
+    
+    // Mark as auto-reply if subject contains Re: and from a system email
+    const subjectIndicatesReply = emailContent.subject.startsWith('Re:') || emailContent.subject.startsWith('RE:');
+    
+    // Calculate a loop detection flag
+    const loopDetected = isAutoReply || 
+                        (fromIsSystemEmail && subjectIndicatesReply) || 
+                        isSelfReply;
+    
+    // If loops detected, mark as replied immediately and exit
+    if (loopDetected) {
+      console.log(`Loop detection: Auto-reply or self-reply detected from ${fromEmailAddress} to ${toEmailAddress}`);
+      console.log(`Loop indicators: isAutoReply=${isAutoReply}, fromIsSystemEmail=${fromIsSystemEmail}, isSelfReply=${isSelfReply}`);
+      
+      // Still log the email but mark it as replied to prevent processing
+      const emailLog = await storage.createEmailLog({
+        userId,
+        from: emailContent.from,
+        to: emailContent.to,
+        subject: emailContent.subject,
+        body: emailContent.body,
+        timestamp: new Date(),
+        status: "received",
+        service,
+        isReplied: true // Mark as replied to prevent processing
+      });
+      
+      // Log the prevention
+      await storage.createSystemActivity({
+        module: "Email",
+        event: "EmailLoopPrevented",
+        status: "success",
+        timestamp: new Date(),
+        details: { 
+          emailId: emailLog.id,
+          from: emailContent.from,
+          to: emailContent.to,
+          subject: emailContent.subject,
+          loopDetectionDetails: {
+            isAutoReply, 
+            fromIsSystemEmail, 
+            isSelfReply, 
+            subjectIndicatesReply
+          }
+        }
+      });
+      
+      return true; // Return true to indicate we handled it (by skipping)
+    }
+    
+    // Log the received email normally if no loop was detected
     await storage.createEmailLog({
       userId,
       from: emailContent.from,
