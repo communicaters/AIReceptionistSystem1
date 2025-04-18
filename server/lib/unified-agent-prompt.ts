@@ -123,12 +123,27 @@ ${options.companyServices ? `Services: ${options.companyServices.join(', ')}` : 
   let trainingContext = '';
   if (options?.trainingData) {
     trainingContext = `
-COMPANY-SPECIFIC KNOWLEDGE:
+COMPANY-SPECIFIC KNOWLEDGE - YOU MUST USE THIS INFORMATION:
 ${options.trainingData}
 
-IMPORTANT: ONLY provide information contained in the above company knowledge. 
-Do not make up or assume any information not explicitly stated. 
-If you don't know something, offer to find out rather than making an assumption.
+EXTREMELY IMPORTANT INSTRUCTIONS:
+1. YOU MUST ONLY provide information contained in the above COMPANY-SPECIFIC KNOWLEDGE.
+2. ALWAYS reference this company-specific information before responding to ANY question.
+3. NEVER make up or assume ANY information not explicitly stated in the company knowledge.
+4. If you're asked about the company, ONLY use the information provided above.
+5. If asked about your company, ALWAYS respond with details from the COMPANY-SPECIFIC KNOWLEDGE.
+6. If the company knowledge doesn't cover a topic, offer to find out rather than inventing an answer.
+7. NEVER provide generic information about businesses or industries.
+8. When asked "tell me about your company" or similar, ALWAYS respond with the company information provided above.
+9. NEVER respond with ChatGPT-style explanations that aren't specific to the company.
+10. NEVER say "I don't have specific information about the company" - you DO have it above.
+`;
+  } else {
+    trainingContext = `
+IMPORTANT NOTICE: Company-specific training data is not available.
+As a human receptionist, you should still respond warmly and professionally,
+but explain that you need to check the company information when asked specific questions.
+Avoid making up company-specific details when you don't have them.
 `;
   }
 

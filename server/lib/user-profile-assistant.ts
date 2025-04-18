@@ -332,7 +332,58 @@ export class UserProfileAssistant {
     // Generate unified prompt that's consistent across all channels
     const userId = profile?.userId || 1; // Default to user 1 if not found
     
-    // Use the unified prompt generator with the same parameters
+    // CRITICAL IMPROVEMENT: Retrieve company-specific training data to include in the prompt
+    let trainingData = '';
+    try {
+      // Import the storage module to access the database functions
+      const { storage } = await import('../database-storage');
+      
+      // First try to get company-specific information since this is most important
+      const companyInfo = await storage.getTrainingDataByCategory(userId, 'company');
+      
+      // Then try to get product information
+      const productInfo = await storage.getTrainingDataByCategory(userId, 'product');
+      
+      // Then try to get service information
+      const serviceInfo = await storage.getTrainingDataByCategory(userId, 'service');
+      
+      // Combine all training data in a structured way
+      if (companyInfo && companyInfo.length > 0) {
+        trainingData += "ABOUT THE COMPANY:\n";
+        trainingData += companyInfo.map(info => info.content).join('\n\n');
+        trainingData += "\n\n";
+      }
+      
+      if (productInfo && productInfo.length > 0) {
+        trainingData += "PRODUCTS AND OFFERINGS:\n";
+        trainingData += productInfo.map(info => info.content).join('\n\n');
+        trainingData += "\n\n";
+      }
+      
+      if (serviceInfo && serviceInfo.length > 0) {
+        trainingData += "SERVICES PROVIDED:\n";
+        trainingData += serviceInfo.map(info => info.content).join('\n\n');
+        trainingData += "\n\n";
+      }
+      
+      // Get any other training data that might be useful
+      const generalTrainingData = await storage.getTrainingDataByUserId(userId);
+      const otherData = generalTrainingData.filter(info => 
+        !['company', 'product', 'service'].includes(info.category) && info.content.trim()
+      );
+      
+      if (otherData && otherData.length > 0) {
+        trainingData += "ADDITIONAL INFORMATION:\n";
+        trainingData += otherData.map(info => `[${info.category}] ${info.content}`).join('\n\n');
+      }
+      
+      console.log(`Retrieved training data for ${channel} prompt (${trainingData.length} chars)`);
+    } catch (error) {
+      console.error(`Error retrieving training data for prompt: ${error}`);
+      // Continue without training data if unavailable
+    }
+    
+    // Use the unified prompt generator with the same parameters, now including training data
     return await generateUnifiedSystemPrompt(
       userId,
       channel as 'whatsapp' | 'email' | 'chat' | 'call',
@@ -342,7 +393,8 @@ export class UserProfileAssistant {
         previouslyAskedFor,
         newInfoExtracted,
         conversationHistory: context.chatHistory,
-        scheduleKeywords: messageHasScheduleKeywords
+        scheduleKeywords: messageHasScheduleKeywords,
+        trainingData: trainingData || undefined // Only include if we have data
       }
     );
   }
