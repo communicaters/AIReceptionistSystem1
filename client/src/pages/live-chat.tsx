@@ -422,7 +422,7 @@ const LiveChatContent = () => {
             <CardHeader>
               <CardTitle>Active Sessions</CardTitle>
               <CardDescription>
-                View and manage current chat sessions
+                View and manage current chat sessions ({uniqueSessions.length} total)
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -432,31 +432,58 @@ const LiveChatContent = () => {
                     No active chat sessions
                   </div>
                 ) : (
-                  uniqueSessions.map((sessionId) => (
-                    <Button
-                      key={sessionId}
-                      variant={selectedSessionId === sessionId ? "default" : "outline"}
-                      className="justify-start h-auto py-3"
-                      onClick={() => setSelectedSessionId(sessionId)}
-                    >
-                      <div className="flex items-center">
-                        <div className="bg-primary/10 text-primary p-2 rounded-full mr-3">
-                          <Users className="h-5 w-5" />
-                        </div>
-                        <div className="text-left">
-                          <div className="font-medium">
-                            Session #{sessionId.substring(8, 16)}
+                  <>
+                    {currentSessions.map((sessionId) => (
+                      <Button
+                        key={sessionId}
+                        variant={selectedSessionId === sessionId ? "default" : "outline"}
+                        className="justify-start h-auto py-3"
+                        onClick={() => setSelectedSessionId(sessionId)}
+                      >
+                        <div className="flex items-center">
+                          <div className="bg-primary/10 text-primary p-2 rounded-full mr-3">
+                            <Users className="h-5 w-5" />
                           </div>
-                          <div className="text-xs text-muted-foreground">
-                            Started {formatDistanceToNow(
-                              new Date(parseInt(sessionId.split('_')[1])),
-                              { addSuffix: true }
-                            )}
+                          <div className="text-left">
+                            <div className="font-medium">
+                              Session #{sessionId.substring(8, 16)}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              Started {formatDistanceToNow(
+                                new Date(parseInt(sessionId.split('_')[1])),
+                                { addSuffix: true }
+                              )}
+                            </div>
                           </div>
                         </div>
+                      </Button>
+                    ))}
+                    
+                    {/* Pagination Controls */}
+                    {totalPages > 1 && (
+                      <div className="flex justify-center items-center mt-4 space-x-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                          disabled={currentPage === 1}
+                        >
+                          Previous
+                        </Button>
+                        <div className="text-sm">
+                          Page {currentPage} of {totalPages}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                          disabled={currentPage === totalPages}
+                        >
+                          Next
+                        </Button>
                       </div>
-                    </Button>
-                  ))
+                    )}
+                  </>
                 )}
               </div>
             </CardContent>
