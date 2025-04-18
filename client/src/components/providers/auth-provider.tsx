@@ -29,7 +29,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     // Check if we have a token and user data in localStorage on initial load
-    const checkAuth = async () => {
+    const checkAuth = () => {
       const token = localStorage.getItem("authToken");
       const userInfo = localStorage.getItem("userInfo");
 
@@ -38,51 +38,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           const userData = JSON.parse(userInfo);
           setUser(userData);
           setIsAuthenticated(true);
-          setIsLoading(false);
         } catch (error) {
           console.error("Error parsing user data:", error);
           // Clear invalid data
           localStorage.removeItem("authToken");
           localStorage.removeItem("userInfo");
-          
-          // Auto-login functionality for development
-          await autoLoginForDevelopment();
         }
-      } else {
-        // Auto-login functionality for development
-        await autoLoginForDevelopment();
       }
-    };
-
-    // Auto-login function with development endpoint for testing only
-    const autoLoginForDevelopment = async () => {
-      try {
-        console.log("Attempting auto-login with dev endpoint...");
-        
-        // Use the dev-login endpoint that doesn't require password verification
-        const response = await fetch("/api/auth/dev-login", {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json"
-          }
-        });
-        
-        const data = await response.json();
-        
-        if (response.ok && data.token && data.user) {
-          console.log("Auto-login successful");
-          localStorage.setItem("authToken", data.token);
-          localStorage.setItem("userInfo", JSON.stringify(data.user));
-          setUser(data.user);
-          setIsAuthenticated(true);
-        } else {
-          console.error("Auto-login failed:", data.message);
-        }
-      } catch (error) {
-        console.error("Auto-login error:", error);
-      } finally {
-        setIsLoading(false);
-      }
+      
+      setIsLoading(false);
     };
 
     checkAuth();

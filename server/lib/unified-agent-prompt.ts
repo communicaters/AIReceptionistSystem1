@@ -142,19 +142,6 @@ IMPORTANT GUIDELINES:
 ${trainingContent}`;
   }
   
-  // Get intent mapping data for NLP understanding
-  const intentMap = await storage.getIntentsByUserId(userId);
-  if (intentMap && intentMap.length > 0) {
-    const intentMapContent = intentMap.map(intent => 
-      `Intent: ${intent.intent}\nExamples: ${intent.examples.join(', ')}`
-    ).join('\n\n');
-    
-    systemPrompt += `\n\nINTENT RECOGNITION MAPPINGS:
-${intentMapContent}
-
-When a customer message matches or is similar to one of the example phrases above, recognize it as the corresponding intent and respond according to our business information.`;
-  }
-  
   // Get product data for the business
   const products = await storage.getProductsByUserId(userId);
   if (products.length > 0) {
