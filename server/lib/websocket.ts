@@ -364,10 +364,26 @@ async function handleUserInfo(clientId: string, userInfo: any) {
       });
     }
     
-    // Find or create user profile
-    const profile = await userProfileManager.findOrCreateProfile({
-      userId
-    });
+    // First, check if a profile with this email already exists
+    let profile = null;
+    try {
+      if (userInfo.emailAddress) {
+        const existingProfile = await storage.getUserProfileByEmail(userInfo.emailAddress);
+        if (existingProfile) {
+          console.log(`Found existing profile with email ${userInfo.emailAddress}, profile ID: ${existingProfile.id}`);
+          profile = existingProfile;
+        }
+      }
+    } catch (error) {
+      console.warn(`Error checking for existing profile by email: ${error}`);
+    }
+
+    // If no existing profile found by email, find or create one by userId
+    if (!profile) {
+      profile = await userProfileManager.findOrCreateProfile({
+        userId
+      });
+    }
     
     if (profile) {
       // Update profile with new information
@@ -379,9 +395,13 @@ async function handleUserInfo(clientId: string, userInfo: any) {
         hasUpdates = true;
       }
       
+      // Only update email if it's not already set (to avoid duplicate key issues)
       if (userInfo.emailAddress && (!profile.email || profile.email !== userInfo.emailAddress)) {
-        updates.email = userInfo.emailAddress;
-        hasUpdates = true;
+        // Only try to update if the profile doesn't already have this email
+        if (!profile.email) {
+          updates.email = userInfo.emailAddress;
+          hasUpdates = true;
+        }
       }
       
       if (userInfo.mobileNumber && (!profile.phone || profile.phone !== userInfo.mobileNumber)) {
