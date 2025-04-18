@@ -349,9 +349,8 @@ async function handleChatMessage(clientId: string, message: string) {
     timestamp: new Date()
   });
   
-  // Get the UserProfileAssistant instance
-  const userProfileAssistant = getUserProfileAssistant();
-  console.log('UserProfileAssistant loaded for chat handling');
+  // We'll use the UserProfileAssistant later in the process
+  console.log('Preparing for chat handling with user profile integration');
   
   try {
     // Extract any potential user information from the message using regex
@@ -478,6 +477,10 @@ async function handleChatMessage(clientId: string, message: string) {
     }
 
     // Use the profile-aware assistant to generate a response that considers user profile info
+    // Get a reference to the unified profile assistant
+    const userProfileAssistant = getUserProfileAssistant();
+    
+    // Use the unified agent system to generate a response
     const { response: profileAwareResponse, profileId } = await userProfileAssistant.generateResponse(
       userId,
       sessionId, // We use sessionId as the identifier since we may not have phone/email yet
