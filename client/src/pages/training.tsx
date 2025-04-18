@@ -460,10 +460,25 @@ const TrainingPage = () => {
                             </div>
                           </div>
                           <div className="flex gap-2">
-                            <Button variant="ghost" size="icon" disabled>
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              onClick={() => {
+                                setEditingIntent(intent);
+                                setShowEditIntentDialog(true);
+                              }}
+                            >
                               <Edit className="h-4 w-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" disabled>
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              onClick={() => {
+                                if (confirm('Are you sure you want to delete this intent?')) {
+                                  deleteIntentMutation.mutate(intent.id);
+                                }
+                              }}
+                            >
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
@@ -519,6 +534,28 @@ const TrainingPage = () => {
               })} 
               isLoading={updateTrainingDataMutation.isPending}
               categories={allCategories} 
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog for editing intent */}
+      <Dialog open={showEditIntentDialog} onOpenChange={(open) => {
+        setShowEditIntentDialog(open);
+        if (!open) setEditingIntent(null);
+      }}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Edit Intent</DialogTitle>
+          </DialogHeader>
+          {editingIntent && (
+            <EditIntentForm 
+              intent={editingIntent}
+              onSubmit={(data) => updateIntentMutation.mutate({ 
+                id: editingIntent.id, 
+                data 
+              })} 
+              isLoading={updateIntentMutation.isPending}
             />
           )}
         </DialogContent>
@@ -742,6 +779,12 @@ const AddIntentForm = ({ onSubmit, isLoading }: AddIntentFormProps) => {
 };
 
 // Edit Training Data form component
+interface EditIntentFormProps {
+  intent: Intent;
+  onSubmit: (data: Partial<Omit<Intent, 'id' | 'userId'>>) => void;
+  isLoading: boolean;
+}
+
 interface EditTrainingDataFormProps {
   trainingData: TrainingData;
   onSubmit: (data: Partial<Omit<TrainingData, 'id' | 'userId' | 'createdAt' | 'metadata'>>) => void;
@@ -836,6 +879,110 @@ const EditTrainingDataForm = ({ trainingData, onSubmit, isLoading, categories }:
         <Button type="submit" disabled={isLoading}>
           {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Update Training Data
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+};
+
+// Edit Intent Form Component
+const EditIntentForm = ({ intent, onSubmit, isLoading }: EditIntentFormProps) => {
+  const [intentName, setIntentName] = useState(intent.intent);
+  const [example, setExample] = useState("");
+  const [examples, setExamples] = useState<string[]>([...intent.examples]);
+  
+  const addExample = () => {
+    if (example.trim()) {
+      setExamples(prev => [...prev, example.trim()]);
+      setExample("");
+    }
+  };
+  
+  const removeExample = (idx: number) => {
+    setExamples(prev => prev.filter((_, i) => i !== idx));
+  };
+  
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!intentName.trim() || examples.length === 0) {
+      return; // Prevent submission without intent or examples
+    }
+    
+    onSubmit({
+      intent: intentName.trim(),
+      examples
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="intent">Intent Name</Label>
+        <Input
+          id="intent"
+          value={intentName}
+          onChange={(e) => setIntentName(e.target.value)}
+          placeholder="e.g., schedule_meeting, product_info, help_request"
+          required
+        />
+        <p className="text-xs text-muted-foreground">
+          Use a clear and descriptive name for the intent, typically in snake_case.
+        </p>
+      </div>
+      
+      <div className="space-y-2">
+        <Label>Example Phrases</Label>
+        <div className="flex space-x-2">
+          <Input
+            value={example}
+            onChange={(e) => setExample(e.target.value)}
+            placeholder="Add an example phrase for this intent"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                addExample();
+              }
+            }}
+          />
+          <Button type="button" onClick={addExample} variant="secondary">
+            Add
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Add multiple example phrases that represent this intent.
+          Press Enter or click Add to add each example.
+        </p>
+      </div>
+      
+      {examples.length > 0 && (
+        <div className="border rounded-md p-3 space-y-2">
+          <Label>Current Examples:</Label>
+          <div className="space-y-2">
+            {examples.map((ex, idx) => (
+              <div key={idx} className="flex justify-between items-center bg-muted p-2 rounded-sm">
+                <span className="text-sm font-mono">"{ex}"</span>
+                <Button 
+                  type="button" 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={() => removeExample(idx)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      
+      <DialogFooter>
+        <Button 
+          type="submit" 
+          disabled={isLoading || !intentName.trim() || examples.length === 0}
+        >
+          {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          Update Intent
         </Button>
       </DialogFooter>
     </form>
