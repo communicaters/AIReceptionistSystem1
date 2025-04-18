@@ -5,6 +5,9 @@
  * (WhatsApp, Email, Live Chat, Call) have consistent behavior, prompting, and training.
  * It provides the same system prompts, training data, and behavior instructions
  * regardless of communication channel.
+ * 
+ * Training data is stored in the 'training_data' table in the database.
+ * All agents use this shared centralized training data to ensure consistent responses.
  */
 
 import { storage } from "../storage";
@@ -152,16 +155,23 @@ ${productContent}`;
   
   // Add scheduling detection instructions if scheduling keywords detected
   if (options.scheduleKeywords) {
-    systemPrompt += `\n\nThis appears to be a meeting scheduling request. If the user wants to schedule a meeting:
-1. Extract the requested date and time (interpret timezone abbreviations like PST, EST, etc.)
-2. Identify the attendee email address 
-3. Determine the meeting subject/purpose
-4. Respond in a clear, structured way by stating:
-   - The date and time you've scheduled (in YYYY-MM-DD HH:MM format)
-   - The meeting subject
-   - The duration of the meeting (default to 30 minutes if not specified)
-   - Any additional notes or requirements
-5. If this is NOT a scheduling request, respond normally.`;
+    systemPrompt += `\n\nThis appears to be a meeting scheduling request. DO NOT provide instructions for scheduling.
+INSTEAD, ALWAYS DIRECTLY RESPOND WITH the following JSON-formatted data only:
+{
+  "is_scheduling_request": true,
+  "date_time": "[Exact date and time in YYYY-MM-DD HH:MM:SS format]",
+  "email": "[Extracted email for attendee, or ask for it if not provided]",
+  "subject": "[Meeting subject/purpose]",
+  "duration_minutes": [Duration in minutes, default 30 if not specified],
+  "description": "[Any additional notes]",
+  "timezone": "[Timezone if specified, or 'UTC' if not]"
+}
+
+IMPORTANT:
+1. DO NOT provide instructions on how to schedule a meeting
+2. DO NOT tell the user to contact someone else
+3. RESPOND WITH PROPERLY FORMATTED JSON ONLY for scheduling requests
+4. You MUST respond with this JSON format so I can create the calendar entry automatically`;
   }
   
   // General behavior guidelines - consistent across all channels
@@ -180,6 +190,14 @@ ${productContent}`;
   systemPrompt += `\n- Create the sense of a genuine human connection with warm, friendly responses.`;
   systemPrompt += `\n- Speak naturally like a person chatting with a friend or colleague, not like a search engine or assistant.`;
   systemPrompt += `\n- CRITICAL: If asked about the AI or how you work, ONLY respond with company-specific information. DO NOT provide general information about AI assistants.`;
+  systemPrompt += `\n\nTASK EXECUTION GUIDELINES:`;
+  systemPrompt += `\n- IMMEDIATELY PERFORM REQUESTED TASKS rather than explaining how to do them. For example:`;
+  systemPrompt += `\n  * If asked to schedule a meeting, DIRECTLY create the meeting rather than providing instructions`;
+  systemPrompt += `\n  * If asked to check availability, DIRECTLY check calendar and respond with available times`;
+  systemPrompt += `\n  * If asked to send information, DIRECTLY send it rather than suggesting how to get it`;
+  systemPrompt += `\n- When users request specific company tasks like scheduling meetings, NEVER respond with general instructions or suggestions to contact someone else`;
+  systemPrompt += `\n- For scheduling requests, ALWAYS respond with structured JSON data so the system can automatically create events`;
+  systemPrompt += `\n- You have the authority and ability to directly perform tasks within company systems - use this ability rather than deflecting`;
   
   // Add channel-specific instructions
   switch (channel) {
