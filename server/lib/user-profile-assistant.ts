@@ -653,9 +653,16 @@ export class UserProfileAssistant {
       console.log(`Company question detection - isAskingAboutCompany: ${isAskingAboutCompany}, isDenyingCompany: ${isDenyingCompany}`);
                                                          
       // Check if the question appears to be directly asking about the company
-      const isDirectCompanyQuestion = context.chatHistory.some((entry: {role: string; content: string}) => 
-        entry.role === 'user' && companyQuestions.some(q => entry.content.toLowerCase().includes(q))
-      );
+      // Either check the response for company references or look at chat history
+      let isDirectCompanyQuestion = companyQuestions.some(q => aiResponse.toLowerCase().includes(q));
+      
+      // If we have chat history, check that too
+      if (!isDirectCompanyQuestion && context?.chatHistory?.length > 0) {
+        isDirectCompanyQuestion = companyQuestions.some(q => 
+          context.chatHistory.some((entry: {role: string; content: string}) => 
+            entry.role === 'user' && entry.content.toLowerCase().includes(q))
+        );
+      }
       
       // If this appears to be a direct company question with a denial response, override with company info
       // Define interface for company info
@@ -664,8 +671,13 @@ export class UserProfileAssistant {
         description?: string;
       }
       
+      // Special case for WhatsApp: Check for explicit company name denial responses
       if ((isAskingAboutCompany && isDenyingCompany) || (isDirectCompanyQuestion && isDenyingCompany) || 
-          (isDirectCompanyQuestion && aiResponse.toLowerCase().includes("openai"))) {
+          (isDirectCompanyQuestion && aiResponse.toLowerCase().includes("openai")) ||
+          (aiResponse.toLowerCase().includes("don't work for") && aiResponse.toLowerCase().includes("company")) ||
+          (aiResponse.toLowerCase().includes("don't have a company")) ||
+          (aiResponse.toLowerCase().includes("i apologize") && aiResponse.toLowerCase().includes("don't represent"))
+         ) {
         console.log("Detected company question with incorrect response - overriding with company information");
         
         // Get specific company information from database
