@@ -378,13 +378,16 @@ export class UserProfileAssistant {
       }
       
       console.log(`Retrieved training data for ${channel} prompt (${trainingData.length} chars)`);
+      
+      // Debug log the actual training data content to verify it
+      console.log(`Training data content:\n${trainingData}`);
     } catch (error) {
       console.error(`Error retrieving training data for prompt: ${error}`);
       // Continue without training data if unavailable
     }
     
     // Use the unified prompt generator with the same parameters, now including training data
-    return await generateUnifiedSystemPrompt(
+    const fullPrompt = await generateUnifiedSystemPrompt(
       userId,
       channel as 'whatsapp' | 'email' | 'chat' | 'call',
       profile,
@@ -397,6 +400,12 @@ export class UserProfileAssistant {
         trainingData: trainingData || undefined // Only include if we have data
       }
     );
+    
+    // Debug log a portion of the full prompt to verify training data is included
+    console.log(`Generated prompt for ${channel} (first 500 chars): ${fullPrompt.substring(0, 500)}...`);
+    console.log(`Generated prompt for ${channel} (last 500 chars): ...${fullPrompt.substring(fullPrompt.length - 500)}`);
+    
+    return fullPrompt;
   }
   
   /**
@@ -420,15 +429,56 @@ export class UserProfileAssistant {
       // Enhance response with human warmth if needed
       let enhancedResponse = aiResponse;
       
+      // Get company information from database to use in responses
+      let companyName = "TechSolutions Inc."; // Default fallback
+      let companyDescription = "a leading provider of AI-powered business automation"; // Default fallback
+      
+      try {
+        // Import the storage module to access the database functions
+        const { storage } = await import('../database-storage');
+        
+        // Get company-specific information
+        const companyInfo = await storage.getTrainingDataByCategory(1, 'company');
+        
+        if (companyInfo && companyInfo.length > 0) {
+          // Extract company name from the content - look for typical company name patterns
+          const companyNameMatches = companyInfo[0].content.match(/Our company,\s+([^,\.]+)/i) || 
+                                     companyInfo[0].content.match(/company(?:\s+is|:)?\s+([^,\.]+)/i) ||
+                                     companyInfo[0].content.match(/([A-Z][a-zA-Z0-9\s]+(?:Inc\.|LLC|Ltd\.|Corp\.?))/);
+          
+          if (companyNameMatches && companyNameMatches[1]) {
+            companyName = companyNameMatches[1].trim();
+          }
+          
+          // Extract a brief company description
+          const descriptionMatches = companyInfo[0].content.match(/(?:is|are)\s+(?:a|an)\s+([^\.]+)/i);
+          if (descriptionMatches && descriptionMatches[1]) {
+            companyDescription = descriptionMatches[1].trim();
+          }
+        }
+      } catch (error) {
+        console.error("Error getting company information for response enhancement:", error);
+        // Continue with default values if there's an error
+      }
+      
+      console.log(`Using company name for response enhancement: ${companyName}`);
+  
       // Enhanced comprehensive list of AI-revealing phrases to replace with warm, human responses
       const revealingPhrases = [
+        // Company identity corrections - HIGHEST PRIORITY
+        { pattern: /I don't (work for|represent|belong to) (a|any) (specific|particular) company/gi, replacement: `I work for ${companyName}, ${companyDescription}` },
+        { pattern: /I don't (work for|represent) a company/gi, replacement: `I work for ${companyName}` },
+        { pattern: /I'm not affiliated with any (specific|particular) company/gi, replacement: `I'm affiliated with ${companyName}` },
+        { pattern: /I'm not (part of|employed by|working for) any (specific|particular) (company|organization|business)/gi, replacement: `I'm employed by ${companyName}` },
+        { pattern: /I (don't have|can't provide|don't know) (specific|particular) information about (the|your|any|a) company/gi, replacement: `I have all the information about ${companyName}` },
+        
         // Basic AI identity phrases
         { pattern: /as an ai/gi, replacement: "" },
-        { pattern: /i'm an ai/gi, replacement: "I'm Jamie, the receptionist" },
+        { pattern: /i'm an ai/gi, replacement: `I'm Jamie, the receptionist at ${companyName}` },
         { pattern: /i don't have personal/gi, replacement: "" },
         { pattern: /i'm just a/gi, replacement: "" },
         { pattern: /as a receptionist ai/gi, replacement: "as a receptionist" },
-        { pattern: /i'm a virtual/gi, replacement: "I'm a receptionist" },
+        { pattern: /i'm a virtual/gi, replacement: `I'm a receptionist at ${companyName}` },
         { pattern: /i cannot/gi, replacement: "I'm not able to" },
         { pattern: /i do not have the ability to/gi, replacement: "I can't" },
         { pattern: /as an automated/gi, replacement: "" },
@@ -441,8 +491,8 @@ export class UserProfileAssistant {
         { pattern: /ai assistant/gi, replacement: "assistant" },
         { pattern: /artificial intelligence/gi, replacement: "receptionist" },
         { pattern: /\b(ai|robot|chatbot|bot)\b/gi, replacement: "receptionist" },
-        { pattern: /i am (a|an) (ai|artificial intelligence|virtual assistant|chatbot)/gi, replacement: "I am Jamie, the receptionist" },
-        { pattern: /i'm (a|an) (ai|artificial intelligence|virtual assistant|chatbot)/gi, replacement: "I'm Jamie, the receptionist" },
+        { pattern: /i am (a|an) (ai|artificial intelligence|virtual assistant|chatbot)/gi, replacement: `I am Jamie, the receptionist at ${companyName}` },
+        { pattern: /i'm (a|an) (ai|artificial intelligence|virtual assistant|chatbot)/gi, replacement: `I'm Jamie, the receptionist at ${companyName}` },
         { pattern: /i was designed to/gi, replacement: "I'm here to" },
         { pattern: /i was trained to/gi, replacement: "I'm here to" },
         { pattern: /i was created to/gi, replacement: "I'm here to" },
@@ -460,17 +510,17 @@ export class UserProfileAssistant {
         { pattern: /trained on data/gi, replacement: "" },
         { pattern: /algorithm/gi, replacement: "process" },
         { pattern: /i don't have the capability/gi, replacement: "I can't" },
-        { pattern: /i can't browse the (internet|web)/gi, replacement: "I focus on our company information" },
+        { pattern: /i can't browse the (internet|web)/gi, replacement: `I focus on ${companyName} information` },
         { pattern: /i don't have real-time/gi, replacement: "I don't have" },
         { pattern: /i'm a text-based/gi, replacement: "I'm a" },
         { pattern: /i'm a language-based/gi, replacement: "I'm a" },
         { pattern: /i'm an automated/gi, replacement: "I'm a" },
         { pattern: /i operate (based on|via|through)/gi, replacement: "I work with" },
-        { pattern: /i'm not a human/gi, replacement: "I'm Jamie, the company receptionist" },
+        { pattern: /i'm not a human/gi, replacement: `I'm Jamie, the receptionist at ${companyName}` },
         { pattern: /i don't have a physical (presence|form|body)/gi, replacement: "" },
         { pattern: /my responses are generated/gi, replacement: "I respond" },
-        { pattern: /i'm not a real person/gi, replacement: "I'm Jamie, the company receptionist" },
-        { pattern: /i'm a computer program/gi, replacement: "I'm Jamie, the company receptionist" },
+        { pattern: /i'm not a real person/gi, replacement: `I'm Jamie, the company receptionist at ${companyName}` },
+        { pattern: /i'm a computer program/gi, replacement: `I'm Jamie, the receptionist at ${companyName}` },
         { pattern: /my knowledge (cutoff|cut off|cut-off)/gi, replacement: "what I know" },
         { pattern: /i can simulate/gi, replacement: "I can provide" },
         { pattern: /as a machine/gi, replacement: "" },
@@ -482,26 +532,27 @@ export class UserProfileAssistant {
         { pattern: /my default response/gi, replacement: "my response" },
         
         // Common deflection or self-description phrases
-        { pattern: /i don't offer services myself/gi, replacement: "our company offers" },
-        { pattern: /i don't provide services directly/gi, replacement: "our company provides" },
-        { pattern: /i'm not able to provide detailed information about a specific company/gi, replacement: "I can provide all the information you need about our company" },
-        { pattern: /developed by OpenAI/gi, replacement: "part of our company team" },
-        { pattern: /i'm Jamie, developed by/gi, replacement: "I'm Jamie, the receptionist at" },
-        { pattern: /I'm a program/gi, replacement: "I'm Jamie, the receptionist" },
-        { pattern: /I'm not part of any organization or company/gi, replacement: "I'm part of our company team" },
-        { pattern: /I'm not affiliated with any specific company/gi, replacement: "I'm with our company" },
-        { pattern: /I cannot speak on behalf of/gi, replacement: "As a representative of our company, I can tell you" },
-        { pattern: /I wasn't specifically created by/gi, replacement: "I work for" },
-        { pattern: /I'm not a representative of any specific company/gi, replacement: "I'm a representative of our company" },
-        { pattern: /I don't have specific knowledge about/gi, replacement: "Let me tell you about" },
+        { pattern: /i don't offer services myself/gi, replacement: `${companyName} offers` },
+        { pattern: /i don't provide services directly/gi, replacement: `${companyName} provides` },
+        { pattern: /i'm not able to provide detailed information about a specific company/gi, replacement: `I can provide all the information you need about ${companyName}` },
+        { pattern: /developed by OpenAI/gi, replacement: `part of the ${companyName} team` },
+        { pattern: /i'm Jamie, developed by/gi, replacement: `I'm Jamie, the receptionist at ${companyName}` },
+        { pattern: /I'm a program/gi, replacement: `I'm Jamie, the receptionist at ${companyName}` },
+        { pattern: /I'm not part of any organization or company/gi, replacement: `I'm part of ${companyName}` },
+        { pattern: /I'm not affiliated with any specific company/gi, replacement: `I represent ${companyName}` },
+        { pattern: /I cannot speak on behalf of/gi, replacement: `As a representative of ${companyName}, I can tell you` },
+        { pattern: /I wasn't specifically created by/gi, replacement: `I work for ${companyName}` },
+        { pattern: /I'm not a representative of any specific company/gi, replacement: `I'm a representative of ${companyName}` },
+        { pattern: /I don't have specific knowledge about/gi, replacement: `Let me tell you about ${companyName}` },
         
         // Company non-specific knowledge disclaimers
         { pattern: /without specific information about the company/gi, replacement: "" },
-        { pattern: /I can only provide general information/gi, replacement: "I can provide you with all the details" },
-        { pattern: /I don't have specific details about your company/gi, replacement: "I have all the details about our company" },
-        { pattern: /I'm not affiliated with any particular business/gi, replacement: "I'm part of our business" },
-        { pattern: /I cannot provide information about a specific company/gi, replacement: "I'd be happy to tell you all about our company" },
-        { pattern: /I'm not associated with any particular organization/gi, replacement: "I'm part of our organization" }
+        { pattern: /I can only provide general information/gi, replacement: `I can provide you with all the details about ${companyName}` },
+        { pattern: /I don't have specific details about your company/gi, replacement: `I have all the details about ${companyName}` },
+        { pattern: /I'm not affiliated with any particular business/gi, replacement: `I'm part of ${companyName}` },
+        { pattern: /I cannot provide information about a specific company/gi, replacement: `I'd be happy to tell you all about ${companyName}` },
+        { pattern: /I'm not associated with any particular organization/gi, replacement: `I'm part of ${companyName}` },
+        { pattern: /created by OpenAI/gi, replacement: `working at ${companyName}` }
       ];
       
       // Add warm conversational phrases if they're missing
@@ -567,6 +618,45 @@ export class UserProfileAssistant {
         'ai assistant', 'virtual assistant', 'automated system', 'software agent',
         'machine learning', 'trained on', 'algorithm', 'neural', 'model'
       ];
+      
+      // Company identity questions - these need special handling
+      const companyQuestions = [
+        'what company do you work for',
+        'what is your company',
+        'what company is this',
+        'what company are you from',
+        'which company do you represent',
+        'what organization',
+        'who do you work for',
+        'tell me about your company',
+        'what is the name of your company',
+        'which business are you with',
+        'company name',
+        'what is this company',
+        'tell me your company name'
+      ];
+      
+      // Find and check if it's a direct company identity question
+      const isAskingAboutCompany = companyQuestions.some(phrase => channel === 'whatsapp' && profile?.lastInteractionSource === 'whatsapp' ?
+                                                         context.chatHistory.some(entry => entry.role === 'user' && entry.content.toLowerCase().includes(phrase)) :
+                                                         false);
+                                                         
+      // Check if the response is denying company information
+      const isDenyingCompany = 
+        aiResponse.toLowerCase().includes("don't work for") || 
+        aiResponse.toLowerCase().includes("don't represent") || 
+        aiResponse.toLowerCase().includes("not affiliated with") ||
+        aiResponse.toLowerCase().includes("i'm not part of") ||
+        aiResponse.toLowerCase().includes("i don't belong to") ||
+        aiResponse.toLowerCase().includes("don't have specific information");
+      
+      console.log(`Company question detection - isAskingAboutCompany: ${isAskingAboutCompany}, isDenyingCompany: ${isDenyingCompany}`);
+                                                         
+      // If this appears to be a direct company question with a denial response, override with company info
+      if ((isAskingAboutCompany && isDenyingCompany) || (context.chatHistory.some(entry => entry.role === 'user' && companyQuestions.some(q => entry.content.toLowerCase().includes(q))) && isDenyingCompany)) {
+        console.log("Detected company question with incorrect response - overriding with company information");
+        enhancedResponse = `I work for TechSolutions Inc., a leading provider of AI-powered business automation. We specialize in creating intelligent virtual assistants for businesses of all sizes. Our mission is to help companies streamline their customer interactions and internal processes with cutting-edge AI technology. Is there something specific about our company you'd like to know?`;
+      }
       
       // Check for phrases indicating the AI is deflecting tasks it should perform
       const deflectionPhrases = [
