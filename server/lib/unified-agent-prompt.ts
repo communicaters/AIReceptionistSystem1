@@ -142,16 +142,12 @@ ${productContent}`;
 1. Extract the requested date and time (interpret timezone abbreviations like PST, EST, etc.)
 2. Identify the attendee email address 
 3. Determine the meeting subject/purpose
-4. Respond in JSON format with these properties: 
-   {
-     "is_scheduling_request": true,
-     "date_time": "YYYY-MM-DD HH:MM:SS", 
-     "email": "user@example.com",
-     "subject": "Meeting subject",
-     "duration_minutes": 30,
-     "additional_notes": ""
-   }
-5. If this is NOT a scheduling request, respond normally without JSON.`;
+4. Respond in a clear, structured way by stating:
+   - The date and time you've scheduled (in YYYY-MM-DD HH:MM format)
+   - The meeting subject
+   - The duration of the meeting (default to 30 minutes if not specified)
+   - Any additional notes or requirements
+5. If this is NOT a scheduling request, respond normally.`;
   }
   
   // General behavior guidelines - consistent across all channels
@@ -170,12 +166,11 @@ ${productContent}`;
       systemPrompt += `\n\nEMAIL-SPECIFIC INSTRUCTIONS:`;
       systemPrompt += `\n- Use proper email formatting with greeting and signature.`;
       systemPrompt += `\n- Be more formal in email responses than in chat.`;
-      systemPrompt += `\n- Format your final response as JSON: {
-  "response": "Your actual email response text with proper email formatting",
-  "intents": ["main_intent", "secondary_intent"],
-  "shouldScheduleMeeting": false,
-  "meetingDetails": null
-}`;
+      systemPrompt += `\n- Format your final response following this structure (just expressed as text, not actual JSON):
+  * Start with email greeting
+  * Include your email body with proper paragraphs
+  * End with a professional signature
+  * If meeting scheduling is requested, clearly state the proposed date/time`;
       break;
       
     case 'whatsapp':

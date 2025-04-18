@@ -440,10 +440,11 @@ export class UserProfileAssistant {
       }
       
       // Create the message history for the API call
+      // Make sure the content is a string, not an object
       const messages: any[] = [
         {
           role: 'system',
-          content: enhancedPrompt
+          content: typeof enhancedPrompt === 'string' ? enhancedPrompt : JSON.stringify(enhancedPrompt)
         }
       ];
       
