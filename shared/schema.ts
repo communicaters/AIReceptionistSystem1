@@ -960,6 +960,7 @@ export const userInteractions = pgTable("user_interactions", {
   id: serial("id").primaryKey(),
   userProfileId: integer("user_profile_id").notNull().references(() => userProfileData.id, { onDelete: 'cascade' }),
   interactionSource: text("interaction_source").notNull(), // email, chat, call, whatsapp
+  interactionType: text("interaction_type").notNull(), // inbound, outbound, etc.
   messageSummary: text("message_summary"),
   content: text("content"),
   timestamp: timestamp("timestamp").notNull().defaultNow(),

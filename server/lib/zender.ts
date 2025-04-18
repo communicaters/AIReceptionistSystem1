@@ -1028,7 +1028,6 @@ If this is NOT a meeting scheduling request, respond normally and set is_schedul
           
           // Update last interaction source in profile
           await userProfileManager.updateProfile(userProfile.id, {
-            lastSeen: new Date(),
             lastInteractionSource: 'whatsapp'
           });
         }

@@ -53,9 +53,7 @@ export class UserProfileManager {
         userId: params.userId || null,
         email: params.email || null,
         phone: params.phone || null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        lastSeen: new Date()
+        // Default values for timestamps are set at the database level
       };
 
       return await storage.createUserProfile(newProfile);
@@ -113,8 +111,8 @@ export class UserProfileManager {
         interactionSource: source,
         interactionType: type,
         content,
-        metadata,
-        timestamp: new Date()
+        metadata
+        // timestamp is set automatically by the database
       };
 
       return await storage.createUserInteraction(interaction);
