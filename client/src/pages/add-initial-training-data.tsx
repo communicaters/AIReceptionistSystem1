@@ -8,121 +8,147 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Progress } from "@/components/ui/progress";
 import DashboardLayout from "@/components/layout/dashboard-layout";
 
-// Sample training data examples for different categories
+// Sample training data examples for different categories - with human, conversational tone
 const trainingExamples = [
-  // Voice calls
-  { category: "call", content: "When a caller asks for business hours, state the hours from Monday to Friday, 9 AM to 5 PM, and mention that we're closed on weekends." },
-  { category: "call", content: "For calls asking about setting up an appointment, ask for their name, contact information, and preferred time before scheduling." },
-  { category: "call", content: "If a caller needs technical support, ask for their account number first, then the nature of their technical issue." },
-  { category: "voicemail", content: "If the call goes to voicemail, leave a message that includes the date and time of the call, your name, and a brief reason for calling. Ask them to return the call and provide your contact number." },
-  { category: "call", content: "When transferring a call, always inform the caller that you're transferring them and to whom. Provide a brief reason for the transfer." },
+  // Voice calls - warm and natural responses
+  { category: "call", content: "We're open weekdays from 9 to 5. Let me know if you need any help outside those hours - I can always try to arrange something that works for you!" },
+  { category: "call", content: "I'd be happy to help set up that appointment for you. What day works best on your end? And could I get your name and best number to reach you, just in case we need to make any changes?" },
+  { category: "call", content: "I understand you're having a technical issue - that can be frustrating! If you have your account number handy, I can pull up your information right away and get this sorted for you." },
+  { category: "voicemail", content: "Hi there! This is Jamie from Acme Solutions calling on Tuesday afternoon about your recent inquiry. I've got some great options for you - give me a call back at 555-1234 whenever you have a moment. Looking forward to chatting!" },
+  { category: "call", content: "I'm going to connect you with Sarah from our technical team - she's amazing with these kinds of questions and will get you taken care of right away. Just give me one second to transfer you." },
 
-  // Email handling
-  { category: "email", content: "All emails should be acknowledged within 1 business hour, even if a full resolution takes longer." },
-  { category: "email", content: "When responding to customer inquiries by email, begin with a greeting using their name, reference their specific question, and provide a clear answer with any necessary links or attachments." },
-  { category: "email", content: "Email signatures should include your full name, position, company name, contact number, and a link to schedule a meeting if needed." },
-  { category: "email", content: "For email support tickets, confirm receipt with a ticket number and estimated resolution time." },
-  { category: "email", content: "When sending follow-up emails, reference previous communication and summarize what actions have been taken so far." },
+  // Email handling - personalized and warm
+  { category: "email", content: "Thanks for your email! I wanted to let you know I've received it and I'm looking into this for you right now. You'll hear back from me very soon with more details." },
+  { category: "email", content: "Hi David, thanks for reaching out about the project timeline! I've checked with the team, and we're actually running a bit ahead of schedule. I've attached the latest progress report for you to review. Let me know if you need anything else!" },
+  { category: "email", content: "Jamie Miller\nCustomer Success Manager\nAcme Solutions\n555-123-4567\nBook a chat with me: calendly.com/jamiemiller" },
+  { category: "email", content: "Thanks for your support request! I've created ticket #45678 for you. Our team is already looking into this, and we should have a solution for you within the next 4 hours. I'll keep you posted!" },
+  { category: "email", content: "Following up on our conversation from Tuesday - I spoke with the development team and they've implemented those changes you requested. Would you have time this week to take a look and share your thoughts?" },
   
-  // Chat/WhatsApp
-  { category: "chat", content: "Respond to all chat messages within 1 minute during business hours." },
-  { category: "chat", content: "Begin chat interactions with a greeting and your name." },
-  { category: "chat", content: "For complex issues in chat, offer to escalate to a phone call or schedule a time to have a more detailed discussion." },
-  { category: "whatsapp", content: "When using WhatsApp for business communication, maintain the same professional tone as other channels, but messages can be more concise." },
-  { category: "whatsapp", content: "Use WhatsApp's list or button features when providing multiple options to simplify customer selection." },
+  // Chat/WhatsApp - casual but professional
+  { category: "chat", content: "I'll jump on your questions right away! Give me just a minute to pull up that information for you." },
+  { category: "chat", content: "Hey there! I'm Jamie with customer support. How can I make your day better?" },
+  { category: "chat", content: "This is a bit complex to handle over chat. Would you prefer a quick phone call to sort this out faster? I'm available now if that works for you!" },
+  { category: "whatsapp", content: "Thanks for reaching out! I can definitely help with that question about your subscription. The upgrade you're asking about includes 5 additional users and premium support." },
+  { category: "whatsapp", content: "Which option works better for you: 1) Schedule a demo this week, 2) Get pricing info by email, or 3) Speak with a sales specialist?" },
 
-  // Calendar & Meetings
-  { category: "calendar", content: "Before scheduling a meeting, verify availability in the shared calendar and block the time immediately upon confirmation." },
-  { category: "meeting", content: "All meeting invitations should include an agenda, expected duration, and any preparation needed from participants." },
-  { category: "scheduling", content: "When scheduling external meetings, provide a link to your booking system rather than going back and forth with available times." },
-  { category: "calendar", content: "If a meeting needs to be rescheduled, provide at least two alternative times and dates." },
-  { category: "meeting", content: "Send meeting reminders 24 hours in advance with the agenda and any relevant documents." },
+  // Calendar & Meetings - helpful and accommodating
+  { category: "calendar", content: "I've checked the team calendar and we have availability on Thursday at 2pm or Friday morning. Which would work better for your schedule?" },
+  { category: "meeting", content: "I've set up our call for Tuesday at 3pm EST. We'll be discussing the Q3 marketing strategy, and it should take about 45 minutes. Could you come prepared with your campaign results from last quarter?" },
+  { category: "scheduling", content: "Instead of going back and forth, you can pick a time that works for you right here: calendly.com/mylink. I've opened up extra slots this week just for you!" },
+  { category: "calendar", content: "Sorry we need to reschedule! Would Tuesday at 11am or Wednesday at 2pm work better with your schedule? I've temporarily held both times for you." },
+  { category: "meeting", content: "Just a friendly reminder about our strategy call tomorrow at 10am. I've attached the discussion points we'll cover and the latest analytics report. Looking forward to our conversation!" },
 
-  // Business & Product information
-  { category: "business", content: "When discussing company history, mention our founding in 2015 and our mission to simplify communication through AI technology." },
-  { category: "product", content: "The AI Receptionist has three pricing tiers: Basic ($49/month), Professional ($99/month), and Enterprise (custom pricing)." },
-  { category: "product", content: "Key features include multi-channel support (voice, email, chat, WhatsApp), AI-powered responses, and seamless calendar integration." },
-  { category: "business", content: "Our support hours are Monday to Friday, 9 AM to 6 PM Eastern Time." },
-  { category: "business", content: "For partnership inquiries, direct them to partnerships@aireceptionist.com." },
+  // Business & Product information - enthusiastic but genuine
+  { category: "business", content: "We started back in 2015 with a simple mission - to make communication effortless through smart AI. It's been an amazing journey seeing how we've transformed customer experiences since then!" },
+  { category: "product", content: "Our pricing is designed to grow with your needs. Many of our customers start with the Basic plan at $49/month, though the Professional plan at $99 is our most popular option because of the advanced analytics. For larger organizations, we create custom Enterprise packages." },
+  { category: "product", content: "What makes our solution special is how it brings everything together in one place - your voice calls, emails, chat, and WhatsApp messages, all with smart AI responses. And the calendar integration is seamless, so you'll never miss an important meeting." },
+  { category: "business", content: "Our support team is here for you weekdays from 9am to 6pm Eastern. If you need help outside those hours, leave a message and we'll get back to you first thing the next morning!" },
+  { category: "business", content: "I'd love to connect you with our partnerships team! Drop an email to partnerships@aireceptionist.com, and Maya will personally get back to you within a day to discuss the opportunities." },
 
-  // General interactions
-  { category: "greeting", content: "Begin all interactions with a warm welcome that includes the company name." },
-  { category: "farewell", content: "End conversations by thanking the person for their time, summarizing any next steps, and offering additional assistance if needed." },
-  { category: "general", content: "If you don't know the answer to a question, acknowledge that and offer to find out rather than guessing." },
-  { category: "general", content: "Always address people by their name if it's available." },
-  { category: "fallback", content: "When unable to understand a request, politely ask for clarification and provide examples of what you can help with." }
+  // General interactions - conversational and natural
+  { category: "greeting", content: "Hey there! Welcome to Acme Solutions. How can I help make your day better?" },
+  { category: "farewell", content: "Thanks so much for chatting today, Jessica! I've got you all set up with those account changes, and I'll send over that information we discussed by email. Is there anything else I can help with before you go?" },
+  { category: "general", content: "That's a great question! I'm not 100% certain about the details, but I'd rather get you the right answer than guess. Can I look into this and get back to you in about an hour?" },
+  { category: "general", content: "Great to hear from you again, Michael! How have things been since we last spoke?" },
+  { category: "fallback", content: "I want to make sure I'm helping you correctly, but I'm not quite following. Could you tell me a bit more about what you're looking for? I can help with things like account questions, scheduling, or technical support." }
 ];
 
-// Intent mapping examples
+// Intent mapping examples - expanded with more conversational, natural expressions
 const intentExamples = [
   {
     intent: "schedule_meeting",
     examples: [
       "I need to schedule a meeting",
-      "Book an appointment",
-      "Find a time for us to meet",
-      "Can we set up a call?",
-      "I'd like to arrange a meeting with the team"
+      "Could you help me book an appointment?",
+      "I'd like to find a time that works for us to connect",
+      "Can we jump on a call sometime this week?",
+      "I need to arrange a chat with someone from your team",
+      "When would be a good time to discuss this further?",
+      "Let's set up some time to talk about this project"
     ]
   },
   {
     intent: "business_hours",
     examples: [
       "What are your hours?",
-      "When are you open?",
-      "What time do you close?",
-      "Are you open on weekends?",
-      "Business hours please"
+      "When are you guys open?",
+      "What time do you close today?",
+      "Are you available on weekends?",
+      "What days of the week are you open?",
+      "Is anyone there on Sunday?",
+      "Do you have holiday hours?"
     ]
   },
   {
     intent: "product_info",
     examples: [
-      "Tell me about your products",
-      "What services do you offer?",
-      "How much does it cost?",
-      "Do you have pricing information?",
-      "Features of AI Receptionist"
+      "Tell me a bit about what you offer",
+      "What kind of services do you provide?",
+      "I'm wondering about your pricing",
+      "Could you share some details about your plans?",
+      "What makes your product special?",
+      "Can you tell me more about how the AI Receptionist works?",
+      "I'm trying to understand if this would be a good fit for my company"
     ]
   },
   {
     intent: "technical_support",
     examples: [
-      "I'm having a problem with...",
-      "Something's not working",
-      "I need help with a technical issue",
-      "The system is down",
-      "How do I fix..."
+      "I'm having trouble with the system",
+      "Something's been acting weird on my account",
+      "I can't seem to get this feature working",
+      "The app keeps crashing when I try to...",
+      "I think there might be a bug in your system",
+      "Can you help me fix this issue?",
+      "The integration with my calendar isn't working properly"
     ]
   },
   {
     intent: "contact_human",
     examples: [
-      "I want to speak to a person",
-      "Connect me with a human",
-      "Transfer to an agent",
-      "Is there someone I can talk to?",
-      "Real person please"
+      "Could I talk to someone from your team?",
+      "I'd prefer to speak with a person about this",
+      "Is there a way to reach your customer support?",
+      "Can you connect me with someone who can help with this?",
+      "I need to speak to a specialist about this question",
+      "This is a bit complex - is there someone I could talk to directly?",
+      "I'd like to have a conversation with a real person"
     ]
   },
   {
     intent: "greeting",
     examples: [
-      "Hello",
-      "Hi there",
-      "Good morning",
-      "Hey",
-      "How are you?"
+      "Hey there!",
+      "Hi, how's it going?",
+      "Good morning, hope you're having a great day",
+      "Hello, thanks for being here",
+      "Hey, appreciate you helping me out",
+      "Hi! Just wanted to ask a quick question",
+      "Hello, hope I'm not interrupting!"
     ]
   },
   {
     intent: "check_status",
     examples: [
-      "What's the status of my request?",
-      "Update on my ticket",
-      "Has my issue been resolved?",
-      "Any progress on my case?",
-      "Where are we with..."
+      "Just wondering where we are with my request?",
+      "Has there been any progress on my support ticket?",
+      "I'm following up on the issue I reported yesterday",
+      "Just checking in on the status of my order",
+      "Have you had a chance to look at my question from earlier?",
+      "Any updates on that thing we discussed?",
+      "I'm curious about what's happening with my case"
+    ]
+  },
+  {
+    intent: "general_inquiry",
+    examples: [
+      "I have a quick question about something",
+      "I was wondering if you could help me understand something",
+      "Could you explain how this works?",
+      "I'm reaching out because I wanted to ask about...",
+      "Just looking for some information on...",
+      "I'm curious about something on your website",
+      "Mind if I ask you something real quick?"
     ]
   }
 ];

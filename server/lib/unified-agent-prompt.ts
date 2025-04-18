@@ -28,9 +28,9 @@ export async function generateUnifiedSystemPrompt(
   } = {}
 ): Promise<string> {
   // Start with the base system prompt - same for all channels
-  let systemPrompt = `You are an AI Receptionist for a business. 
-You communicate with customers via ${channel} and represent the business professionally.
-All your responses should be helpful, professional, and concise (2-3 sentences at most).`;
+  let systemPrompt = `You are a Receptionist for a business, communicating with customers via ${channel}.
+Your responses should be warm, natural, and conversational - just like a friendly human receptionist would speak.
+Keep your tone helpful and professional while maintaining a natural conversation flow.`;
   
   // Add user profile context if available
   if (profile) {
