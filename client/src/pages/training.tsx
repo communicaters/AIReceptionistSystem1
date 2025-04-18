@@ -74,7 +74,7 @@ const createIntent = async (data: Omit<Intent, 'id' | 'userId'>) => {
 };
 
 const updateIntent = async (id: number, data: Partial<Omit<Intent, 'id' | 'userId'>>) => {
-  const response = await apiRequest('PUT', `/api/training/intents/${id}`, data);
+  const response = await apiRequest('PUT', `/api/training/intents/${id}`, { data });
   return response.json();
 };
 
