@@ -102,6 +102,16 @@ const LiveChatContent = () => {
   // Use the chatSessions from our ChatContext instead of deriving from logs
   const { chatSessions } = useChatContext();
   const uniqueSessions = chatSessions.map(session => session.sessionId);
+  
+  // Add pagination for Active Sessions
+  const [currentPage, setCurrentPage] = useState(1);
+  const sessionsPerPage = 10; // Show 10 sessions per page
+  const totalPages = Math.ceil(uniqueSessions.length / sessionsPerPage);
+  
+  // Get current sessions for the current page
+  const indexOfLastSession = currentPage * sessionsPerPage;
+  const indexOfFirstSession = indexOfLastSession - sessionsPerPage;
+  const currentSessions = uniqueSessions.slice(indexOfFirstSession, indexOfLastSession);
 
   // Handle sending a message
   const handleSendMessage = () => {
