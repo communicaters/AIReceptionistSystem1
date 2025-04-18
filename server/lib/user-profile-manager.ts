@@ -30,6 +30,9 @@ export class UserProfileManager {
    * @param profileData Data for the new profile
    */
   async createProfile(profileData: Partial<InsertUserProfileData>): Promise<UserProfileData> {
+    // Ensure we have the current timestamp for better consistency
+    const now = new Date();
+    
     const newProfile: InsertUserProfileData = {
       userId: profileData.userId || null,
       name: profileData.name || null,
@@ -41,6 +44,27 @@ export class UserProfileManager {
     };
     
     return await storage.createUserProfile(newProfile);
+  }
+  
+  /**
+   * Update a user's last interaction source and seen timestamp
+   * This is a critical method for maintaining cross-channel continuity
+   * @param profileId The profile ID
+   * @param source The communication channel (whatsapp, email, chat, call)
+   */
+  async updateLastInteraction(profileId: number, source: string): Promise<boolean> {
+    try {
+      const updates = {
+        lastInteractionSource: source,
+        lastSeen: new Date()
+      };
+      
+      const updatedProfile = await this.updateProfile(profileId, updates);
+      return !!updatedProfile;
+    } catch (err) {
+      console.error(`Failed to update last interaction for profile ${profileId}:`, err);
+      return false;
+    }
   }
   
   /**
@@ -216,6 +240,75 @@ export class UserProfileManager {
     limit: number = 10
   ): Promise<UserInteraction[]> {
     return await storage.getUserInteractionsBySource(profileId, source, limit);
+  }
+  
+  /**
+   * Get all interactions across all channels for a user profile
+   * This is crucial for creating unified conversation history
+   * @param profileId The user profile ID
+   * @param limit Maximum number of interactions to retrieve per channel
+   */
+  async getAllChannelInteractions(
+    profileId: number,
+    limit: number = 10
+  ): Promise<{ [key: string]: UserInteraction[] }> {
+    try {
+      // Get all recent interactions first
+      const allInteractions = await storage.getUserInteractionsByProfileId(profileId, limit * 4);
+      
+      // Group by channel/source
+      const channelInteractions: { [key: string]: UserInteraction[] } = {
+        whatsapp: [],
+        email: [],
+        chat: [],
+        call: []
+      };
+      
+      // Sort interactions into channels
+      allInteractions.forEach(interaction => {
+        const source = interaction.interactionSource?.toLowerCase();
+        if (source && channelInteractions[source]) {
+          // Only add up to the limit per channel
+          if (channelInteractions[source].length < limit) {
+            channelInteractions[source].push(interaction);
+          }
+        }
+      });
+      
+      return channelInteractions;
+    } catch (err) {
+      console.error(`Error retrieving all channel interactions for profile ${profileId}:`, err);
+      return { whatsapp: [], email: [], chat: [], call: [] };
+    }
+  }
+  
+  /**
+   * Get unified conversation history in a format suitable for AI context
+   * @param profileId The user profile ID 
+   * @param limit Maximum number of messages to include
+   */
+  async getUnifiedConversationHistory(
+    profileId: number,
+    limit: number = 10
+  ): Promise<Array<{ role: string; content: string; timestamp: Date; source: string }>> {
+    try {
+      // Get recent interactions across all channels
+      const interactions = await storage.getUserInteractionsByProfileId(profileId, limit);
+      
+      // Format into a conversation history array
+      const history = interactions.map(interaction => ({
+        role: interaction.interactionType === 'inbound' ? 'user' : 'assistant',
+        content: interaction.content || '',
+        timestamp: interaction.timestamp || new Date(),
+        source: interaction.interactionSource || 'unknown'
+      }));
+      
+      // Sort by timestamp, newest last
+      return history.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+    } catch (err) {
+      console.error(`Error creating unified conversation history for profile ${profileId}:`, err);
+      return [];
+    }
   }
 
   /**
