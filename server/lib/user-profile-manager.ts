@@ -71,16 +71,23 @@ export class UserProfileManager {
    */
   async updateProfile(
     profileId: number, 
-    updates: Partial<InsertUserProfileData>
+    updates: Partial<InsertUserProfileData & { lastSeen?: Date }>
   ): Promise<UserProfileData | null> {
     const profile = await storage.getUserProfile(profileId);
     if (!profile) return null;
 
-    const updatedProfile = await storage.updateUserProfile(profileId, {
+    // Create update object with only fields that are part of UserProfileData
+    const updatesWithTimestamps = {
       ...updates,
-      lastSeen: new Date(),
       updatedAt: new Date()
-    });
+    };
+    
+    // Only add lastSeen if explicitly provided or if not updating it specifically
+    if (!('lastSeen' in updates)) {
+      updatesWithTimestamps.lastSeen = new Date();
+    }
+
+    const updatedProfile = await storage.updateUserProfile(profileId, updatesWithTimestamps);
 
     return updatedProfile || null;
   }

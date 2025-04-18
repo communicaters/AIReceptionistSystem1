@@ -3,6 +3,7 @@ import FormData from 'form-data';
 import { storage } from '../storage';
 import { WhatsappConfig, InsertWhatsappLog } from '@shared/schema';
 import { broadcastMessage } from './websocket';
+import { userProfileManager } from './user-profile-manager';
 
 // Extended interface that includes the new fields
 interface ExtendedWhatsappLog extends InsertWhatsappLog {
@@ -525,6 +526,43 @@ export class ZenderService {
       
       console.log(`Extracted webhook data - From: ${sender}, Message: ${message.substring(0, 30)}...`);
       
+      // Find or create a user profile for this sender
+      try {
+        console.log(`Finding or creating user profile for phone: ${sender}`);
+        const userProfile = await userProfileManager.findOrCreateProfile({
+          phone: sender,
+          userId: this.userId
+        });
+        
+        if (userProfile) {
+          console.log(`User profile found/created with ID: ${userProfile.id}`);
+          
+          // Record this WhatsApp interaction
+          await userProfileManager.recordInteraction(
+            userProfile.id,
+            'whatsapp',
+            'inbound',
+            message.substring(0, 100) + (message.length > 100 ? '...' : ''),
+            {
+              timestamp: timestamp,
+              phoneNumber: sender,
+              mediaUrl: mediaUrl
+            }
+          );
+          console.log(`Recorded inbound WhatsApp interaction for user profile ${userProfile.id}`);
+          
+          // Update the last seen timestamp for the user profile
+          await userProfileManager.updateProfile(userProfile.id, {
+            lastInteractionSource: 'whatsapp'
+          });
+        } else {
+          console.warn(`Failed to create user profile for phone number: ${sender}`);
+        }
+      } catch (profileError) {
+        console.error('Error managing user profile for WhatsApp sender:', profileError);
+        // Continue with message processing even if profile management fails
+      }
+      
       // Log the incoming message with status
       const whatsappLog = await storage.createWhatsappLog({
         userId: this.userId,
@@ -964,6 +1002,39 @@ If this is NOT a meeting scheduling request, respond normally and set is_schedul
         
         // Use the template content with AI message as a variable
         messageBody = template.content.replace('{{message}}', replyToUser);
+      }
+      
+      // Find user profile for this phone number (should already exist from inbound message)
+      try {
+        const userProfile = await userProfileManager.findOrCreateProfile({
+          phone: phoneNumber,
+          userId: this.userId
+        });
+        
+        // Record this outbound interaction in the user profile
+        if (userProfile) {
+          await userProfileManager.recordInteraction(
+            userProfile.id,
+            'whatsapp',
+            'outbound',
+            messageBody.substring(0, 100) + (messageBody.length > 100 ? '...' : ''),
+            {
+              timestamp: new Date(),
+              phoneNumber: phoneNumber,
+              aiGenerated: true
+            }
+          );
+          console.log(`Recorded outbound WhatsApp interaction for user profile ${userProfile.id}`);
+          
+          // Update last interaction source in profile
+          await userProfileManager.updateProfile(userProfile.id, {
+            lastSeen: new Date(),
+            lastInteractionSource: 'whatsapp'
+          });
+        }
+      } catch (profileError) {
+        console.error('Error managing user profile for WhatsApp response:', profileError);
+        // Continue with sending message even if profile management fails
       }
       
       // Send the AI response back to the user
