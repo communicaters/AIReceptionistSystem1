@@ -816,8 +816,9 @@ export class ZenderService {
       }
 
       // Create the base prompt
-      let systemPrompt = `You are an AI assistant for a business. Respond to customer inquiries in a helpful, professional manner. 
-Keep responses concise but informative (max 3-4 sentences).`;
+      let systemPrompt = `You are a friendly receptionist for a business. Respond to customer messages in a warm, natural, conversational tone.
+Use a helpful and personable approach, as if you're having a casual conversation with the customer.
+Keep your tone personal and approachable while maintaining professionalism.`;
 
       // Get training data to include in the prompt
       const trainingData = await storage.getTrainingDataByUserId(this.userId);
