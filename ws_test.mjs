@@ -1,52 +1,68 @@
-import { WebSocket } from 'ws';
+import WebSocket from 'ws';
 
-const client = new WebSocket('ws://localhost:5000/ws');
-const sessionId = 'test_session_' + Date.now();
+console.log('WebSocket Test - Testing Company Name Response');
 
-client.on('open', function() {
-  console.log('Connected to AI receptionist WebSocket server');
+// Create connection
+const ws = new WebSocket('ws://localhost:5000/ws');
+
+// Connection opened
+ws.on('open', function() {
+  console.log('Connected to WebSocket server');
   
-  // Send a chat message asking about company services
-  setTimeout(() => {
-    console.log('Sending chat message...');
-    client.send(JSON.stringify({
-      type: 'user_message',
-      sessionId: sessionId,
-      content: 'What services does your company offer?'
-    }));
-  }, 1000);
+  // Establish session and send the company name question
+  const initialMsg = {
+    type: 'chat_message', 
+    data: { 
+      message: 'What company do you work for?',
+      sessionId: 'test_company_direct'
+    }
+  };
+  
+  console.log('Sending message:', JSON.stringify(initialMsg));
+  ws.send(JSON.stringify(initialMsg));
 });
 
-client.on('message', function(data) {
-  try {
-    const message = JSON.parse(data.toString());
-    console.log('Received message type:', message.type);
+// Listen for messages
+ws.on('message', function(data) {
+  const response = JSON.parse(data);
+  console.log('Received response:', JSON.stringify(response, null, 2));
+  
+  if (response.type === 'chat_response') {
+    console.log('\nCompany Name Test Results:');
+    console.log('-------------------------');
+    console.log('Response:', response.data.message);
     
-    if (message.type === 'error') {
-      console.log('Error message:', message.message);
-    } else if (message.type === 'welcome') {
-      console.log('Welcome message received, session ID:', message.sessionId);
-    } else if (message.type === 'message' && message.role === 'assistant') {
-      console.log('\nAI Response:');
-      console.log('============');
-      console.log(message.content);
-      console.log('============\n');
+    // Check if response mentions the company name
+    const companyNameMatches = [
+      response.data.message.includes('TechSolutions'),
+      response.data.message.includes('RedRay')
+    ];
+    
+    if (companyNameMatches[0]) {
+      console.log('✓ Company name detected: TechSolutions');
+    } else if (companyNameMatches[1]) {
+      console.log('✓ Company name detected: RedRay');
     } else {
-      console.log('Full message:', message);
+      console.log('✗ No recognized company name in response');
     }
-  } catch (err) {
-    console.error('Error parsing message:', err);
-    console.log('Raw data:', data);
+    
+    // Close the connection after we get our response
+    setTimeout(() => {
+      ws.close();
+      console.log('Test complete. Connection closed.');
+      process.exit(0);
+    }, 1000);
   }
 });
 
-client.on('error', function(error) {
-  console.error('WebSocket error:', error);
+// Handle connection issues
+ws.on('error', function(error) {
+  console.error('WebSocket Error:', error);
+  process.exit(1);
 });
 
-// Keep the connection open for 10 seconds
+// Set timeout to avoid hanging forever
 setTimeout(() => {
-  console.log('Test complete, closing connection');
-  client.close();
-  process.exit(0);
+  console.error('Test timed out after 10 seconds');
+  process.exit(1);
 }, 10000);

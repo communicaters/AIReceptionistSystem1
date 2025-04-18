@@ -1,70 +1,46 @@
 const WebSocket = require('ws');
 
-// Create a WebSocket server to simulate a connection
-const server = new WebSocket.Server({ port: 8081 });
+// Create WebSocket connection to the server
+const ws = new WebSocket('ws://localhost:5000/ws');
 
-// When a connection is established with our server
-server.on('connection', function(ws) {
-  console.log('Client connected to test server');
+ws.on('open', function open() {
+  console.log('Connected to server');
   
-  // Just echo back messages for testing
-  ws.on('message', function(message) {
-    console.log('Received message:', message.toString());
-    ws.send(message);
-  });
+  // Send a message
+  ws.send(JSON.stringify({
+    type: 'init',
+    data: {
+      hostname: 'test.com'
+    }
+  }));
 });
 
-// Connect to the AI receptionist server
-const client = new WebSocket('ws://localhost:5000/ws');
-
-// A unique session ID
-const sessionId = 'test_session_' + Date.now();
-
-client.on('open', function() {
-  console.log('Connected to AI receptionist WebSocket');
-  
-  // Send a user message
-  const message = JSON.stringify({
-    type: 'user_message',
-    content: 'Tell me about your company services',
-    sessionId: sessionId
-  });
-  
-  setTimeout(() => {
-    console.log('Sending message:', message);
-    client.send(message);
-  }, 1000);
-});
-
-client.on('message', function(data) {
+ws.on('message', function incoming(data) {
+  console.log('Received:', data.toString());
   const message = JSON.parse(data);
-  console.log('Received from AI receptionist:', message);
   
-  // If we get a response, close after a delay
-  if (message.type === 'message' && message.role === 'assistant') {
-    console.log('\nAI RESPONSE:');
-    console.log('=============');
-    console.log(message.content);
-    console.log('=============\n');
+  // If we received welcome message with session ID, send our test question
+  if (message.type === 'welcome') {
+    console.log('Session established, sending test message');
+    const sessionId = message.sessionId;
     
     setTimeout(() => {
-      console.log('Test complete, closing connections');
-      client.close();
-      server.close();
-    }, 2000);
+      ws.send(JSON.stringify({
+        type: 'message',
+        sessionId: sessionId,
+        message: 'What company do you work for?'
+      }));
+    }, 1000);
   }
 });
 
-client.on('error', function(error) {
-  console.error('WebSocket error:', error);
+ws.on('error', function error(err) {
+  console.error('WebSocket error:', err);
 });
 
-// Keep the program running for up to 10 seconds
+// Close after 20 seconds
 setTimeout(() => {
-  console.log('Timeout reached, closing connections');
-  try {
-    client.close();
-    server.close();
-  } catch (err) {}
+  console.log('Closing connection after timeout');
+  ws.close();
   process.exit(0);
-}, 10000);
+}, 20000);
