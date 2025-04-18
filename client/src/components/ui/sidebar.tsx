@@ -19,7 +19,6 @@ import {
   UserCog
 } from "lucide-react";
 import { useAuth } from "@/components/providers/auth-provider";
-import { cn } from "@/lib/utils";
 
 interface SidebarProps {
   isMobileOpen: boolean;
@@ -89,31 +88,29 @@ const Sidebar = ({ isMobileOpen, setIsMobileOpen }: SidebarProps) => {
           Main
         </div>
         <Link href="/">
-          <div
-            className={cn(
-              "flex items-center px-4 py-3 cursor-pointer",
+          <a
+            className={`flex items-center px-4 py-3 ${
               isActive("/")
                 ? "text-white bg-primary hover:bg-primary-dark"
                 : "text-neutral-300 hover:bg-neutral-700"
-            )}
+            }`}
           >
             <Home className="w-5 h-5" />
             <span className="ml-3">Dashboard</span>
-          </div>
+          </a>
         </Link>
 
         <Link href="/settings">
-          <div
-            className={cn(
-              "flex items-center px-4 py-3 cursor-pointer",
+          <a
+            className={`flex items-center px-4 py-3 ${
               isActive("/settings")
                 ? "text-white bg-primary hover:bg-primary-dark"
                 : "text-neutral-300 hover:bg-neutral-700"
-            )}
+            }`}
           >
             <Settings className="w-5 h-5" />
             <span className="ml-3">System Settings</span>
-          </div>
+          </a>
         </Link>
 
         <div className="px-4 py-2 mt-4 text-neutral-400 text-xs uppercase font-semibold">
@@ -121,115 +118,107 @@ const Sidebar = ({ isMobileOpen, setIsMobileOpen }: SidebarProps) => {
         </div>
 
         <Link href="/voice-call">
-          <div
-            className={cn(
-              "flex items-center px-4 py-3 cursor-pointer",
+          <a
+            className={`flex items-center px-4 py-3 ${
               isActive("/voice-call")
                 ? "text-white bg-primary hover:bg-primary-dark"
                 : "text-neutral-300 hover:bg-neutral-700"
-            )}
+            }`}
           >
             <Phone className="w-5 h-5" />
             <span className="ml-3">Voice Call Handling</span>
-          </div>
+          </a>
         </Link>
 
         <Link href="/email-management">
-          <div
-            className={cn(
-              "flex items-center px-4 py-3 cursor-pointer",
+          <a
+            className={`flex items-center px-4 py-3 ${
               isActive("/email-management")
                 ? "text-white bg-primary hover:bg-primary-dark"
                 : "text-neutral-300 hover:bg-neutral-700"
-            )}
+            }`}
           >
             <Mail className="w-5 h-5" />
             <span className="ml-3">Email Management</span>
-          </div>
+          </a>
         </Link>
 
         <Link href="/live-chat">
-          <div
-            className={cn(
-              "flex items-center px-4 py-3 cursor-pointer",
+          <a
+            className={`flex items-center px-4 py-3 ${
               isActive("/live-chat")
                 ? "text-white bg-primary hover:bg-primary-dark"
                 : "text-neutral-300 hover:bg-neutral-700"
-            )}
+            }`}
           >
             <MessageCircle className="w-5 h-5" />
             <span className="ml-3">Live Chat</span>
-          </div>
+          </a>
         </Link>
 
         <Link href="/whatsapp">
-          <div
-            className={cn(
-              "flex items-center px-4 py-3 cursor-pointer",
+          <a
+            className={`flex items-center px-4 py-3 ${
               isActive("/whatsapp")
                 ? "text-white bg-primary hover:bg-primary-dark"
                 : "text-neutral-300 hover:bg-neutral-700"
-            )}
+            }`}
           >
             <MessageSquare className="w-5 h-5" />
             <span className="ml-3">WhatsApp Business</span>
-          </div>
+          </a>
         </Link>
 
         <Link href="/calendar">
-          <div
-            className={cn(
-              "flex items-center px-4 py-3 cursor-pointer",
+          <a
+            className={`flex items-center px-4 py-3 ${
               isActive("/calendar")
                 ? "text-white bg-primary hover:bg-primary-dark"
                 : "text-neutral-300 hover:bg-neutral-700"
-            )}
+            }`}
           >
             <Calendar className="w-5 h-5" />
             <span className="ml-3">Calendar & Scheduling</span>
-          </div>
+          </a>
         </Link>
 
         <Link href="/products">
-          <div
-            className={cn(
-              "flex items-center px-4 py-3 cursor-pointer",
+          <a
+            className={`flex items-center px-4 py-3 ${
               isActive("/products")
                 ? "text-white bg-primary hover:bg-primary-dark"
                 : "text-neutral-300 hover:bg-neutral-700"
-            )}
+            }`}
           >
             <Database className="w-5 h-5" />
             <span className="ml-3">Product & Pricing</span>
-          </div>
+          </a>
         </Link>
 
         <Link href="/ai-training">
-          <div
-            className={cn(
-              "flex items-center px-4 py-3 cursor-pointer",
+          <a
+            className={`flex items-center px-4 py-3 ${
               isActive("/ai-training")
                 ? "text-white bg-primary hover:bg-primary-dark"
                 : "text-neutral-300 hover:bg-neutral-700"
-            )}
+            }`}
           >
             <Monitor className="w-5 h-5" />
             <span className="ml-3">AI Core & Training</span>
-          </div>
+          </a>
         </Link>
 
         <Link href="/speech-engines">
-          <div
-            className={cn(
-              "flex items-center px-4 py-3 cursor-pointer",
+          <a
+            className={`flex items-center px-4 py-3 ${
               isActive("/speech-engines")
                 ? "text-white bg-primary hover:bg-primary-dark"
                 : "text-neutral-300 hover:bg-neutral-700"
-            )}
+            }`}
           >
             <Mic className="w-5 h-5" />
             <span className="ml-3">Speech Engines</span>
-          </div>
+          </a>
         </Link>
 
         {isAdmin && (
@@ -238,56 +227,52 @@ const Sidebar = ({ isMobileOpen, setIsMobileOpen }: SidebarProps) => {
               Administration
             </div>
             <Link href="/admin/dashboard">
-              <div
-                className={cn(
-                  "flex items-center px-4 py-3 cursor-pointer",
+              <a
+                className={`flex items-center px-4 py-3 ${
                   isActive("/admin/dashboard")
                     ? "text-white bg-primary hover:bg-primary-dark"
                     : "text-neutral-300 hover:bg-neutral-700"
-                )}
+                }`}
               >
                 <ShieldCheck className="w-5 h-5" />
                 <span className="ml-3">Admin Dashboard</span>
-              </div>
+              </a>
             </Link>
             <Link href="/admin/users">
-              <div
-                className={cn(
-                  "flex items-center px-4 py-3 cursor-pointer",
+              <a
+                className={`flex items-center px-4 py-3 ${
                   isActive("/admin/users")
                     ? "text-white bg-primary hover:bg-primary-dark"
                     : "text-neutral-300 hover:bg-neutral-700"
-                )}
+                }`}
               >
                 <Users className="w-5 h-5" />
                 <span className="ml-3">User Management</span>
-              </div>
+              </a>
             </Link>
             <Link href="/admin/packages">
-              <div
-                className={cn(
-                  "flex items-center px-4 py-3 cursor-pointer",
+              <a
+                className={`flex items-center px-4 py-3 ${
                   isActive("/admin/packages")
                     ? "text-white bg-primary hover:bg-primary-dark"
                     : "text-neutral-300 hover:bg-neutral-700"
-                )}
+                }`}
               >
                 <PackageCheck className="w-5 h-5" />
                 <span className="ml-3">Package Management</span>
-              </div>
+              </a>
             </Link>
             <Link href="/admin/reports">
-              <div
-                className={cn(
-                  "flex items-center px-4 py-3 cursor-pointer",
+              <a
+                className={`flex items-center px-4 py-3 ${
                   isActive("/admin/reports")
                     ? "text-white bg-primary hover:bg-primary-dark"
                     : "text-neutral-300 hover:bg-neutral-700"
-                )}
+                }`}
               >
                 <BarChart className="w-5 h-5" />
                 <span className="ml-3">Reports & Analytics</span>
-              </div>
+              </a>
             </Link>
           </>
         )}
@@ -295,14 +280,13 @@ const Sidebar = ({ isMobileOpen, setIsMobileOpen }: SidebarProps) => {
         <div className="px-4 py-2 mt-4 text-neutral-400 text-xs uppercase font-semibold">
           More
         </div>
-        <div
-          role="button"
-          className="flex items-center px-4 py-3 text-neutral-300 hover:bg-neutral-700 cursor-pointer"
-          onClick={() => window.open('/help', '_blank')}
+        <a
+          href="#"
+          className="flex items-center px-4 py-3 text-neutral-300 hover:bg-neutral-700"
         >
           <HelpCircle className="w-5 h-5" />
           <span className="ml-3">Help & Support</span>
-        </div>
+        </a>
         <button
           onClick={logout}
           className="w-full text-left flex items-center px-4 py-3 text-neutral-300 hover:bg-neutral-700"

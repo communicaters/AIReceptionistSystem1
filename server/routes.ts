@@ -4572,6 +4572,46 @@ AI Receptionist
       apiResponse(res, { error: "Failed to create intent" }, 500);
     }
   });
+  
+  // Update an intent
+  app.put("/api/training/intents/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return apiResponse(res, { error: "Invalid intent ID" }, 400);
+      }
+      
+      const intent = await storage.updateIntent(id, req.body.data);
+      if (!intent) {
+        return apiResponse(res, { error: "Intent not found" }, 404);
+      }
+      
+      apiResponse(res, intent);
+    } catch (error) {
+      console.error("Error updating intent:", error);
+      apiResponse(res, { error: "Failed to update intent" }, 500);
+    }
+  });
+  
+  // Delete an intent
+  app.delete("/api/training/intents/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return apiResponse(res, { error: "Invalid intent ID" }, 400);
+      }
+      
+      const success = await storage.deleteIntent(id);
+      if (!success) {
+        return apiResponse(res, { error: "Intent not found or could not be deleted" }, 404);
+      }
+      
+      apiResponse(res, { success: true });
+    } catch (error) {
+      console.error("Error deleting intent:", error);
+      apiResponse(res, { error: "Failed to delete intent" }, 500);
+    }
+  });
 
   // Module management
   app.put("/api/modules/:name/status", async (req, res) => {
