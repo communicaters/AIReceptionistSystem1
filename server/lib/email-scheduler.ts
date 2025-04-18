@@ -74,14 +74,16 @@ async function runEmailSyncJob() {
     // Get all active users with IMAP configuration (for now just user 1)
     const userId = 1; // TODO: Extend to all active users once multi-user is implemented
     
-    // Check if IMAP is configured and active for this user
-    const imapConfig = await storage.getSmtpConfigByUserId(userId);
+    // Check if SMTP is configured and active (we'll derive IMAP settings from it)
+    const smtpConfig = await storage.getSmtpConfigByUserId(userId);
     
-    if (!imapConfig?.isActive || !imapConfig?.imapHost) {
-      console.log('IMAP not configured for user, skipping email sync');
+    if (!smtpConfig?.isActive) {
+      console.log('SMTP not active for user, skipping email sync');
       syncJobStatus.isRunning = false;
       return;
     }
+    
+    // We'll rely on the auto-detection in the imap.ts module instead of requiring imapHost
     
     // Run email sync with retry logic
     const syncOptions = {
