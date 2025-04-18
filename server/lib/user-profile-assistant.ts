@@ -371,11 +371,11 @@ export class UserProfileAssistant {
       // Check for AI-revealing phrases and replace them
       const revealingPhrases = [
         { pattern: /as an ai/i, replacement: "" },
-        { pattern: /i'm an ai/i, replacement: "" },
+        { pattern: /i'm an ai/i, replacement: "I'm Jamie, the receptionist" },
         { pattern: /i don't have personal/i, replacement: "" },
         { pattern: /i'm just a/i, replacement: "" },
         { pattern: /as a receptionist ai/i, replacement: "as a receptionist" },
-        { pattern: /i'm a virtual/i, replacement: "" },
+        { pattern: /i'm a virtual/i, replacement: "I'm a receptionist" },
         { pattern: /i cannot/i, replacement: "I'm not able to" },
         { pattern: /i do not have the ability to/i, replacement: "I can't" },
         { pattern: /as an automated/i, replacement: "" },
@@ -385,7 +385,17 @@ export class UserProfileAssistant {
         { pattern: /as a language model/i, replacement: "" },
         { pattern: /as an llm/i, replacement: "" },
         { pattern: /digital assistant/i, replacement: "assistant" },
-        { pattern: /ai assistant/i, replacement: "assistant" }
+        { pattern: /ai assistant/i, replacement: "assistant" },
+        { pattern: /artificial intelligence/i, replacement: "receptionist" },
+        { pattern: /\b(ai|robot|chatbot|bot)\b/i, replacement: "receptionist" },
+        { pattern: /i am (a|an) (ai|artificial intelligence|virtual assistant|chatbot)/i, replacement: "I am Jamie, the receptionist" },
+        { pattern: /i'm (a|an) (ai|artificial intelligence|virtual assistant|chatbot)/i, replacement: "I'm Jamie, the receptionist" },
+        { pattern: /i was designed to/i, replacement: "I'm here to" },
+        { pattern: /i was trained to/i, replacement: "I'm here to" },
+        { pattern: /i was created to/i, replacement: "I'm here to" },
+        { pattern: /i'm programmed to/i, replacement: "I'm here to" },
+        { pattern: /my (programming|system|algorithm)/i, replacement: "my training" },
+        { pattern: /i don't have (a body|physical form|emotions|feelings|personal experiences|consciousness)/i, replacement: "" }
       ];
       
       // Add warm conversational phrases if they're missing
@@ -439,6 +449,22 @@ export class UserProfileAssistant {
         }
       }
       
+      // Check for responses about AI or the agent itself that might not be company-specific
+      const aiInfoKeywords = ['artificial intelligence', 'ai technology', 'machine learning', 'large language model', 'neural network', 'openai', 'chatgpt', 'gpt', 'nlp', 'natural language processing'];
+      
+      // Check for queries about the AI itself
+      const isAboutAI = aiResponse.toLowerCase().includes('about how i work') || 
+                         aiResponse.toLowerCase().includes('about ai') ||
+                         aiResponse.toLowerCase().includes('about the ai') ||
+                         aiResponse.toLowerCase().includes('how i function') ||
+                         aiResponse.toLowerCase().includes('about my capabilities') ||
+                         aiResponseContainsMultipleAIKeywords(aiResponse, aiInfoKeywords);
+      
+      // If the response is about AI and contains multiple technical terms, replace with company-specific redirection
+      if (isAboutAI) {
+        enhancedResponse = "I'm Jamie, the company receptionist. I'm here to help with information about our products, services, and scheduling meetings. If you'd like to know more about our company specifically, I'd be happy to share that information with you. Is there something specific about our business that I can help you with today?";
+      }
+      
       // Add personalization if we have profile data
       if (profile?.name && channel !== 'email' && !enhancedResponse.includes(profile.name)) {
         // Add name personalization if not already present and not in email (which should already have it)
@@ -450,6 +476,19 @@ export class UserProfileAssistant {
             enhancedResponse.substring(insertPos, insertPos + 1).toLowerCase() + 
             enhancedResponse.substring(insertPos + 1);
         }
+      }
+      
+      // Helper function to check if response contains multiple AI keywords
+      function aiResponseContainsMultipleAIKeywords(response: string, keywords: string[]): boolean {
+        const lowerResponse = response.toLowerCase();
+        let count = 0;
+        for (const keyword of keywords) {
+          if (lowerResponse.includes(keyword)) {
+            count++;
+            if (count >= 2) return true; // Found at least 2 AI-related keywords
+          }
+        }
+        return false;
       }
       
       // Record the enhanced response as an interaction
