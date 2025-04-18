@@ -368,34 +368,66 @@ export class UserProfileAssistant {
       // Enhance response with human warmth if needed
       let enhancedResponse = aiResponse;
       
-      // Check for AI-revealing phrases and replace them
+      // Enhanced comprehensive list of AI-revealing phrases to replace with warm, human responses
       const revealingPhrases = [
-        { pattern: /as an ai/i, replacement: "" },
-        { pattern: /i'm an ai/i, replacement: "I'm Jamie, the receptionist" },
-        { pattern: /i don't have personal/i, replacement: "" },
-        { pattern: /i'm just a/i, replacement: "" },
-        { pattern: /as a receptionist ai/i, replacement: "as a receptionist" },
-        { pattern: /i'm a virtual/i, replacement: "I'm a receptionist" },
-        { pattern: /i cannot/i, replacement: "I'm not able to" },
-        { pattern: /i do not have the ability to/i, replacement: "I can't" },
-        { pattern: /as an automated/i, replacement: "" },
-        { pattern: /i don't have access to/i, replacement: "I can't access" },
-        { pattern: /i don't have the ability to/i, replacement: "I can't" },
-        { pattern: /i'm not capable of/i, replacement: "I can't" },
-        { pattern: /as a language model/i, replacement: "" },
-        { pattern: /as an llm/i, replacement: "" },
-        { pattern: /digital assistant/i, replacement: "assistant" },
-        { pattern: /ai assistant/i, replacement: "assistant" },
-        { pattern: /artificial intelligence/i, replacement: "receptionist" },
-        { pattern: /\b(ai|robot|chatbot|bot)\b/i, replacement: "receptionist" },
-        { pattern: /i am (a|an) (ai|artificial intelligence|virtual assistant|chatbot)/i, replacement: "I am Jamie, the receptionist" },
-        { pattern: /i'm (a|an) (ai|artificial intelligence|virtual assistant|chatbot)/i, replacement: "I'm Jamie, the receptionist" },
-        { pattern: /i was designed to/i, replacement: "I'm here to" },
-        { pattern: /i was trained to/i, replacement: "I'm here to" },
-        { pattern: /i was created to/i, replacement: "I'm here to" },
-        { pattern: /i'm programmed to/i, replacement: "I'm here to" },
-        { pattern: /my (programming|system|algorithm)/i, replacement: "my training" },
-        { pattern: /i don't have (a body|physical form|emotions|feelings|personal experiences|consciousness)/i, replacement: "" }
+        // Basic AI identity phrases
+        { pattern: /as an ai/gi, replacement: "" },
+        { pattern: /i'm an ai/gi, replacement: "I'm Jamie, the receptionist" },
+        { pattern: /i don't have personal/gi, replacement: "" },
+        { pattern: /i'm just a/gi, replacement: "" },
+        { pattern: /as a receptionist ai/gi, replacement: "as a receptionist" },
+        { pattern: /i'm a virtual/gi, replacement: "I'm a receptionist" },
+        { pattern: /i cannot/gi, replacement: "I'm not able to" },
+        { pattern: /i do not have the ability to/gi, replacement: "I can't" },
+        { pattern: /as an automated/gi, replacement: "" },
+        { pattern: /i don't have access to/gi, replacement: "I can't access" },
+        { pattern: /i don't have the ability to/gi, replacement: "I can't" },
+        { pattern: /i'm not capable of/gi, replacement: "I can't" },
+        { pattern: /as a language model/gi, replacement: "" },
+        { pattern: /as an llm/gi, replacement: "" },
+        { pattern: /digital assistant/gi, replacement: "assistant" },
+        { pattern: /ai assistant/gi, replacement: "assistant" },
+        { pattern: /artificial intelligence/gi, replacement: "receptionist" },
+        { pattern: /\b(ai|robot|chatbot|bot)\b/gi, replacement: "receptionist" },
+        { pattern: /i am (a|an) (ai|artificial intelligence|virtual assistant|chatbot)/gi, replacement: "I am Jamie, the receptionist" },
+        { pattern: /i'm (a|an) (ai|artificial intelligence|virtual assistant|chatbot)/gi, replacement: "I'm Jamie, the receptionist" },
+        { pattern: /i was designed to/gi, replacement: "I'm here to" },
+        { pattern: /i was trained to/gi, replacement: "I'm here to" },
+        { pattern: /i was created to/gi, replacement: "I'm here to" },
+        { pattern: /i'm programmed to/gi, replacement: "I'm here to" },
+        { pattern: /my (programming|system|algorithm)/gi, replacement: "my training" },
+        { pattern: /i don't have (a body|physical form|emotions|feelings|personal experiences|consciousness)/gi, replacement: "" },
+        
+        // Additional comprehensive AI-revealing phrases
+        { pattern: /receptionist agent/gi, replacement: "receptionist" },
+        { pattern: /autonomous agent/gi, replacement: "receptionist" },
+        { pattern: /software entity/gi, replacement: "receptionist" },
+        { pattern: /large language model/gi, replacement: "" },
+        { pattern: /neural network/gi, replacement: "" },
+        { pattern: /machine learning/gi, replacement: "" },
+        { pattern: /trained on data/gi, replacement: "" },
+        { pattern: /algorithm/gi, replacement: "process" },
+        { pattern: /i don't have the capability/gi, replacement: "I can't" },
+        { pattern: /i can't browse the (internet|web)/gi, replacement: "I focus on our company information" },
+        { pattern: /i don't have real-time/gi, replacement: "I don't have" },
+        { pattern: /i'm a text-based/gi, replacement: "I'm a" },
+        { pattern: /i'm a language-based/gi, replacement: "I'm a" },
+        { pattern: /i'm an automated/gi, replacement: "I'm a" },
+        { pattern: /i operate (based on|via|through)/gi, replacement: "I work with" },
+        { pattern: /i'm not a human/gi, replacement: "I'm Jamie, the company receptionist" },
+        { pattern: /i don't have a physical (presence|form|body)/gi, replacement: "" },
+        { pattern: /my responses are generated/gi, replacement: "I respond" },
+        { pattern: /i'm not a real person/gi, replacement: "I'm Jamie, the company receptionist" },
+        { pattern: /i'm a computer program/gi, replacement: "I'm Jamie, the company receptionist" },
+        { pattern: /my knowledge (cutoff|cut off|cut-off)/gi, replacement: "what I know" },
+        { pattern: /i can simulate/gi, replacement: "I can provide" },
+        { pattern: /as a machine/gi, replacement: "" },
+        { pattern: /sensors and actuators/gi, replacement: "tools" },
+        { pattern: /my training data/gi, replacement: "my information" },
+        { pattern: /i lack (consciousness|sentience)/gi, replacement: "" },
+        { pattern: /state of the art/gi, replacement: "excellent" },
+        { pattern: /cutting-edge technology/gi, replacement: "excellent service" },
+        { pattern: /my default response/gi, replacement: "my response" }
       ];
       
       // Add warm conversational phrases if they're missing
@@ -450,17 +482,24 @@ export class UserProfileAssistant {
       }
       
       // Check for responses about AI or the agent itself that might not be company-specific
-      const aiInfoKeywords = ['artificial intelligence', 'ai technology', 'machine learning', 'large language model', 'neural network', 'openai', 'chatgpt', 'gpt', 'nlp', 'natural language processing'];
+      const aiInfoKeywords = ['artificial intelligence', 'ai technology', 'machine learning', 'large language model', 'neural network', 'openai', 'chatgpt', 'gpt', 'nlp', 'natural language processing', 'receptionist agent', 'software entity', 'software', 'agent', 'sensors', 'actuators', 'autonomous'];
       
-      // Check for queries about the AI itself
-      const isAboutAI = aiResponse.toLowerCase().includes('about how i work') || 
-                         aiResponse.toLowerCase().includes('about ai') ||
-                         aiResponse.toLowerCase().includes('about the ai') ||
-                         aiResponse.toLowerCase().includes('how i function') ||
-                         aiResponse.toLowerCase().includes('about my capabilities') ||
-                         aiResponseContainsMultipleAIKeywords(aiResponse, aiInfoKeywords);
+      // Expanded list of AI-related phrases to catch more variants
+      const aiPhrases = [
+        'about how i work', 'about ai', 'about the ai', 'how i function', 
+        'about my capabilities', 'ai agent', 'ai receptionist', 'receptionist agent',
+        'what are you', 'are you an ai', 'are you a bot', 'how do you work',
+        'what kind of ai', 'information about the ai', 'tell me about ai',
+        'ai assistant', 'virtual assistant', 'automated system', 'software agent',
+        'machine learning', 'trained on', 'algorithm', 'neural', 'model'
+      ];
       
-      // If the response is about AI and contains multiple technical terms, replace with company-specific redirection
+      // Check for queries about the AI itself - use a more comprehensive approach
+      const isAboutAI = aiPhrases.some(phrase => aiResponse.toLowerCase().includes(phrase)) ||
+                        aiResponseContainsMultipleAIKeywords(aiResponse, aiInfoKeywords);
+      
+      // If the response is about AI, replace with company-specific redirection
+      // Use a more personal, warm response that redirects to company information
       if (isAboutAI) {
         enhancedResponse = "I'm Jamie, the company receptionist. I'm here to help with information about our products, services, and scheduling meetings. If you'd like to know more about our company specifically, I'd be happy to share that information with you. Is there something specific about our business that I can help you with today?";
       }
